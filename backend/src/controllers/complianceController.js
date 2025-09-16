@@ -1,5 +1,11 @@
 // backend/src/controllers/complianceController.js
 const { getDbPoolWithTunnel } = require('../lib/db');
+const OpenAI = require('openai');
+
+// Configurar OpenAI
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY
+});
 
 // Função auxiliar para registrar alterações no histórico
 const registrarAlteracao = async (pool, complianceId, campo, valorAnterior, valorNovo, userId, organizacao) => {
@@ -388,20 +394,54 @@ exports.gerarParecer = async (req, res) => {
 
     const competencia = rows[0];
     
-    // TODO: Implementar integração com IA
-    // Por enquanto, vamos gerar um parecer básico
-    const parecer = `
-      PARECER TÉCNICO - COMPETÊNCIA ${competencia.competencia_referencia}
+    // Preparar dados para a IA
+    const dadosCompliance = {
+      competencia_referencia: competencia.competencia_referencia,
+      relatorio_inicial: competencia.relatorio_inicial_texto,
+      relatorio_faturamento: competencia.relatorio_faturamento_texto,
+      imposto_compensado: competencia.imposto_compensado_texto,
+      valor_compensado: competencia.valor_compensado_texto,
+      emails: competencia.emails_texto,
+      estabelecimento: competencia.estabelecimento_texto
+    };
+
+    // Gerar prompt para a IA
+    const prompt = `
+      Gere um parecer técnico de compliance fiscal baseado nos seguintes dados:
       
-      Baseado nos dados fornecidos:
-      - Competência de Referência: ${competencia.competencia_referencia}
-      - Relatório Inicial: ${competencia.relatorio_inicial_texto || 'Não informado'}
-      - Relatório de Faturamento: ${competencia.relatorio_faturamento_texto || 'Não informado'}
-      - Imposto Compensado: ${competencia.imposto_compensado_texto || 'Não informado'}
-      - Valor Compensado: ${competencia.valor_compensado_texto || 'Não informado'}
+      Competência: ${dadosCompliance.competencia_referencia}
+      Relatório Inicial: ${dadosCompliance.relatorio_inicial || 'Não informado'}
+      Relatório de Faturamento: ${dadosCompliance.relatorio_faturamento || 'Não informado'}
+      Imposto Compensado: ${dadosCompliance.imposto_compensado || 'Não informado'}
+      Valor Compensado: ${dadosCompliance.valor_compensado || 'Não informado'}
+      Emails: ${dadosCompliance.emails || 'Não informado'}
+      Estabelecimento: ${dadosCompliance.estabelecimento || 'Não informado'}
       
-      [Aqui será implementada a integração com IA para gerar o parecer completo]
+      O parecer deve ser profissional, técnico e incluir:
+      - Análise dos dados fornecidos
+      - Conformidade com a legislação fiscal
+      - Recomendações específicas
+      - Conclusões e próximos passos
     `;
+
+    // Chamar OpenAI
+    const completion = await openai.chat.completions.create({
+      model: "gpt-3.5-turbo",
+      messages: [
+        {
+          role: "system",
+          content: "Você é um especialista em compliance fiscal brasileiro. Gere pareceres técnicos profissionais e detalhados."
+        },
+        {
+          role: "user",
+          content: prompt
+        }
+      ],
+      max_tokens: 2000,
+      temperature: 0.7
+    });
+
+    const parecer = completion.choices[0].message.content;
 
     // Atualizar o parecer no banco
     await pool.query(`
