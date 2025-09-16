@@ -35,6 +35,9 @@ const upload = multer({
 // Listar competências
 router.get('/competencias', complianceController.listCompetencias);
 
+// Excluir competência - MOVER PARA ANTES da rota GET /competencias/:id
+router.delete('/competencias/:id', complianceController.deleteCompetencia);
+
 // Buscar competência por ID
 router.get('/competencias/:id', complianceController.getCompetencia);
 
@@ -67,5 +70,8 @@ router.delete('/anexos/:anexoId', anexosController.removeAnexo);
 
 // Gerar parecer com IA
 router.post('/competencias/:id/gerar-parecer', complianceController.gerarParecer);
+
+// Obter histórico de alterações de uma competência
+router.get('/competencias/:id/historico', complianceController.getHistorico); // ← NOVA ROTA
 
 module.exports = router;

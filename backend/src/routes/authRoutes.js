@@ -4,9 +4,10 @@ const authController = require('../controllers/authControllers');
 
 const router = express.Router();
 
-// Rotas de autenticaÁ„o
+// Rotas de autentica√ß√£o
 router.post('/login', authController.login);
 router.post('/registrar', authController.registrar);
 router.get('/verificar', authController.verificarToken);
+router.get('/user/:userId', authController.getCurrentUser); // ‚Üê NOVA ROTA
 
 module.exports = router;
