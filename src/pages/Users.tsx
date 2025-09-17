@@ -245,7 +245,7 @@ const Users = () => {
                           </Button>
                         ) : (
                           <div className="text-xs text-gray-400">
-                            Apenas PORTES pode resetar
+                            Nenhuma ação disponível
                           </div>
                         )}
                       </div>

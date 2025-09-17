@@ -516,8 +516,13 @@ const ComplianceItemCard = memo(({
                 type="date"
                 value={item.data || ''}
                 onChange={(e) => onFieldChange(item.id, 'data', e.target.value)}
+                min="1900-01-01"
+                max="2099-12-31"
                 className="mt-1 flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
               />
+              <p className="text-xs text-gray-500 mt-1">
+                Selecione uma data válida (ano entre 1900 e 2099)
+              </p>
             </div>
           )}
 

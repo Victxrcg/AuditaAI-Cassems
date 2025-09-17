@@ -235,6 +235,19 @@ exports.updateComplianceField = async (req, res) => {
     
     ({ pool, server } = await getDbPoolWithTunnel());
     
+    // Validação específica para competencia_referencia
+    if (field === 'competencia_referencia') {
+      const date = new Date(value);
+      const year = date.getFullYear();
+      
+      if (year < 1900 || year > 2099) {
+        return res.status(400).json({
+          success: false,
+          error: 'Ano deve estar entre 1900 e 2099'
+        });
+      }
+    }
+
     // Mapear campos do frontend para campos do banco PRIMEIRO
     const fieldMapping = {
       'competencia_referencia': 'competencia_referencia',

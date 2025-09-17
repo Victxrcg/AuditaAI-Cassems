@@ -7,7 +7,8 @@ exports.listarUsuarios = async (req, res) => {
   try {
     ({ pool, server } = await getDbPoolWithTunnel());
     
-    const [rows] = await pool.query(`
+    // Remover a desestruturação [rows] - usar apenas pool.query
+    const rows = await pool.query(`
       SELECT 
         id,
         nome,
@@ -15,10 +16,15 @@ exports.listarUsuarios = async (req, res) => {
         perfil,
         ativo,
         created_at,
-        updated_at
+        updated_at,
+        organizacao,
+        cor_identificacao
       FROM usuarios_cassems
       ORDER BY nome ASC
     `);
+    
+    console.log('🔍 Debug - Usuários encontrados:', rows.length);
+    console.log(' Debug - Dados:', rows);
     
     res.json(rows);
   } catch (err) {

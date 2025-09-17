@@ -15,7 +15,7 @@ app.use(express.urlencoded({ extended: true }));
 // Rotas
 app.use('/api/compliance', complianceRoutes);
 app.use('/api/usuarios', usuariosRoutes);
-app.use('/api', authRoutes); // Login e registro em /api/login e /api/registrar
+app.use('/api/auth', authRoutes); // Mudança: de /api para /api/auth
 
 // Rota de teste
 app.get('/api/health', (req, res) => {

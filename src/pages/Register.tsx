@@ -29,21 +29,47 @@ const Register = () => {
       setIsLoading(false);
       return;
     }
+
+    // Validação de senha
+    if (senha.length < 6) {
+      toast({ title: 'Senha muito curta', description: 'A senha deve ter pelo menos 6 caracteres.', variant: 'destructive' });
+      setIsLoading(false);
+      return;
+    }
+
     try {
-      const res = await fetch(`${API_BASE}/api/register`, {
+      const res = await fetch(`${API_BASE}/api/auth/registrar`, { // Mudança: de /api/register para /api/auth/registrar
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ nome, email, senha })
       });
       const data = await res.json();
       if (res.ok && data.success) {
-        toast({ title: 'Cadastro realizado!', description: 'Agora você já pode fazer login.' });
-        setNome(""); setEmail(""); setSenha(""); setConfirmSenha("");
+        toast({ 
+          title: 'Cadastro realizado!', 
+          description: 'Agora você já pode fazer login.' 
+        });
+        setNome(""); 
+        setEmail(""); 
+        setSenha(""); 
+        setConfirmSenha("");
+        // Redirecionar para login após 2 segundos
+        setTimeout(() => {
+          navigate('/login');
+        }, 2000);
       } else {
-        toast({ title: 'Erro no cadastro', description: data.error || 'Tente novamente.', variant: 'destructive' });
+        toast({ 
+          title: 'Erro no cadastro', 
+          description: data.error || 'Tente novamente.', 
+          variant: 'destructive' 
+        });
       }
     } catch (err) {
-      toast({ title: 'Erro de conexão', description: 'Não foi possível enviar seu cadastro.', variant: 'destructive' });
+      toast({ 
+        title: 'Erro de conexão', 
+        description: 'Não foi possível enviar seu cadastro.', 
+        variant: 'destructive' 
+      });
     }
     setIsLoading(false);
   };
@@ -64,12 +90,27 @@ const Register = () => {
           </div>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <Label>Nome</Label>
-              <Input placeholder="Digite seu nome" value={nome} onChange={e => setNome(e.target.value)} required />
+              <Label>Nome completo</Label>
+              <Input 
+                placeholder="Digite seu nome completo" 
+                value={nome} 
+                onChange={e => setNome(e.target.value)} 
+                required 
+                minLength={2}
+              />
             </div>
             <div>
               <Label>Email</Label>
-              <Input type="email" placeholder="Digite seu email" value={email} onChange={e => setEmail(e.target.value)} required />
+              <Input 
+                type="email" 
+                placeholder="Digite seu email" 
+                value={email} 
+                onChange={e => setEmail(e.target.value)} 
+                required 
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                Use um email válido para receber notificações
+              </p>
             </div>
             <div>
               <Label>Senha</Label>
@@ -81,6 +122,7 @@ const Register = () => {
                   onChange={e => setSenha(e.target.value)}
                   required
                   className="pr-10"
+                  minLength={6}
                 />
                 <button
                   type="button"
@@ -90,6 +132,9 @@ const Register = () => {
                   {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
                 </button>
               </div>
+              <p className="text-xs text-gray-500 mt-1">
+                Mínimo de 6 caracteres
+              </p>
             </div>
             <div>
               <Label>Confirmar senha</Label>
@@ -114,7 +159,13 @@ const Register = () => {
                 <p className="text-sm text-red-500 mt-1">As senhas não conferem.</p>
               )}
             </div>
-            <Button type="submit" className="w-full" disabled={isLoading || (senha.length > 0 && confirmSenha.length > 0 && senha !== confirmSenha)}>{isLoading ? 'Enviando...' : 'Cadastrar'}</Button>
+            <Button 
+              type="submit" 
+              className="w-full" 
+              disabled={isLoading || (senha.length > 0 && confirmSenha.length > 0 && senha !== confirmSenha) || senha.length < 6}
+            >
+              {isLoading ? 'Enviando...' : 'Cadastrar'}
+            </Button>
           </form>
         </CardContent>
       </Card>
