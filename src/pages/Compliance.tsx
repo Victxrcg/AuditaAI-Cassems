@@ -170,7 +170,8 @@ const ComplianceItemCard = memo(({
   getStatusBadge,
   loading,
   currentCompetenciaId,
-  onToggleExpanded
+  onToggleExpanded,
+  downloadParecerPDF // ← ADICIONAR ESTA PROP
 }: {
   item: ComplianceItem;
   onFieldChange: (id: string, field: 'valor' | 'data' | 'observacoes', value: string) => void;
@@ -182,6 +183,7 @@ const ComplianceItemCard = memo(({
   loading: boolean;
   currentCompetenciaId: string | null;
   onToggleExpanded: (id: string) => void;
+  downloadParecerPDF: (parecerText: string) => void; // ← ADICIONAR ESTA PROP
 }) => {
   const [uploading, setUploading] = useState(false);
   const [anexos, setAnexos] = useState<Anexo[]>(item.anexos || []);
@@ -325,17 +327,68 @@ const ComplianceItemCard = memo(({
                   A IA analisará todos os campos preenchidos e gerará um parecer completo.
                 </p>
               </div>
-              <Button
-                onClick={() => gerarParecer(currentCompetenciaId || '')}
-                size="lg"
-                className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white"
-                disabled={loading}
-              >
-                <MessageSquare className="h-5 w-5 mr-2" />
-                {loading ? 'Gerando...' : 'Gerar Parecer IA'}
-              </Button>
+              <div className="flex gap-2">
+                {!item.observacoes ? (
+                  // Se não há parecer gerado, mostrar botão para gerar
+                  <Button
+                    onClick={() => gerarParecer(currentCompetenciaId || '')}
+                    size="lg"
+                    className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white"
+                    disabled={loading}
+                  >
+                    {loading ? (
+                      <>
+                        <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2"></div>
+                        Gerando...
+                      </>
+                    ) : (
+                      <>
+                        <MessageSquare className="h-5 w-5 mr-2" />
+                        Gerar Parecer IA
+                      </>
+                    )}
+                  </Button>
+                ) : (
+                  // Se já há parecer gerado, mostrar apenas botão para baixar
+                  <Button
+                    onClick={() => downloadParecerPDF(item.observacoes)}
+                    variant="outline"
+                    className="border-green-600 text-green-600 hover:bg-green-50"
+                    size="lg"
+                  >
+                    <Download className="h-5 w-5 mr-2" />
+                    Baixar PDF
+                  </Button>
+                )}
+              </div>
             </div>
           </div>
+
+          {/* Mostrar loading enquanto gera o parecer */}
+          {loading && !item.observacoes && (
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+              <div className="flex items-center gap-3">
+                <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
+                <div>
+                  <h4 className="font-medium text-blue-900">Gerando Parecer com IA...</h4>
+                  <p className="text-sm text-blue-700">Aguarde enquanto a inteligência artificial analisa os dados e gera o parecer.</p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Mostrar parecer gerado se existir */}
+          {item.observacoes && (
+            <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+              <div className="flex items-center gap-2 text-green-800 mb-3">
+                <CheckCircle className="h-4 w-4" />
+                <span className="font-medium">Parecer Gerado:</span>
+              </div>
+              <div className="text-sm text-gray-700 whitespace-pre-wrap bg-white p-3 rounded border">
+                {item.observacoes}
+              </div>
+            </div>
+          )}
 
           {/* Lista de anexos do parecer */}
           {anexos.length > 0 && (
@@ -809,8 +862,15 @@ export default function Compliance() {
           competenciasData = [data.data];
         }
 
+        // Ordenar por data de criação (mais recente primeiro)
+        competenciasData.sort((a, b) => {
+          const dateA = new Date(a.created_at);
+          const dateB = new Date(b.created_at);
+          return dateB.getTime() - dateA.getTime(); // Ordem decrescente (mais recente primeiro)
+        });
+
         setCompetencias(competenciasData);
-        console.log(' Competências carregadas:', competenciasData);
+        console.log(' Competências carregadas e ordenadas:', competenciasData);
       } else {
         setError(data.error);
       }
@@ -1630,11 +1690,17 @@ export default function Compliance() {
                   {/* Badge de organização */}
                   {getOrganizationBadge(competencia.created_by_organizacao)}
 
-                  <Badge variant={competencia.status === 'concluida' ? 'default' : 'outline'}>
-                    {competencia.status === 'concluida' ? 'Concluída' : 'Em Andamento'}
+                  <Badge 
+                    className={competencia.parecer_texto 
+                      ? "bg-green-100 text-green-800 border-green-200" 
+                      : "bg-yellow-100 text-yellow-800 border-yellow-200"
+                    }
+                  >
+                    {competencia.parecer_texto ? 'Concluído' : 'Em Andamento'}
                   </Badge>
                 </div>
 
+                {/* Na seção de informações da competência, adicionar indicador de parecer */}
                 <div className="mt-1 text-sm text-gray-600">
                   <div className="flex items-center gap-2">
                     <p>
@@ -1659,15 +1725,31 @@ export default function Compliance() {
                     )}
                   </div>
                   <p>Criado em: {formatDateBR(competencia.created_at)}</p>
-                  {competencia.parecer_gerado && (
-                    <p className="text-green-600 font-medium">
-                       Parecer gerado
-                    </p>
+                  
+                  {/* Indicador de parecer disponível */}
+                  {competencia.parecer_texto && (
+                    <div className="flex items-center gap-1 text-green-600 font-medium">
+                      <CheckCircle className="h-4 w-4" />
+                      <span>Parecer disponível para download</span>
+                    </div>
                   )}
                 </div>
               </div>
 
               <div className="flex gap-2">
+                {/* Botão de download do parecer se existir */}
+                {competencia.parecer_texto && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => downloadParecerPDF(competencia.parecer_texto)}
+                    className="border-green-600 text-green-600 hover:bg-green-50"
+                  >
+                    <Download className="h-4 w-4 mr-1" />
+                    Baixar Parecer
+                  </Button>
+                )}
+                
                 <Button
                   variant="outline"
                   size="sm"
@@ -1727,6 +1809,7 @@ export default function Compliance() {
             loading={loading}
             currentCompetenciaId={currentCompetenciaId}
             onToggleExpanded={handleToggleExpanded}
+            downloadParecerPDF={downloadParecerPDF}
           />
         ))}
       </div>
@@ -1747,15 +1830,6 @@ export default function Compliance() {
         </div>
 
         <div className="flex gap-2">
-          <Button
-            onClick={() => gerarParecer(selectedCompetencia?.id || '')}
-            className="bg-purple-600 hover:bg-purple-700"
-            disabled={loading}
-          >
-            <Brain className="h-4 w-4 mr-2" />
-            {loading ? 'Gerando...' : 'Gerar Parecer IA'}
-          </Button>
-
           <Button 
             onClick={() => handleDeleteClick(selectedCompetencia?.id || '')}
             variant="destructive"
@@ -1786,24 +1860,10 @@ export default function Compliance() {
             loading={loading}
             currentCompetenciaId={currentCompetenciaId}
             onToggleExpanded={handleToggleExpanded}
+            downloadParecerPDF={downloadParecerPDF}
           />
         ))}
       </div>
-
-      {/* Adicionar seção de parecer após os itens de compliance */}
-      {selectedCompetencia?.parecer_texto && (
-        <div className="mt-8 bg-white border border-gray-200 rounded-lg p-6">
-          <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
-            <FileText className="h-5 w-5" />
-            Parecer Gerado por IA
-          </h3>
-          <div className="prose max-w-none">
-            <pre className="whitespace-pre-wrap text-sm text-gray-700 bg-gray-50 p-4 rounded-lg">
-              {selectedCompetencia.parecer_texto}
-            </pre>
-          </div>
-        </div>
-      )}
 
       {/* Adicionar seção de histórico */}
       <HistoricoAlteracoes historico={historico} loading={loadingHistorico} />
