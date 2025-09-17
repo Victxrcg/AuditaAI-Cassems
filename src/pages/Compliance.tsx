@@ -30,7 +30,8 @@ import {
   ArrowLeft,
   Eye,
   Pencil,
-  Brain
+  Brain,
+  ChevronDown
 } from 'lucide-react';
 import {
   uploadAnexo,
@@ -45,6 +46,7 @@ import {
 } from '@/services/anexosService';
 import { formatDateBR, formatDateTimeBR, formatCompetenciaTitle } from '@/utils/dateUtils';
 import { toast } from '@/components/ui/use-toast';
+import jsPDF from 'jspdf';
 
 // Atualizar interfaces para incluir organização
 interface ComplianceItem {
@@ -724,6 +726,9 @@ export default function Compliance() {
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [competenciaToDelete, setCompetenciaToDelete] = useState<string | null>(null);
 
+  // Estado para colapso da seção de Leis Vigentes
+  const [leisVigentesExpanded, setLeisVigentesExpanded] = useState(true);
+
   // API base URL
   const API_BASE = 'http://localhost:3001/api';
 
@@ -1324,7 +1329,8 @@ export default function Compliance() {
                 valor: item.valor || '',
                 data: item.data || '',
                 observacoes: item.observacoes || '',
-                status: item.status // Manter o status original
+                status: 'concluido' as const, // Mudar para concluído
+                isExpanded: false // Fechar o card
               }
             : i
         );
@@ -1404,6 +1410,88 @@ export default function Compliance() {
     }
   }, []);
 
+  // Função para gerar e baixar PDF do parecer
+  const downloadParecerPDF = (parecerText: string) => {
+    try {
+      // Criar um novo documento
+      const doc = new jsPDF();
+      
+      // Configurar fonte e tamanho
+      doc.setFont('helvetica');
+      doc.setFontSize(12);
+      
+      // Título
+      doc.setFontSize(16);
+      doc.setFont('helvetica', 'bold');
+      doc.text('Parecer de Compliance Fiscal', 20, 30);
+      
+      // Linha separadora
+      doc.setLineWidth(0.5);
+      doc.line(20, 35, 190, 35);
+      
+      // Informações da competência
+      doc.setFontSize(10);
+      doc.setFont('helvetica', 'normal');
+      doc.text(`Competência: ${competenciaData || 'N/A'}`, 20, 45);
+      doc.text(`Data de Geração: ${new Date().toLocaleDateString('pt-BR')}`, 20, 50);
+      doc.text(`Gerado por: ${currentUser?.nome || 'Sistema'}`, 20, 55);
+      
+      // Espaçamento
+      doc.text('', 20, 65);
+      
+      // Conteúdo do parecer
+      doc.setFontSize(12);
+      doc.setFont('helvetica', 'normal');
+      
+      // Dividir o texto em linhas que cabem na página
+      const pageWidth = 170; // Largura útil da página
+      const lineHeight = 6;
+      const maxLinesPerPage = 40;
+      let yPosition = 75;
+      let currentPage = 1;
+      
+      const lines = doc.splitTextToSize(parecerText, pageWidth);
+      
+      lines.forEach((line: string, index: number) => {
+        // Verificar se precisa de nova página
+        if (yPosition > 280) {
+          doc.addPage();
+          currentPage++;
+          yPosition = 20;
+        }
+        
+        doc.text(line, 20, yPosition);
+        yPosition += lineHeight;
+      });
+      
+      // Rodapé
+      const totalPages = doc.getNumberOfPages();
+      for (let i = 1; i <= totalPages; i++) {
+        doc.setPage(i);
+        doc.setFontSize(8);
+        doc.text(`Página ${i} de ${totalPages}`, 20, 290);
+        doc.text('Sistema de Compliance Fiscal - AuditaAI', 150, 290);
+      }
+      
+      // Baixar o arquivo
+      const fileName = `parecer_compliance_${competenciaData || 'competencia'}_${new Date().toISOString().split('T')[0]}.pdf`;
+      doc.save(fileName);
+      
+      toast({
+        title: "PDF Gerado",
+        description: "Parecer baixado com sucesso!",
+      });
+      
+    } catch (error) {
+      console.error('Erro ao gerar PDF:', error);
+      toast({
+        title: "Erro",
+        description: "Erro ao gerar PDF do parecer",
+        variant: "destructive",
+      });
+    }
+  };
+
   // Carregar dados na inicialização
   useEffect(() => {
     console.log(' Carregando competências...');
@@ -1452,6 +1540,62 @@ export default function Compliance() {
             {loading ? 'Criando...' : 'Nova Competência'}
           </Button>
         </div>
+      </div>
+
+      {/* Seção de Leis Vigentes - Colapsável */}
+      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+        <div 
+          className="flex items-center justify-between cursor-pointer hover:bg-blue-100 rounded-lg p-2 -m-2 transition-colors"
+          onClick={() => setLeisVigentesExpanded(!leisVigentesExpanded)}
+        >
+          <h2 className="text-lg font-semibold text-blue-900 flex items-center gap-2">
+            <AlertCircle className="h-5 w-5" />
+            Leis Vigentes
+          </h2>
+          <ChevronDown 
+            className={`h-5 w-5 text-blue-600 transition-transform duration-200 ${
+              leisVigentesExpanded ? 'rotate-180' : ''
+            }`} 
+          />
+        </div>
+        
+        {leisVigentesExpanded && (
+          <div className="mt-4 space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="bg-white p-4 rounded-lg border border-blue-100">
+                <h3 className="font-medium text-blue-800 mb-2">Decreto 3.048/1999</h3>
+                <p className="text-sm text-blue-700 mb-3">
+                  Regulamenta a Previdência Social e estabelece normas para o regime geral de previdência social.
+                </p>
+                <a 
+                  href="https://www.planalto.gov.br/ccivil_03/decreto/d3048.htm" 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="text-blue-600 hover:text-blue-800 text-sm font-medium underline"
+                >
+                  Ver Decreto Completo →
+                </a>
+              </div>
+              <div className="bg-white p-4 rounded-lg border border-blue-100">
+                <h3 className="font-medium text-blue-800 mb-2">Solução de Consulta COSIT 79/2023</h3>
+                <p className="text-sm text-blue-700 mb-3">
+                  Orientações sobre consulta de CNPJ e procedimentos fiscais vigentes.
+                </p>
+                <a 
+                  href="http://normas.receita.fazenda.gov.br/sijut2consulta/consulta.action?facetsExistentes=&orgaosSelecionados=&tiposAtosSelecionados=&lblTiposAtosSelecionados=&ordemColuna=&ordemDirecao=&tipoConsulta=formulario&tipoAtoFacet=&siglaOrgaoFacet=&anoAtoFacet=&termoBusca=consulta+cnpj&numero_ato=79&tipoData=1&dt_inicio=&dt_fim=&ano_ato=&p=1&optOrdem=relevancia&p=1" 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="text-blue-600 hover:text-blue-800 text-sm font-medium underline"
+                >
+                  Ver Consulta Completa →
+                </a>
+              </div>
+            </div>
+            <div className="text-xs text-blue-600">
+              <strong>Status:</strong> Ambas as legislações estão vigentes e devem ser observadas nos procedimentos de compliance fiscal.
+            </div>
+          </div>
+        )}
       </div>
 
       {error && (
