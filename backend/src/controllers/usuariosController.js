@@ -7,8 +7,8 @@ exports.listarUsuarios = async (req, res) => {
   try {
     ({ pool, server } = await getDbPoolWithTunnel());
     
-    // Remover a desestruturação [rows] - usar apenas pool.query
-    const rows = await pool.query(`
+    // Usar pool.execute em vez de pool.query para MariaDB
+    const rows = await pool.execute(`
       SELECT 
         id,
         nome,
@@ -23,6 +23,8 @@ exports.listarUsuarios = async (req, res) => {
       ORDER BY nome ASC
     `);
     
+    console.log(' Debug - Tipo de retorno:', typeof rows);
+    console.log(' Debug - É array:', Array.isArray(rows));
     console.log('🔍 Debug - Usuários encontrados:', rows.length);
     console.log(' Debug - Dados:', rows);
     
@@ -130,6 +132,13 @@ exports.atualizarUsuario = async (req, res) => {
   try {
     const { id } = req.params;
     const { nome, email, perfil, ativo } = req.body;
+    
+    // Validar perfil
+    if (perfil && !['admin', 'compliance'].includes(perfil)) {
+      return res.status(400).json({ 
+        error: 'Perfil inválido. Use apenas "admin" ou "compliance"' 
+      });
+    }
     
     ({ pool, server } = await getDbPoolWithTunnel());
     

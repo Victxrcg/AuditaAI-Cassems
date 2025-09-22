@@ -2,7 +2,10 @@ import { useEffect, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Plus, RefreshCw, User, Mail, Shield, CheckCircle, XCircle, Key, Calendar, Clock, Building } from 'lucide-react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Switch } from '@/components/ui/switch';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Plus, RefreshCw, User, Mail, Shield, CheckCircle, XCircle, Key, Calendar, Clock, Building, Edit, Save, X } from 'lucide-react';
 import { toast } from '@/components/ui/use-toast';
 
 interface UserRow {
@@ -21,6 +24,8 @@ const Users = () => {
   const [users, setUsers] = useState<UserRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [currentUser, setCurrentUser] = useState<any>(null);
+  const [editingUser, setEditingUser] = useState<UserRow | null>(null);
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
 
   // Carregar usuário atual do localStorage
   useEffect(() => {
@@ -63,6 +68,57 @@ const Users = () => {
 
   useEffect(() => { fetchUsers(); }, []);
 
+  const updateUser = async (userId: number, userData: Partial<UserRow>) => {
+    if (!currentUser || currentUser.organizacao !== 'portes') {
+      toast({
+        title: "Acesso Negado",
+        description: "Apenas usuários da PORTES podem editar usuários.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      const response = await fetch(`${API_BASE}/api/usuarios/${userId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(userData)
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        toast({
+          title: "Usuário Atualizado",
+          description: `Usuário foi atualizado com sucesso.`,
+        });
+        
+        // Atualizar a lista de usuários
+        setUsers(users.map(user => 
+          user.id === userId 
+            ? { ...user, ...userData, updated_at: new Date().toISOString() }
+            : user
+        ));
+        
+        setIsEditDialogOpen(false);
+        setEditingUser(null);
+      } else {
+        toast({
+          title: "Erro",
+          description: data.error || "Erro ao atualizar usuário",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      console.error('Erro ao atualizar usuário:', error);
+      toast({
+        title: "Erro",
+        description: "Erro ao atualizar usuário",
+        variant: "destructive",
+      });
+    }
+  };
+
   const resetPassword = async (userId: number, userName: string) => {
     if (!currentUser || currentUser.organizacao !== 'portes') {
       toast({
@@ -104,14 +160,20 @@ const Users = () => {
     }
   };
 
+  const getProfileLabel = (perfil: string) => {
+    const profiles = {
+      admin: 'Administrador',
+      compliance: 'Compliance'
+    };
+    return profiles[perfil as keyof typeof profiles] || perfil;
+  };
+
   const getRoleBadge = (perfil: string) => {
     const config = {
       admin: { label: 'Administrador', className: 'bg-red-100 text-red-800 border-red-200' },
-      auditor: { label: 'Auditor', className: 'bg-blue-100 text-blue-800 border-blue-200' },
-      compliance: { label: 'Compliance', className: 'bg-green-100 text-green-800 border-green-200' },
-      viewer: { label: 'Visualizador', className: 'bg-gray-100 text-gray-800 border-gray-200' }
+      compliance: { label: 'Compliance', className: 'bg-green-100 text-green-800 border-green-200' }
     };
-    const roleConfig = config[perfil as keyof typeof config] || config.viewer;
+    const roleConfig = config[perfil as keyof typeof config] || config.compliance;
     return <Badge className={`${roleConfig.className} border`}>{roleConfig.label}</Badge>;
   };
 
@@ -153,6 +215,21 @@ const Users = () => {
       hour: '2-digit',
       minute: '2-digit'
     });
+  };
+
+  const openEditDialog = (user: UserRow) => {
+    setEditingUser({...user});
+    setIsEditDialogOpen(true);
+  };
+
+  const handleSave = () => {
+    if (editingUser) {
+      updateUser(editingUser.id, {
+        perfil: editingUser.perfil,
+        organizacao: editingUser.organizacao,
+        ativo: editingUser.ativo
+      });
+    }
   };
 
   return (
@@ -234,15 +311,26 @@ const Users = () => {
                       <div className="space-y-1">
                         <div className="text-xs text-gray-500 font-medium">Ações</div>
                         {currentUser?.organizacao === 'portes' ? (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => resetPassword(user.id, user.nome || user.email)}
-                            className="text-orange-600 border-orange-300 hover:bg-orange-50"
-                          >
-                            <Key className="h-4 w-4 mr-1" />
-                            Resetar Senha
-                          </Button>
+                          <div className="flex gap-2">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => openEditDialog(user)}
+                              className="text-blue-600 border-blue-300 hover:bg-blue-50"
+                            >
+                              <Edit className="h-4 w-4 mr-1" />
+                              Editar
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => resetPassword(user.id, user.nome || user.email)}
+                              className="text-orange-600 border-orange-300 hover:bg-orange-50"
+                            >
+                              <Key className="h-4 w-4 mr-1" />
+                              Resetar
+                            </Button>
+                          </div>
                         ) : (
                           <div className="text-xs text-gray-400">
                             Nenhuma ação disponível
@@ -273,6 +361,124 @@ const Users = () => {
           )}
         </CardContent>
       </Card>
+
+      {/* Dialog de Edição Completo */}
+      <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Editar Usuário</DialogTitle>
+          </DialogHeader>
+          {editingUser && (
+            <div className="space-y-6">
+              {/* Informações do Usuário */}
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Usuário</label>
+                <div className="p-3 bg-gray-50 rounded-lg">
+                  <p className="text-lg font-semibold">{editingUser.nome}</p>
+                  <p className="text-sm text-gray-600">{editingUser.email}</p>
+                </div>
+              </div>
+              
+              {/* Organização */}
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Organização</label>
+                <Select
+                  value={editingUser.organizacao || 'cassems'}
+                  onValueChange={(value) => setEditingUser({...editingUser, organizacao: value as 'cassems' | 'portes'})}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione a organização" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="cassems">
+                      <div className="flex items-center gap-2">
+                        <Building className="h-4 w-4" />
+                        CASSEMS
+                      </div>
+                    </SelectItem>
+                    <SelectItem value="portes">
+                      <div className="flex items-center gap-2">
+                        <Building className="h-4 w-4" />
+                        PORTES
+                      </div>
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Perfil */}
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Perfil</label>
+                <Select
+                  value={editingUser.perfil}
+                  onValueChange={(value) => setEditingUser({...editingUser, perfil: value})}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione um perfil" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="admin">
+                      <div className="flex items-center gap-2">
+                        <Shield className="h-4 w-4" />
+                        Administrador - Acesso total ao sistema
+                      </div>
+                    </SelectItem>
+                    <SelectItem value="compliance">
+                      <div className="flex items-center gap-2">
+                        <User className="h-4 w-4" />
+                        Compliance - Focado em compliance fiscal
+                      </div>
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Status Ativo/Inativo */}
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Status</label>
+                <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                  <div className="flex items-center gap-2">
+                    {editingUser.ativo === 1 ? (
+                      <CheckCircle className="h-4 w-4 text-green-600" />
+                    ) : (
+                      <XCircle className="h-4 w-4 text-red-600" />
+                    )}
+                    <span className="font-medium">
+                      {editingUser.ativo === 1 ? 'Ativo' : 'Inativo'}
+                    </span>
+                  </div>
+                  <Switch
+                    checked={editingUser.ativo === 1}
+                    onCheckedChange={(checked) => setEditingUser({...editingUser, ativo: checked ? 1 : 0})}
+                  />
+                </div>
+              </div>
+
+              {/* Botões de Ação */}
+              <div className="flex justify-end gap-2 pt-4">
+                <Button
+                  variant="outline"
+                  onClick={() => setIsEditDialogOpen(false)}
+                >
+                  <X className="h-4 w-4 mr-2" />
+                  Cancelar
+                </Button>
+                <Button
+                  onClick={handleSave}
+                  disabled={
+                    editingUser.perfil === users.find(u => u.id === editingUser.id)?.perfil &&
+                    editingUser.organizacao === users.find(u => u.id === editingUser.id)?.organizacao &&
+                    editingUser.ativo === users.find(u => u.id === editingUser.id)?.ativo
+                  }
+                >
+                  <Save className="h-4 w-4 mr-2" />
+                  Salvar Alterações
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

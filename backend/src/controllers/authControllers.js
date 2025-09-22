@@ -15,7 +15,7 @@ exports.login = async (req, res) => {
     ({ pool, server } = await getDbPoolWithTunnel());
 
     // Buscar usuário por email incluindo campos de organização
-    const rows = await pool.query(`
+    const rows = await pool.execute(`
       SELECT 
         id, nome, email, senha, perfil, ativo, created_at, updated_at,
         organizacao, permissoes, cor_identificacao
@@ -24,7 +24,7 @@ exports.login = async (req, res) => {
     `, [email]);
 
     console.log('🔍 Debug login - Email:', email);
-    console.log(' Debug login - Rows:', rows);
+    console.log('🔍 Debug login - Rows:', rows);
 
     // Verificar se encontrou usuário
     if (!rows || rows.length === 0) {
@@ -32,15 +32,36 @@ exports.login = async (req, res) => {
     }
 
     const user = rows[0];
-    console.log(' User encontrado:', user);
+    console.log('👤 User encontrado:', user);
+    console.log('👤 Senha recebida:', senha);
+    console.log('🔑 Senha no banco:', user.senha);
 
     // Verificar se o usuário está ativo
     if (user.ativo !== 1) {
       return res.status(401).json({ error: 'Usuário inativo' });
     }
 
-    // Verificar senha (simplificado - produção: bcrypt)
-    if (user.senha !== senha) {
+    // Verificar senha - tentar tanto texto plano quanto hash
+    let senhaValida = false;
+    
+    // Primeiro tenta com texto plano (senhas antigas)
+    if (user.senha === senha) {
+      console.log('✅ Senha válida (texto plano)');
+      senhaValida = true;
+    } else {
+      // Depois tenta com hash base64 (senhas resetadas)
+      const hashedPassword = Buffer.from(senha).toString('base64');
+      console.log('�� Hash gerado:', hashedPassword);
+      console.log('🔑 Comparando com banco:', user.senha === hashedPassword);
+      
+      if (user.senha === hashedPassword) {
+        console.log('✅ Senha válida (hash base64)');
+        senhaValida = true;
+      }
+    }
+
+    if (!senhaValida) {
+      console.log('❌ Senha inválida');
       return res.status(401).json({ error: 'Credenciais inválidas' });
     }
 
@@ -184,4 +205,60 @@ exports.verificarToken = async (req, res) => {
     success: true,
     message: 'Token válido'
   });
+};
+
+// Resetar senha
+exports.resetPassword = async (req, res) => {
+  let pool, server;
+  try {
+    const { userId } = req.body;
+    
+    if (!userId) {
+      return res.status(400).json({ 
+        error: 'ID do usuário é obrigatório' 
+      });
+    }
+
+    ({ pool, server } = await getDbPoolWithTunnel());
+
+    // Verificar se usuário existe
+    const user = await pool.execute(`
+      SELECT id, nome, email FROM usuarios_cassems WHERE id = ?
+    `, [userId]);
+
+    if (user.length === 0) {
+      return res.status(404).json({ 
+        error: 'Usuário não encontrado' 
+      });
+    }
+
+    // Resetar senha para "123456" (padrão)
+    const defaultPassword = "123456";
+    const hashedPassword = Buffer.from(defaultPassword).toString('base64');
+
+    await pool.execute(`
+      UPDATE usuarios_cassems 
+      SET senha = ?, updated_at = NOW()
+      WHERE id = ?
+    `, [hashedPassword, userId]);
+
+    console.log(` Senha resetada para usuário ${user[0].nome} (${user[0].email})`);
+
+    res.json({
+      success: true,
+      message: 'Senha resetada com sucesso',
+      data: {
+        userId: user[0].id,
+        nome: user[0].nome,
+        email: user[0].email,
+        novaSenha: defaultPassword
+      }
+    });
+  } catch (err) {
+    console.error('❌ Erro ao resetar senha:', err);
+    res.status(500).json({
+      error: 'Erro interno do servidor',
+      details: err.message
+    });
+  }
 };
