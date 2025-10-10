@@ -8,7 +8,7 @@ import jwt from 'jsonwebtoken';
 import 'dotenv/config';
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = Number(process.env['API-PORTA'] || process.env.PORT || 3000);
 const ADMIN_HASH = process.env.ADMIN_HASH;
 const JWT_SECRET = process.env.JWT_SECRET;
 

@@ -1,21 +1,26 @@
-import { defineConfig } from 'vite';
+import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react-swc';
 import path from 'path';
 
-export default defineConfig({
-  plugins: [react()],
-  resolve: {
-    alias: {
-      '@': path.resolve(__dirname, './src'),
+export default defineConfig(({ mode }) => {
+  const env = loadEnv(mode, process.cwd(), '');
+  const frontPort = Number(env['FRONT-PORTA'] || 4011);
+
+  return {
+    plugins: [react()],
+    resolve: {
+      alias: {
+        '@': path.resolve(__dirname, './src'),
+      },
     },
-  },
-  server: {
-    host: '0.0.0.0',
-    port: 3002,
-    allowedHosts: [
-      'auditaai.portes.com.br',
-      'api-auditaai.portes.com.br'
-      
-    ]
-  },
-}); 
+    server: {
+      host: '0.0.0.0',
+      port: frontPort,
+      allowedHosts: [
+        'auditaai.portes.com.br',
+        'api-auditaai.portes.com.br'
+        
+      ]
+    },
+  };
+});

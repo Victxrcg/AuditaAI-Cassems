@@ -22,7 +22,7 @@ app.get('/api/health', (req, res) => {
   res.json({ message: 'API funcionando!', timestamp: new Date() });
 });
 
-const PORT = process.env.PORT || 3001;
+const PORT = Number(process.env['API-PORTA'] || process.env.PORT || 3001);
 app.listen(PORT, () => {
   console.log(`🚀 Servidor rodando na porta ${PORT}`);
 });
