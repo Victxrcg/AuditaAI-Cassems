@@ -66,6 +66,19 @@ const Cronograma = () => {
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [editingCronograma, setEditingCronograma] = useState<CronogramaItem | null>(null);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+  const [formData, setFormData] = useState({
+    titulo: '',
+    descricao: '',
+    organizacao: 'cassems',
+    fase_atual: 'inicio',
+    progresso_percentual: 0,
+    data_inicio: '',
+    data_fim: '',
+    status: 'pendente',
+    prioridade: 'media',
+    observacoes: '',
+    motivo_atraso: ''
+  });
   const [filtroStatus, setFiltroStatus] = useState<string>('todos');
   const [filtroPrioridade, setFiltroPrioridade] = useState<string>('todos');
   const [filtroOrganizacao, setFiltroOrganizacao] = useState<string>('todos');
@@ -135,6 +148,39 @@ const Cronograma = () => {
       fetchEstatisticas();
     }
   }, [currentUser]);
+
+  // Atualizar formData quando editingCronograma muda
+  useEffect(() => {
+    if (editingCronograma) {
+      setFormData({
+        titulo: editingCronograma.titulo,
+        descricao: editingCronograma.descricao || '',
+        organizacao: editingCronograma.organizacao,
+        fase_atual: editingCronograma.fase_atual,
+        progresso_percentual: editingCronograma.progresso_percentual,
+        data_inicio: editingCronograma.data_inicio || '',
+        data_fim: editingCronograma.data_fim || '',
+        status: editingCronograma.status,
+        prioridade: editingCronograma.prioridade,
+        observacoes: editingCronograma.observacoes || '',
+        motivo_atraso: editingCronograma.motivo_atraso || ''
+      });
+    } else {
+      setFormData({
+        titulo: '',
+        descricao: '',
+        organizacao: currentUser?.organizacao || 'cassems',
+        fase_atual: 'inicio',
+        progresso_percentual: 0,
+        data_inicio: '',
+        data_fim: '',
+        status: 'pendente',
+        prioridade: 'media',
+        observacoes: '',
+        motivo_atraso: ''
+      });
+    }
+  }, [editingCronograma, currentUser]);
 
   // Obter organizações únicas para filtro (apenas para Portes)
   const organizacoesUnicas = [...new Set(cronogramas.map(c => c.organizacao))];
@@ -222,6 +268,84 @@ const Cronograma = () => {
     return diffDays > 0 ? diffDays : 0;
   };
 
+  // Salvar cronograma (criar ou editar)
+  const salvarCronograma = async () => {
+    try {
+      const userOrg = currentUser?.organizacao || 'cassems';
+      
+      const url = editingCronograma 
+        ? `${API_BASE}/cronograma/${editingCronograma.id}`
+        : `${API_BASE}/cronograma`;
+      
+      const method = editingCronograma ? 'PUT' : 'POST';
+      
+      const response = await fetch(url, {
+        method,
+        headers: {
+          'Content-Type': 'application/json',
+          'x-user-organization': userOrg
+        },
+        body: JSON.stringify(formData)
+      });
+
+      if (response.ok) {
+        toast({
+          title: "Sucesso",
+          description: editingCronograma ? "Cronograma atualizado com sucesso!" : "Cronograma criado com sucesso!",
+        });
+        setIsEditDialogOpen(false);
+        setEditingCronograma(null);
+        fetchCronogramas();
+        fetchEstatisticas();
+      } else {
+        throw new Error('Erro ao salvar cronograma');
+      }
+    } catch (error) {
+      console.error('Erro ao salvar cronograma:', error);
+      toast({
+        title: "Erro",
+        description: "Erro ao salvar cronograma",
+        variant: "destructive",
+      });
+    }
+  };
+
+  // Deletar cronograma
+  const deleteCronograma = async (id: number) => {
+    if (!confirm('Tem certeza que deseja excluir este cronograma?')) {
+      return;
+    }
+
+    try {
+      const userOrg = currentUser?.organizacao || 'cassems';
+      
+      const response = await fetch(`${API_BASE}/cronograma/${id}`, {
+        method: 'DELETE',
+        headers: {
+          'x-user-organization': userOrg
+        }
+      });
+
+      if (response.ok) {
+        toast({
+          title: "Sucesso",
+          description: "Cronograma excluído com sucesso!",
+        });
+        fetchCronogramas();
+        fetchEstatisticas();
+      } else {
+        throw new Error('Erro ao excluir cronograma');
+      }
+    } catch (error) {
+      console.error('Erro ao excluir cronograma:', error);
+      toast({
+        title: "Erro",
+        description: "Erro ao excluir cronograma",
+        variant: "destructive",
+      });
+    }
+  };
+
   return (
     <div className="p-6 space-y-6">
       {/* Header */}
@@ -249,12 +373,13 @@ const Cronograma = () => {
             <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
             Recarregar
           </Button>
-          {currentUser?.organizacao === 'portes' && (
-            <Button>
-              <Plus className="h-4 w-4 mr-2" />
-              Nova Demanda
-            </Button>
-          )}
+          <Button onClick={() => {
+            setEditingCronograma(null);
+            setIsEditDialogOpen(true);
+          }}>
+            <Plus className="h-4 w-4 mr-2" />
+            Nova Demanda
+          </Button>
         </div>
       </div>
 
@@ -398,23 +523,25 @@ const Cronograma = () => {
                         )}
                       </div>
                     </div>
-                    {currentUser?.organizacao === 'portes' && (
-                      <div className="flex gap-2">
-                        <Button 
-                          variant="outline" 
-                          size="sm"
-                          onClick={() => {
-                            setEditingCronograma(cronograma);
-                            setIsEditDialogOpen(true);
-                          }}
-                        >
-                          <Edit className="h-4 w-4" />
-                        </Button>
-                        <Button variant="outline" size="sm">
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    )}
+                    <div className="flex gap-2">
+                      <Button 
+                        variant="outline" 
+                        size="sm"
+                        onClick={() => {
+                          setEditingCronograma(cronograma);
+                          setIsEditDialogOpen(true);
+                        }}
+                      >
+                        <Edit className="h-4 w-4" />
+                      </Button>
+                      <Button 
+                        variant="outline" 
+                        size="sm"
+                        onClick={() => deleteCronograma(cronograma.id)}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
                   </div>
                 </CardHeader>
                 <CardContent>
@@ -494,23 +621,182 @@ const Cronograma = () => {
         )}
       </div>
 
-      {/* Dialog de Edição */}
+      {/* Dialog de Edição/Criação */}
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Editar Demanda</DialogTitle>
+            <DialogTitle>
+              {editingCronograma ? 'Editar Demanda' : 'Nova Demanda'}
+            </DialogTitle>
           </DialogHeader>
-          {editingCronograma && (
-            <div className="space-y-4">
-              <div className="text-sm text-gray-600">
-                Editando: <span className="font-semibold">{editingCronograma.titulo}</span>
+          
+          <div className="space-y-6">
+            {/* Informações Básicas */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="md:col-span-2">
+                <Label htmlFor="titulo">Título *</Label>
+                <Input
+                  id="titulo"
+                  value={formData.titulo}
+                  onChange={(e) => setFormData({...formData, titulo: e.target.value})}
+                  placeholder="Digite o título da demanda"
+                />
               </div>
               
-              <div className="text-center py-8">
-                <p className="text-gray-500">Funcionalidade de edição em desenvolvimento</p>
+              <div className="md:col-span-2">
+                <Label htmlFor="descricao">Descrição</Label>
+                <Textarea
+                  id="descricao"
+                  value={formData.descricao}
+                  onChange={(e) => setFormData({...formData, descricao: e.target.value})}
+                  placeholder="Descreva a demanda em detalhes"
+                  rows={3}
+                />
+              </div>
+
+              <div>
+                <Label htmlFor="organizacao">Organização</Label>
+                <Select
+                  value={formData.organizacao}
+                  onValueChange={(value) => setFormData({...formData, organizacao: value})}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione a organização" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="cassems">CASSEMS</SelectItem>
+                    <SelectItem value="portes">PORTES</SelectItem>
+                    <SelectItem value="rede_frota">REDE FROTA</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div>
+                <Label htmlFor="fase_atual">Fase Atual</Label>
+                <Select
+                  value={formData.fase_atual}
+                  onValueChange={(value) => setFormData({...formData, fase_atual: value})}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione a fase" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="inicio">Início</SelectItem>
+                    <SelectItem value="planejamento">Planejamento</SelectItem>
+                    <SelectItem value="execucao">Execução</SelectItem>
+                    <SelectItem value="revisao">Revisão</SelectItem>
+                    <SelectItem value="conclusao">Conclusão</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div>
+                <Label htmlFor="status">Status</Label>
+                <Select
+                  value={formData.status}
+                  onValueChange={(value) => setFormData({...formData, status: value})}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione o status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="pendente">Pendente</SelectItem>
+                    <SelectItem value="em_andamento">Em Andamento</SelectItem>
+                    <SelectItem value="concluido">Concluído</SelectItem>
+                    <SelectItem value="atrasado">Atrasado</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div>
+                <Label htmlFor="prioridade">Prioridade</Label>
+                <Select
+                  value={formData.prioridade}
+                  onValueChange={(value) => setFormData({...formData, prioridade: value})}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione a prioridade" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="baixa">Baixa</SelectItem>
+                    <SelectItem value="media">Média</SelectItem>
+                    <SelectItem value="alta">Alta</SelectItem>
+                    <SelectItem value="critica">Crítica</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div>
+                <Label htmlFor="progresso">Progresso (%)</Label>
+                <Input
+                  id="progresso"
+                  type="number"
+                  min="0"
+                  max="100"
+                  value={formData.progresso_percentual}
+                  onChange={(e) => setFormData({...formData, progresso_percentual: parseInt(e.target.value) || 0})}
+                />
+              </div>
+
+              <div>
+                <Label htmlFor="data_inicio">Data de Início</Label>
+                <Input
+                  id="data_inicio"
+                  type="date"
+                  value={formData.data_inicio}
+                  onChange={(e) => setFormData({...formData, data_inicio: e.target.value})}
+                />
+              </div>
+
+              <div>
+                <Label htmlFor="data_fim">Data de Fim</Label>
+                <Input
+                  id="data_fim"
+                  type="date"
+                  value={formData.data_fim}
+                  onChange={(e) => setFormData({...formData, data_fim: e.target.value})}
+                />
+              </div>
+
+              <div className="md:col-span-2">
+                <Label htmlFor="observacoes">Observações</Label>
+                <Textarea
+                  id="observacoes"
+                  value={formData.observacoes}
+                  onChange={(e) => setFormData({...formData, observacoes: e.target.value})}
+                  placeholder="Observações gerais sobre a demanda"
+                  rows={3}
+                />
+              </div>
+
+              <div className="md:col-span-2">
+                <Label htmlFor="motivo_atraso">Motivo do Atraso</Label>
+                <Textarea
+                  id="motivo_atraso"
+                  value={formData.motivo_atraso}
+                  onChange={(e) => setFormData({...formData, motivo_atraso: e.target.value})}
+                  placeholder="Explique o motivo do atraso (se aplicável)"
+                  rows={2}
+                />
               </div>
             </div>
-          )}
+
+            {/* Botões */}
+            <div className="flex justify-end gap-3 pt-4 border-t">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setIsEditDialogOpen(false);
+                  setEditingCronograma(null);
+                }}
+              >
+                Cancelar
+              </Button>
+              <Button onClick={salvarCronograma} disabled={!formData.titulo.trim()}>
+                {editingCronograma ? 'Atualizar' : 'Criar'}
+              </Button>
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
     </div>
