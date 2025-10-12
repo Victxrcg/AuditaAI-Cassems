@@ -4,6 +4,7 @@ const cors = require('cors');
 const complianceRoutes = require('./routes/complianceRoutes');
 const usuariosRoutes = require('./routes/usuariosRoutes');
 const authRoutes = require('./routes/authRoutes');
+const cronogramaRoutes = require('./routes/cronogramaRoutes');
 const { getPoolStatus, getDbPool } = require('./lib/db');
 
 const app = express();
@@ -17,6 +18,7 @@ app.use(express.urlencoded({ extended: true }));
 app.use('/api/compliance', complianceRoutes);
 app.use('/api/usuarios', usuariosRoutes);
 app.use('/api/auth', authRoutes); // Mudança: de /api para /api/auth
+app.use('/api/cronograma', cronogramaRoutes);
 
 // Rota de teste
 app.get('/api/health', (req, res) => {

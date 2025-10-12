@@ -152,7 +152,7 @@ exports.atualizarUsuario = async (req, res) => {
   let pool, server;
   try {
     const { id } = req.params;
-    const { nome, email, perfil, ativo } = req.body;
+    const { nome, email, perfil, ativo, organizacao } = req.body;
     
     // Validar perfil
     if (perfil && !['admin', 'compliance'].includes(perfil)) {
@@ -191,13 +191,14 @@ exports.atualizarUsuario = async (req, res) => {
           email = COALESCE(?, email),
           perfil = COALESCE(?, perfil),
           ativo = COALESCE(?, ativo),
+          organizacao = COALESCE(?, organizacao),
           updated_at = NOW()
       WHERE id = ?
-    `, [nome, email, perfil, ativo, id]);
+    `, [nome, email, perfil, ativo, organizacao, id]);
     
     // Buscar o usuário atualizado
     const [updatedUser] = await pool.query(`
-      SELECT id, nome, email, perfil, ativo, created_at, updated_at
+      SELECT id, nome, nome_empresa, email, perfil, ativo, created_at, updated_at, organizacao, cor_identificacao
       FROM usuarios_cassems WHERE id = ?
     `, [id]);
     
@@ -242,6 +243,35 @@ exports.deletarUsuario = async (req, res) => {
     console.error('❌ Erro ao deletar usuário:', err);
     res.status(500).json({ 
       error: 'Erro ao deletar usuário', 
+      details: err.message 
+    });
+  }
+};
+
+// Listar todas as organizações únicas
+exports.listarOrganizacoes = async (req, res) => {
+  let pool, server;
+  try {
+    ({ pool, server } = await getDbPoolWithTunnel());
+    
+    const rows = await pool.execute(`
+      SELECT DISTINCT 
+        organizacao,
+        COUNT(*) as total_usuarios,
+        MIN(created_at) as primeira_criacao,
+        MAX(created_at) as ultima_criacao
+      FROM usuarios_cassems 
+      GROUP BY organizacao
+      ORDER BY total_usuarios DESC
+    `);
+    
+    console.log('🔍 Organizações encontradas:', rows.length);
+    
+    res.json(rows);
+  } catch (err) {
+    console.error('❌ Erro ao buscar organizações:', err);
+    res.status(500).json({ 
+      error: 'Erro ao buscar organizações', 
       details: err.message 
     });
   }
