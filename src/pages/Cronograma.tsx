@@ -150,12 +150,31 @@ const Cronograma = () => {
   }, [currentUser]);
 
   // Função para converter data para formato YYYY-MM-DD
-  const formatDateForInput = (dateString: string) => {
+  const formatDateForInput = (dateString: string | Date | null) => {
     if (!dateString) return '';
     try {
-      const date = new Date(dateString);
-      return date.toISOString().split('T')[0];
-    } catch {
+      let date: Date;
+      
+      // Se já é uma Date object
+      if (dateString instanceof Date) {
+        date = dateString;
+      } 
+      // Se é string, criar Date object
+      else {
+        date = new Date(dateString);
+      }
+      
+      // Verificar se a data é válida
+      if (isNaN(date.getTime())) {
+        console.log('⚠️ Data inválida:', dateString);
+        return '';
+      }
+      
+      const formatted = date.toISOString().split('T')[0];
+      console.log('✅ Data formatada:', dateString, '→', formatted);
+      return formatted;
+    } catch (error) {
+      console.log('❌ Erro ao formatar data:', dateString, error);
       return '';
     }
   };
@@ -163,6 +182,12 @@ const Cronograma = () => {
   // Atualizar formData quando editingCronograma muda
   useEffect(() => {
     if (editingCronograma) {
+      console.log('🔍 Editando cronograma:', editingCronograma);
+      console.log('🔍 Data início original:', editingCronograma.data_inicio);
+      console.log('🔍 Data fim original:', editingCronograma.data_fim);
+      console.log('🔍 Data início formatada:', formatDateForInput(editingCronograma.data_inicio || ''));
+      console.log('🔍 Data fim formatada:', formatDateForInput(editingCronograma.data_fim || ''));
+      
       setFormData({
         titulo: editingCronograma.titulo,
         descricao: editingCronograma.descricao || '',
@@ -297,8 +322,15 @@ const Cronograma = () => {
       
       const method = editingCronograma ? 'PUT' : 'POST';
       
+      // Preparar dados para envio (remover datas vazias)
+      const dadosParaEnvio = {
+        ...formData,
+        data_inicio: formData.data_inicio || null,
+        data_fim: formData.data_fim || null
+      };
+      
       // Debug: Log dos dados que estão sendo enviados
-      console.log('🔍 Dados sendo enviados:', formData);
+      console.log('🔍 Dados sendo enviados:', dadosParaEnvio);
       console.log('🔍 URL:', url);
       console.log('🔍 Method:', method);
       console.log('🔍 User Org:', userOrg);
@@ -309,7 +341,7 @@ const Cronograma = () => {
           'Content-Type': 'application/json',
           'x-user-organization': userOrg
         },
-        body: JSON.stringify(formData)
+        body: JSON.stringify(dadosParaEnvio)
       });
 
       console.log('🔍 Response Status:', response.status);

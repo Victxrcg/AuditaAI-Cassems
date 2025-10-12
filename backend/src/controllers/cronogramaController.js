@@ -36,6 +36,15 @@ exports.listarCronogramas = async (req, res) => {
     const rows = await executeQueryWithRetry(query, params);
     
     console.log('📋 Cronogramas encontrados:', rows.length);
+    if (rows.length > 0) {
+      console.log('🔍 Primeiro cronograma (exemplo):', {
+        id: rows[0].id,
+        titulo: rows[0].titulo,
+        data_inicio: rows[0].data_inicio,
+        data_fim: rows[0].data_fim,
+        tipo_data_inicio: typeof rows[0].data_inicio
+      });
+    }
     
     // Converter BigInt para Number se necessário
     const processedRows = rows.map(row => {
@@ -79,12 +88,16 @@ exports.criarCronograma = async (req, res) => {
       });
     }
     
+    // Tratar datas vazias como NULL
+    const dataInicio = (data_inicio && data_inicio !== '') ? data_inicio : null;
+    const dataFim = (data_fim && data_fim !== '') ? data_fim : null;
+    
     const result = await executeQueryWithRetry(`
       INSERT INTO cronograma (
         titulo, descricao, organizacao, fase_atual, data_inicio, data_fim,
         responsavel_id, prioridade, observacoes, progresso_percentual
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
-    `, [titulo, descricao, organizacao, fase_atual, data_inicio, data_fim, responsavel_id, prioridade, observacoes]);
+    `, [titulo, descricao, organizacao, fase_atual, dataInicio, dataFim, responsavel_id, prioridade, observacoes]);
     
     // Buscar o cronograma criado
     const newCronograma = await executeQueryWithRetry(`
@@ -161,8 +174,8 @@ exports.atualizarCronograma = async (req, res) => {
     if (titulo !== undefined) { updates.push('titulo = ?'); params.push(titulo); }
     if (descricao !== undefined) { updates.push('descricao = ?'); params.push(descricao); }
     if (fase_atual !== undefined) { updates.push('fase_atual = ?'); params.push(fase_atual); }
-    if (data_inicio !== undefined) { updates.push('data_inicio = ?'); params.push(data_inicio); }
-    if (data_fim !== undefined) { updates.push('data_fim = ?'); params.push(data_fim); }
+    if (data_inicio !== undefined && data_inicio !== '') { updates.push('data_inicio = ?'); params.push(data_inicio); }
+    if (data_fim !== undefined && data_fim !== '') { updates.push('data_fim = ?'); params.push(data_fim); }
     if (responsavel_id !== undefined) { updates.push('responsavel_id = ?'); params.push(responsavel_id); }
     if (prioridade !== undefined) { updates.push('prioridade = ?'); params.push(prioridade); }
     if (status !== undefined) { updates.push('status = ?'); params.push(status); }
@@ -200,6 +213,8 @@ exports.atualizarCronograma = async (req, res) => {
       LEFT JOIN usuarios_cassems u ON c.responsavel_id = u.id
       WHERE c.id = ?
     `, [id]);
+    
+    console.log('🔍 Cronograma atualizado retornado:', updatedCronograma[0]);
     
     // Converter BigInt para Number se necessário
     const cronograma = updatedCronograma[0];
