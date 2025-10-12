@@ -17,7 +17,7 @@ exports.login = async (req, res) => {
     // Buscar usuário por email incluindo campos de organização
     const rows = await pool.execute(`
       SELECT 
-        id, nome, email, senha, perfil, ativo, created_at, updated_at,
+        id, nome, nome_empresa, email, senha, perfil, ativo, created_at, updated_at,
         organizacao, permissoes, cor_identificacao
       FROM usuarios_cassems 
       WHERE email = ?
@@ -71,7 +71,7 @@ exports.login = async (req, res) => {
     // Adicionar informações de organização para o frontend
     const userWithOrg = {
       ...user,
-      organizacao_nome: user.organizacao === 'portes' ? 'Portes' : 'Cassems',
+      organizacao_nome: user.nome_empresa || (user.organizacao === 'portes' ? 'Portes' : 'Cassems'),
       cor_primaria: user.cor_identificacao,
       cor_secundaria: user.organizacao === 'portes' ? '#D1FAE5' : '#DBEAFE'
     };
@@ -94,10 +94,10 @@ exports.login = async (req, res) => {
 exports.registrar = async (req, res) => {
   let pool, server;
   try {
-    const { nome, email, senha, perfil = 'visualizador' } = req.body;
+    const { nome, email, senha, nomeEmpresa, perfil = 'visualizador' } = req.body;
 
-    if (!nome || !email || !senha) {
-      return res.status(400).json({ error: 'Nome, email e senha são obrigatórios' });
+    if (!nome || !email || !senha || !nomeEmpresa) {
+      return res.status(400).json({ error: 'Nome, email, senha e nome da empresa são obrigatórios' });
     }
 
     ({ pool, server } = await getDbPoolWithTunnel());
@@ -122,14 +122,14 @@ exports.registrar = async (req, res) => {
     const hashedPassword = senha;
 
     const result = await pool.query(
-      `INSERT INTO usuarios_cassems (nome, email, senha, perfil, ativo, organizacao, cor_identificacao) VALUES (?, ?, ?, ?, 1, ?, ?)`,
-      [nome, email, hashedPassword, perfil, organizacao, cor_identificacao]
+      `INSERT INTO usuarios_cassems (nome, nome_empresa, email, senha, perfil, ativo, organizacao, cor_identificacao) VALUES (?, ?, ?, ?, ?, 1, ?, ?)`,
+      [nome, nomeEmpresa, email, hashedPassword, perfil, organizacao, cor_identificacao]
     );
 
     // Buscar o usuário criado (sem senha)
     const newUserRows = await pool.query(
       `SELECT 
-        id, nome, email, perfil, ativo, created_at, 
+        id, nome, nome_empresa, email, perfil, ativo, created_at, 
         organizacao, permissoes, cor_identificacao
       FROM usuarios_cassems 
       WHERE id = ?`,
@@ -139,7 +139,7 @@ exports.registrar = async (req, res) => {
     const newUser = newUserRows[0];
     const userWithOrg = {
       ...newUser,
-      organizacao_nome: newUser.organizacao === 'portes' ? 'Portes' : 'Cassems',
+      organizacao_nome: newUser.nome_empresa || (newUser.organizacao === 'portes' ? 'Portes' : 'Cassems'),
       cor_primaria: newUser.cor_identificacao,
       cor_secundaria: newUser.organizacao === 'portes' ? '#D1FAE5' : '#DBEAFE'
     };
@@ -168,7 +168,7 @@ exports.getCurrentUser = async (req, res) => {
 
     const rows = await pool.query(`
       SELECT 
-        id, nome, email, perfil, ativo, created_at, updated_at,
+        id, nome, nome_empresa, email, perfil, ativo, created_at, updated_at,
         organizacao, permissoes, cor_identificacao
       FROM usuarios_cassems 
       WHERE id = ?
@@ -181,7 +181,7 @@ exports.getCurrentUser = async (req, res) => {
     const user = rows[0];
     const userWithOrg = {
       ...user,
-      organizacao_nome: user.organizacao === 'portes' ? 'Portes' : 'Cassems',
+      organizacao_nome: user.nome_empresa || (user.organizacao === 'portes' ? 'Portes' : 'Cassems'),
       cor_primaria: user.cor_identificacao,
       cor_secundaria: user.organizacao === 'portes' ? '#D1FAE5' : '#DBEAFE'
     };

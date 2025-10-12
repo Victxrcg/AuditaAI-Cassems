@@ -62,6 +62,17 @@ const Sidebar = ({ isOpen, onOpenChange }: SidebarProps) => {
     }
   };
 
+  const getCurrentCompanyName = () => {
+    try {
+      const raw = localStorage.getItem('user');
+      if (!raw) return 'Cassems';
+      const u = JSON.parse(raw);
+      return u?.nome_empresa || u?.organizacao_nome || 'Cassems';
+    } catch {
+      return 'Cassems';
+    }
+  };
+
   const menuItems = [
     { 
       name: "Cronograma", 
@@ -129,7 +140,7 @@ const Sidebar = ({ isOpen, onOpenChange }: SidebarProps) => {
               </div>
               <div>
                 <h1 className="text-lg font-bold text-sidebar-foreground">Compliance App</h1>
-                <p className="text-sm text-sidebar-foreground"> Cassems </p>      
+                <p className="text-sm text-sidebar-foreground">{getCurrentCompanyName()}</p>      
               </div>
             </div>
           )}

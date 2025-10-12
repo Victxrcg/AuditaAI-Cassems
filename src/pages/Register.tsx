@@ -13,6 +13,7 @@ const Register = () => {
   const [email, setEmail] = useState("");
   const [senha, setSenha] = useState("");
   const [confirmSenha, setConfirmSenha] = useState("");
+  const [nomeEmpresa, setNomeEmpresa] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -37,11 +38,18 @@ const Register = () => {
       return;
     }
 
+    // Validação do nome da empresa
+    if (!nomeEmpresa.trim()) {
+      toast({ title: 'Nome da empresa obrigatório', description: 'Digite o nome da sua empresa.', variant: 'destructive' });
+      setIsLoading(false);
+      return;
+    }
+
     try {
       const res = await fetch(`${API_BASE}/auth/registrar`, { // Mudança: de /api/register para /api/auth/registrar
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ nome, email, senha })
+        body: JSON.stringify({ nome, email, senha, nomeEmpresa })
       });
       const data = await res.json();
       if (res.ok && data.success) {
@@ -53,6 +61,7 @@ const Register = () => {
         setEmail(""); 
         setSenha(""); 
         setConfirmSenha("");
+        setNomeEmpresa("");
         // Redirecionar para login após 2 segundos
         setTimeout(() => {
           navigate('/login');
@@ -98,6 +107,19 @@ const Register = () => {
                 required 
                 minLength={2}
               />
+            </div>
+            <div>
+              <Label>Nome da Empresa</Label>
+              <Input 
+                placeholder="Digite o nome da sua empresa" 
+                value={nomeEmpresa} 
+                onChange={e => setNomeEmpresa(e.target.value)} 
+                required 
+                minLength={2}
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                Este nome aparecerá no sistema
+              </p>
             </div>
             <div>
               <Label>Email</Label>

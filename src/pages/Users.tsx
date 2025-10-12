@@ -12,11 +12,13 @@ interface UserRow {
   id: number;
   email: string;
   nome: string | null;
+  nome_empresa?: string;
   perfil: string;
   ativo: number;
   created_at?: string;
   updated_at?: string;
   organizacao?: 'cassems' | 'portes';
+  organizacao_nome?: string;
 }
 
 const Users = () => {
@@ -191,16 +193,14 @@ const Users = () => {
     );
   };
 
-  const getOrganizationBadge = (organizacao: string) => {
-    return organizacao === 'cassems' ? (
-      <Badge className="bg-blue-100 text-blue-800 border-blue-200 border">
+  const getOrganizationBadge = (user: UserRow) => {
+    const nomeEmpresa = user.nome_empresa || user.organizacao_nome || (user.organizacao === 'portes' ? 'Portes' : 'Cassems');
+    const isPortes = user.organizacao === 'portes';
+    
+    return (
+      <Badge className={`${isPortes ? 'bg-green-100 text-green-800 border-green-200' : 'bg-blue-100 text-blue-800 border-blue-200'} border`}>
         <Building className="h-3 w-3 mr-1" />
-        CASSEMS
-      </Badge>
-    ) : (
-      <Badge className="bg-green-100 text-green-800 border-green-200 border">
-        <Building className="h-3 w-3 mr-1" />
-        PORTES
+        {nomeEmpresa.toUpperCase()}
       </Badge>
     );
   };
@@ -282,11 +282,11 @@ const Users = () => {
                       </div>
                     </div>
 
-                    {/* Organização */}
+                    {/* Empresa */}
                     <div className="lg:col-span-2">
                       <div className="space-y-1">
-                        <div className="text-xs text-gray-500 font-medium">Organização</div>
-                        {getOrganizationBadge(user.organizacao || 'cassems')}
+                        <div className="text-xs text-gray-500 font-medium">Empresa</div>
+                        {getOrganizationBadge(user)}
                       </div>
                     </div>
 
