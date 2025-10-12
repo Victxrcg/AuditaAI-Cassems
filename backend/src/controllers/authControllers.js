@@ -109,13 +109,38 @@ exports.registrar = async (req, res) => {
       return res.status(400).json({ error: 'Email já está em uso' });
     }
 
-    // Determinar organização baseada no email
+    // Determinar organização baseada no email e nome da empresa
     let organizacao = 'cassems';
     let cor_identificacao = '#3B82F6';
     
+    // Se for email da Portes, sempre é portes
     if (email.includes('@portes.com')) {
       organizacao = 'portes';
       cor_identificacao = '#10B981';
+    }
+    // Se o nome da empresa contém "Portes", também é portes
+    else if (nomeEmpresa && nomeEmpresa.toLowerCase().includes('portes')) {
+      organizacao = 'portes';
+      cor_identificacao = '#10B981';
+    }
+    // Se o nome da empresa contém "Rede Frota", é uma organização específica
+    else if (nomeEmpresa && nomeEmpresa.toLowerCase().includes('rede frota')) {
+      organizacao = 'rede_frota';
+      cor_identificacao = '#8B5CF6'; // Cor roxa para Rede Frota
+    }
+    // Para outras empresas, usar o nome da empresa como organização (normalizado)
+    else if (nomeEmpresa && nomeEmpresa.trim()) {
+      // Normalizar nome da empresa para usar como organização
+      organizacao = nomeEmpresa.toLowerCase()
+        .replace(/[^a-z0-9\s]/g, '') // Remove caracteres especiais
+        .replace(/\s+/g, '_') // Substitui espaços por underscore
+        .substring(0, 50); // Limita tamanho
+      cor_identificacao = '#6366F1'; // Cor azul padrão para organizações terceiras
+    }
+    // Caso contrário, é cassems (padrão)
+    else {
+      organizacao = 'cassems';
+      cor_identificacao = '#3B82F6';
     }
 
     // Hash da senha (simplificado - produção: bcrypt)

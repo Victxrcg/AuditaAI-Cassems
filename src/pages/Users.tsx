@@ -17,7 +17,7 @@ interface UserRow {
   ativo: number;
   created_at?: string;
   updated_at?: string;
-  organizacao?: 'cassems' | 'portes';
+  organizacao?: string;
   organizacao_nome?: string;
 }
 
@@ -38,7 +38,15 @@ const Users = () => {
   const fetchUsers = async () => {
     setLoading(true);
     try {
-      const res = await fetch(`${API_BASE}/usuarios`);
+      // Obter organização do usuário logado
+      const userOrg = currentUser?.organizacao || 'cassems';
+      
+      const res = await fetch(`${API_BASE}/usuarios?organizacao=${userOrg}`, {
+        headers: {
+          'x-user-organization': userOrg
+        }
+      });
+      
       if (!res.ok) {
         console.error('Erro ao buscar usuários:', res.status, res.statusText);
         setUsers([]);
@@ -68,9 +76,14 @@ const Users = () => {
     setLoading(false);
   };
 
-  useEffect(() => { fetchUsers(); }, []);
+  useEffect(() => { 
+    if (currentUser) {
+      fetchUsers(); 
+    }
+  }, [currentUser]);
 
   const updateUser = async (userId: number, userData: Partial<UserRow>) => {
+    // Apenas usuários da Portes podem editar qualquer usuário
     if (!currentUser || currentUser.organizacao !== 'portes') {
       toast({
         title: "Acesso Negado",
@@ -122,6 +135,7 @@ const Users = () => {
   };
 
   const resetPassword = async (userId: number, userName: string) => {
+    // Apenas usuários da Portes podem resetar senhas
     if (!currentUser || currentUser.organizacao !== 'portes') {
       toast({
         title: "Acesso Negado",
@@ -195,10 +209,21 @@ const Users = () => {
 
   const getOrganizationBadge = (user: UserRow) => {
     const nomeEmpresa = user.nome_empresa || user.organizacao_nome || (user.organizacao === 'portes' ? 'Portes' : 'Cassems');
-    const isPortes = user.organizacao === 'portes';
+    
+    // Determinar cor baseada na organização
+    let badgeClass = 'bg-blue-100 text-blue-800 border-blue-200'; // Padrão azul
+    
+    if (user.organizacao === 'portes') {
+      badgeClass = 'bg-green-100 text-green-800 border-green-200';
+    } else if (user.organizacao === 'rede_frota') {
+      badgeClass = 'bg-purple-100 text-purple-800 border-purple-200';
+    } else if (user.organizacao && user.organizacao !== 'cassems' && user.organizacao !== 'portes') {
+      // Organizações terceiras (dinâmicas)
+      badgeClass = 'bg-indigo-100 text-indigo-800 border-indigo-200';
+    }
     
     return (
-      <Badge className={`${isPortes ? 'bg-green-100 text-green-800 border-green-200' : 'bg-blue-100 text-blue-800 border-blue-200'} border`}>
+      <Badge className={`${badgeClass} border`}>
         <Building className="h-3 w-3 mr-1" />
         {nomeEmpresa.toUpperCase()}
       </Badge>
@@ -237,7 +262,17 @@ const Users = () => {
       <div className="flex justify-between items-center">
         <div>
           <h1 className="text-3xl font-bold">Usuários do Sistema</h1>
-          <p className="text-gray-600">Gerencie os usuários e suas permissões</p>
+          <p className="text-gray-600">
+            {currentUser?.organizacao === 'portes' 
+              ? 'Gerencie todos os usuários do sistema' 
+              : `Usuários da ${currentUser?.nome_empresa || currentUser?.organizacao_nome || 'sua organização'}`
+            }
+          </p>
+          {currentUser?.organizacao !== 'portes' && (
+            <p className="text-sm text-blue-600 mt-1">
+              ℹ️ Você está visualizando apenas os usuários da sua organização
+            </p>
+          )}
         </div>
         <Button variant="outline" onClick={fetchUsers} disabled={loading}>
           <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
@@ -384,7 +419,7 @@ const Users = () => {
                 <label className="text-sm font-medium">Organização</label>
                 <Select
                   value={editingUser.organizacao || 'cassems'}
-                  onValueChange={(value) => setEditingUser({...editingUser, organizacao: value as 'cassems' | 'portes'})}
+                  onValueChange={(value) => setEditingUser({...editingUser, organizacao: value})}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Selecione a organização" />
@@ -402,6 +437,13 @@ const Users = () => {
                         PORTES
                       </div>
                     </SelectItem>
+                    <SelectItem value="rede_frota">
+                      <div className="flex items-center gap-2">
+                        <Building className="h-4 w-4" />
+                        REDE FROTA
+                      </div>
+                    </SelectItem>
+                    {/* Adicionar outras organizações dinamicamente se necessário */}
                   </SelectContent>
                 </Select>
               </div>

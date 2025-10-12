@@ -5,13 +5,16 @@ const { getDbPoolWithTunnel } = require('../lib/db');
 exports.listarUsuarios = async (req, res) => {
   let pool, server;
   try {
+    // Obter organização do usuário logado (se fornecido via header ou query)
+    const userOrganization = req.headers['x-user-organization'] || req.query.organizacao;
+    
     ({ pool, server } = await getDbPoolWithTunnel());
     
-    // Usar pool.execute em vez de pool.query para MariaDB
-    const rows = await pool.execute(`
+    let query = `
       SELECT 
         id,
         nome,
+        nome_empresa,
         email,
         perfil,
         ativo,
@@ -20,8 +23,23 @@ exports.listarUsuarios = async (req, res) => {
         organizacao,
         cor_identificacao
       FROM usuarios_cassems
-      ORDER BY nome ASC
-    `);
+    `;
+    
+    let params = [];
+    
+    // Se não for Portes, filtrar apenas usuários da mesma organização
+    if (userOrganization && userOrganization !== 'portes') {
+      query += ` WHERE organizacao = ?`;
+      params.push(userOrganization);
+    }
+    
+    query += ` ORDER BY nome ASC`;
+    
+    console.log('🔍 Query executada:', query);
+    console.log('🔍 Parâmetros:', params);
+    console.log('🔍 Organização do usuário:', userOrganization);
+    
+    const rows = await pool.execute(query, params);
     
     console.log(' Debug - Tipo de retorno:', typeof rows);
     console.log(' Debug - É array:', Array.isArray(rows));
@@ -50,11 +68,14 @@ exports.buscarUsuario = async (req, res) => {
       SELECT 
         id,
         nome,
+        nome_empresa,
         email,
         perfil,
         ativo,
         created_at,
-        updated_at
+        updated_at,
+        organizacao,
+        cor_identificacao
       FROM usuarios_cassems
       WHERE id = ?
     `, [id]);
