@@ -297,6 +297,12 @@ const Cronograma = () => {
       
       const method = editingCronograma ? 'PUT' : 'POST';
       
+      // Debug: Log dos dados que estão sendo enviados
+      console.log('🔍 Dados sendo enviados:', formData);
+      console.log('🔍 URL:', url);
+      console.log('🔍 Method:', method);
+      console.log('🔍 User Org:', userOrg);
+      
       const response = await fetch(url, {
         method,
         headers: {
@@ -306,7 +312,13 @@ const Cronograma = () => {
         body: JSON.stringify(formData)
       });
 
+      console.log('🔍 Response Status:', response.status);
+      console.log('🔍 Response OK:', response.ok);
+
       if (response.ok) {
+        const responseData = await response.json();
+        console.log('✅ Response Data:', responseData);
+        
         toast({
           title: "Sucesso",
           description: editingCronograma ? "Cronograma atualizado com sucesso!" : "Cronograma criado com sucesso!",
@@ -316,13 +328,15 @@ const Cronograma = () => {
         fetchCronogramas();
         fetchEstatisticas();
       } else {
-        throw new Error('Erro ao salvar cronograma');
+        const errorData = await response.text();
+        console.error('❌ Error Response:', errorData);
+        throw new Error(`Erro ${response.status}: ${errorData}`);
       }
     } catch (error) {
-      console.error('Erro ao salvar cronograma:', error);
+      console.error('❌ Erro ao salvar cronograma:', error);
       toast({
         title: "Erro",
-        description: "Erro ao salvar cronograma",
+        description: `Erro ao salvar cronograma: ${error.message}`,
         variant: "destructive",
       });
     }
@@ -378,11 +392,11 @@ const Cronograma = () => {
           </p>
           {currentUser?.organizacao === 'portes' ? (
             <p className="text-sm text-green-600 mt-1">
-              👑 Você tem acesso completo a todos os cronogramas do sistema
+              Acesso completo a todos os cronogramas do sistema.
             </p>
           ) : (
             <p className="text-sm text-blue-600 mt-1">
-              ℹ️ Você está visualizando apenas as demandas da sua organização
+              Visualizando as demandas da sua organização.
             </p>
           )}
         </div>
