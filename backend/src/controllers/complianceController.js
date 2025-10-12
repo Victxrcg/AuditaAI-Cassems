@@ -1,5 +1,5 @@
 // backend/src/controllers/complianceController.js
-const { getDbPoolWithTunnel } = require('../lib/db');
+const { getDbPoolWithTunnel, resetPool, executeQueryWithRetry } = require('../lib/db');
 const OpenAI = require('openai');
 
 // Configurar OpenAI
@@ -22,11 +22,10 @@ const registrarAlteracao = async (pool, complianceId, campo, valorAnterior, valo
 
 // Listar todas as competências
 exports.listCompetencias = async (req, res) => {
-  let pool, server;
   try {
-    ({ pool, server } = await getDbPoolWithTunnel());
+    console.log('🔍 Iniciando listagem de competências...');
     
-    const rows = await pool.query(`
+    const rows = await executeQueryWithRetry(`
       SELECT 
         cf.*,
         u.nome as created_by_nome,
@@ -41,6 +40,8 @@ exports.listCompetencias = async (req, res) => {
     `);
 
     console.log('🔍 Debug - Rows retornadas:', rows);
+    console.log('🔍 Debug - Tipo de rows:', typeof rows);
+    console.log('🔍 Debug - É array?', Array.isArray(rows));
 
     // Se rows não é um array, converter para array
     let competenciasData = [];
@@ -50,18 +51,20 @@ exports.listCompetencias = async (req, res) => {
       competenciasData = [rows];
     }
 
+    console.log('✅ Competências listadas com sucesso:', competenciasData.length);
+
     res.json({
       success: true,
       data: competenciasData
     });
   } catch (error) {
     console.error('❌ Erro ao listar competências:', error);
+    console.error('❌ Stack trace:', error.stack);
+    
     res.status(500).json({
       error: 'Erro ao listar competências',
       details: error.message
     });
-  } finally {
-    if (server) server.close();
   }
 };
 
@@ -109,10 +112,9 @@ exports.getCompetencia = async (req, res) => {
 
 // Criar nova competência
 exports.createCompetencia = async (req, res) => {
-  let pool, server;
   try {
     console.log('🔍 Debug - Iniciando criação de competência');
-    console.log(' Debug - Body recebido:', req.body);
+    console.log('🔍 Debug - Body recebido:', req.body);
     
     const { competencia_referencia, created_by } = req.body;
     
@@ -123,17 +125,15 @@ exports.createCompetencia = async (req, res) => {
       });
     }
     
-    ({ pool, server } = await getDbPoolWithTunnel());
-    
     // Obter informações do usuário que está criando
-    const userRows = await pool.query(`
+    const userRows = await executeQueryWithRetry(`
       SELECT nome, organizacao FROM usuarios_cassems WHERE id = ?
     `, [created_by]);
     
     const userName = userRows[0]?.nome || 'Usuário';
     const userOrg = userRows[0]?.organizacao || 'cassems';
     
-    const result = await pool.query(`
+    const result = await executeQueryWithRetry(`
       INSERT INTO compliance_fiscal (competencia_referencia, created_by, organizacao_criacao, status, ultima_alteracao_por, ultima_alteracao_em, ultima_alteracao_organizacao)
       VALUES (?, ?, ?, 'pendente', ?, NOW(), ?)
       `, [competencia_referencia, created_by, userOrg, created_by, userOrg]);
@@ -151,12 +151,11 @@ exports.createCompetencia = async (req, res) => {
     });
   } catch (error) {
     console.error('❌ Erro ao criar competência:', error);
+    console.error('❌ Stack trace:', error.stack);
     res.status(500).json({
       error: 'Erro ao criar competência',
       details: error.message
     });
-  } finally {
-    if (server) server.close();
   }
 };
 
