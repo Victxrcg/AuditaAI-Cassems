@@ -193,6 +193,13 @@ const Cronograma = () => {
     }
   }, [editingCronograma, currentUser]);
 
+  // Limpar motivo_atraso quando status não for "atrasado"
+  useEffect(() => {
+    if (formData.status !== 'atrasado' && formData.motivo_atraso) {
+      setFormData(prev => ({ ...prev, motivo_atraso: '' }));
+    }
+  }, [formData.status]);
+
   // Obter organizações únicas para filtro (apenas para Portes)
   const organizacoesUnicas = [...new Set(cronogramas.map(c => c.organizacao))];
 
@@ -668,22 +675,37 @@ const Cronograma = () => {
                 />
               </div>
 
-              <div>
-                <Label htmlFor="organizacao">Organização</Label>
-                <Select
-                  value={formData.organizacao}
-                  onValueChange={(value) => setFormData({...formData, organizacao: value})}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Selecione a organização" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="cassems">CASSEMS</SelectItem>
-                    <SelectItem value="portes">PORTES</SelectItem>
-                    <SelectItem value="rede_frota">REDE FROTA</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+              {currentUser?.organizacao === 'portes' ? (
+                <div>
+                  <Label htmlFor="organizacao">Organização</Label>
+                  <Select
+                    value={formData.organizacao}
+                    onValueChange={(value) => setFormData({...formData, organizacao: value})}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecione a organização" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="cassems">CASSEMS</SelectItem>
+                      <SelectItem value="portes">PORTES</SelectItem>
+                      <SelectItem value="rede_frota">REDE FROTA</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              ) : (
+                <div>
+                  <Label htmlFor="organizacao">Organização</Label>
+                  <div className="flex items-center gap-2 p-2 bg-gray-50 border rounded-md">
+                    <Building className="h-4 w-4 text-gray-500" />
+                    <span className="text-sm font-medium text-gray-700">
+                      {currentUser?.nome_empresa || currentUser?.organizacao_nome || 'Sua organização'}
+                    </span>
+                  </div>
+                  <p className="text-xs text-gray-500 mt-1">
+                    Organização fixada para sua conta
+                  </p>
+                </div>
+              )}
 
               <div>
                 <Label htmlFor="fase_atual">Fase Atual</Label>
@@ -783,16 +805,22 @@ const Cronograma = () => {
                 />
               </div>
 
-              <div className="md:col-span-2">
-                <Label htmlFor="motivo_atraso">Motivo do Atraso</Label>
-                <Textarea
-                  id="motivo_atraso"
-                  value={formData.motivo_atraso}
-                  onChange={(e) => setFormData({...formData, motivo_atraso: e.target.value})}
-                  placeholder="Explique o motivo do atraso (se aplicável)"
-                  rows={2}
-                />
-              </div>
+              {formData.status === 'atrasado' && (
+                <div className="md:col-span-2">
+                  <Label htmlFor="motivo_atraso">Motivo do Atraso *</Label>
+                  <Textarea
+                    id="motivo_atraso"
+                    value={formData.motivo_atraso}
+                    onChange={(e) => setFormData({...formData, motivo_atraso: e.target.value})}
+                    placeholder="Explique o motivo do atraso (obrigatório quando status é 'atrasado')"
+                    rows={2}
+                    className="border-red-200 focus:border-red-500"
+                  />
+                  <p className="text-xs text-red-600 mt-1">
+                    ⚠️ Este campo é obrigatório quando o status é "Atrasado"
+                  </p>
+                </div>
+              )}
             </div>
 
             {/* Botões */}
@@ -806,7 +834,13 @@ const Cronograma = () => {
               >
                 Cancelar
               </Button>
-              <Button onClick={salvarCronograma} disabled={!formData.titulo.trim()}>
+              <Button 
+                onClick={salvarCronograma} 
+                disabled={
+                  !formData.titulo.trim() || 
+                  (formData.status === 'atrasado' && !formData.motivo_atraso.trim())
+                }
+              >
                 {editingCronograma ? 'Atualizar' : 'Criar'}
               </Button>
             </div>
