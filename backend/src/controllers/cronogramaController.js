@@ -143,17 +143,17 @@ exports.atualizarCronograma = async (req, res) => {
     
     await executeQueryWithRetry(`
       UPDATE cronograma 
-      SET titulo = COALESCE(?, titulo),
-          descricao = COALESCE(?, descricao),
-          fase_atual = COALESCE(?, fase_atual),
-          data_inicio = COALESCE(?, data_inicio),
-          data_fim = COALESCE(?, data_fim),
-          responsavel_id = COALESCE(?, responsavel_id),
-          prioridade = COALESCE(?, prioridade),
-          status = COALESCE(?, status),
-          progresso_percentual = COALESCE(?, progresso_percentual),
-          observacoes = COALESCE(?, observacoes),
-          motivo_atraso = COALESCE(?, motivo_atraso),
+      SET titulo = IFNULL(?, titulo),
+          descricao = IFNULL(?, descricao),
+          fase_atual = IFNULL(?, fase_atual),
+          data_inicio = IFNULL(?, data_inicio),
+          data_fim = IFNULL(?, data_fim),
+          responsavel_id = IFNULL(?, responsavel_id),
+          prioridade = IFNULL(?, prioridade),
+          status = IFNULL(?, status),
+          progresso_percentual = IFNULL(?, progresso_percentual),
+          observacoes = IFNULL(?, observacoes),
+          motivo_atraso = IFNULL(?, motivo_atraso),
           data_ultima_atualizacao = CURDATE(),
           updated_at = NOW()
       WHERE id = ?
