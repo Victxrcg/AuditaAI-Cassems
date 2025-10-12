@@ -1,5 +1,5 @@
 ﻿// Serviço para gerenciar anexos de compliance
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+const API_BASE = `${import.meta.env.VITE_API_URL || 'http://localhost:3001'}/api`;
 
 export interface Anexo {
   id: number;

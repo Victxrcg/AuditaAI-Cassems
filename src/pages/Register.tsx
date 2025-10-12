@@ -18,7 +18,7 @@ const Register = () => {
   const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
   const navigate = useNavigate();
-  const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+  const API_BASE = `${import.meta.env.VITE_API_URL || 'http://localhost:3001'}/api`;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
