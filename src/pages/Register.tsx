@@ -38,7 +38,7 @@ const Register = () => {
     }
 
     try {
-      const res = await fetch(`${API_BASE}/api/auth/registrar`, { // Mudança: de /api/register para /api/auth/registrar
+      const res = await fetch(`${API_BASE}/auth/registrar`, { // Mudança: de /api/register para /api/auth/registrar
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ nome, email, senha })

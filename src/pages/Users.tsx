@@ -36,7 +36,7 @@ const Users = () => {
   const fetchUsers = async () => {
     setLoading(true);
     try {
-      const res = await fetch(`${API_BASE}/api/usuarios`);
+      const res = await fetch(`${API_BASE}/usuarios`);
       if (!res.ok) {
         console.error('Erro ao buscar usuários:', res.status, res.statusText);
         setUsers([]);
@@ -79,7 +79,7 @@ const Users = () => {
     }
 
     try {
-      const response = await fetch(`${API_BASE}/api/usuarios/${userId}`, {
+      const response = await fetch(`${API_BASE}/usuarios/${userId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(userData)
@@ -130,7 +130,7 @@ const Users = () => {
     }
 
     try {
-      const response = await fetch(`${API_BASE}/api/auth/reset-password`, {
+      const response = await fetch(`${API_BASE}/auth/reset-password`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userId })
