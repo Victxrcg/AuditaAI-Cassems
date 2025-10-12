@@ -788,7 +788,7 @@ export default function Compliance() {
   const [leisVigentesExpanded, setLeisVigentesExpanded] = useState(true);
 
   // API base URL
-  const API_BASE = 'http://localhost:3001/api';
+  const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
   // Mapear IDs dos itens para campos do banco
   const itemFieldMapping: Record<string, Record<string, string>> = {
