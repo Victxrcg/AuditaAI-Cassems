@@ -3,7 +3,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
@@ -149,6 +149,17 @@ const Cronograma = () => {
     }
   }, [currentUser]);
 
+  // Função para converter data para formato YYYY-MM-DD
+  const formatDateForInput = (dateString: string) => {
+    if (!dateString) return '';
+    try {
+      const date = new Date(dateString);
+      return date.toISOString().split('T')[0];
+    } catch {
+      return '';
+    }
+  };
+
   // Atualizar formData quando editingCronograma muda
   useEffect(() => {
     if (editingCronograma) {
@@ -158,8 +169,8 @@ const Cronograma = () => {
         organizacao: editingCronograma.organizacao,
         fase_atual: editingCronograma.fase_atual,
         progresso_percentual: editingCronograma.progresso_percentual,
-        data_inicio: editingCronograma.data_inicio || '',
-        data_fim: editingCronograma.data_fim || '',
+        data_inicio: formatDateForInput(editingCronograma.data_inicio || ''),
+        data_fim: formatDateForInput(editingCronograma.data_fim || ''),
         status: editingCronograma.status,
         prioridade: editingCronograma.prioridade,
         observacoes: editingCronograma.observacoes || '',
@@ -628,6 +639,9 @@ const Cronograma = () => {
             <DialogTitle>
               {editingCronograma ? 'Editar Demanda' : 'Nova Demanda'}
             </DialogTitle>
+            <DialogDescription>
+              {editingCronograma ? 'Modifique os dados da demanda abaixo.' : 'Preencha os dados para criar uma nova demanda.'}
+            </DialogDescription>
           </DialogHeader>
           
           <div className="space-y-6">

@@ -37,7 +37,18 @@ exports.listarCronogramas = async (req, res) => {
     
     console.log('📋 Cronogramas encontrados:', rows.length);
     
-    res.json(rows);
+    // Converter BigInt para Number se necessário
+    const processedRows = rows.map(row => {
+      const processedRow = { ...row };
+      Object.keys(processedRow).forEach(key => {
+        if (typeof processedRow[key] === 'bigint') {
+          processedRow[key] = Number(processedRow[key]);
+        }
+      });
+      return processedRow;
+    });
+    
+    res.json(processedRows);
   } catch (error) {
     console.error('❌ Erro ao listar cronogramas:', error);
     res.status(500).json({
@@ -196,7 +207,17 @@ exports.buscarCronograma = async (req, res) => {
       return res.status(404).json({ error: 'Cronograma não encontrado' });
     }
     
-    res.json(rows[0]);
+    // Converter BigInt para Number se necessário
+    const cronograma = rows[0];
+    if (cronograma) {
+      Object.keys(cronograma).forEach(key => {
+        if (typeof cronograma[key] === 'bigint') {
+          cronograma[key] = Number(cronograma[key]);
+        }
+      });
+    }
+    
+    res.json(cronograma);
   } catch (error) {
     console.error('❌ Erro ao buscar cronograma:', error);
     res.status(500).json({
@@ -261,7 +282,18 @@ exports.estatisticasCronograma = async (req, res) => {
       ${whereClause}
     `, params);
     
-    res.json(stats[0]);
+    // Converter BigInt para Number se necessário
+    const statsData = stats[0];
+    if (statsData) {
+      // Converter campos BigInt para Number
+      Object.keys(statsData).forEach(key => {
+        if (typeof statsData[key] === 'bigint') {
+          statsData[key] = Number(statsData[key]);
+        }
+      });
+    }
+    
+    res.json(statsData);
   } catch (error) {
     console.error('❌ Erro ao buscar estatísticas:', error);
     res.status(500).json({
