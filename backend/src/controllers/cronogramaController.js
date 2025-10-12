@@ -99,10 +99,20 @@ exports.criarCronograma = async (req, res) => {
       WHERE c.id = ?
     `, [result.insertId]);
     
+    // Converter BigInt para Number se necessário
+    const cronograma = newCronograma[0];
+    if (cronograma) {
+      Object.keys(cronograma).forEach(key => {
+        if (typeof cronograma[key] === 'bigint') {
+          cronograma[key] = Number(cronograma[key]);
+        }
+      });
+    }
+    
     res.status(201).json({
       success: true,
       message: 'Cronograma criado com sucesso',
-      data: newCronograma[0]
+      data: cronograma
     });
   } catch (error) {
     console.error('❌ Erro ao criar cronograma:', error);
@@ -141,23 +151,35 @@ exports.atualizarCronograma = async (req, res) => {
       }
     }
     
-    await executeQueryWithRetry(`
+    // Construir query dinamicamente para evitar conflitos de collation
+    const updates = [];
+    const params = [];
+    
+    if (titulo !== undefined) { updates.push('titulo = ?'); params.push(titulo); }
+    if (descricao !== undefined) { updates.push('descricao = ?'); params.push(descricao); }
+    if (fase_atual !== undefined) { updates.push('fase_atual = ?'); params.push(fase_atual); }
+    if (data_inicio !== undefined) { updates.push('data_inicio = ?'); params.push(data_inicio); }
+    if (data_fim !== undefined) { updates.push('data_fim = ?'); params.push(data_fim); }
+    if (responsavel_id !== undefined) { updates.push('responsavel_id = ?'); params.push(responsavel_id); }
+    if (prioridade !== undefined) { updates.push('prioridade = ?'); params.push(prioridade); }
+    if (status !== undefined) { updates.push('status = ?'); params.push(status); }
+    if (progresso !== undefined) { updates.push('progresso_percentual = ?'); params.push(progresso); }
+    if (observacoes !== undefined) { updates.push('observacoes = ?'); params.push(observacoes); }
+    if (motivo_atraso !== undefined) { updates.push('motivo_atraso = ?'); params.push(motivo_atraso); }
+    
+    // Sempre atualizar data_ultima_atualizacao e updated_at
+    updates.push('data_ultima_atualizacao = CURDATE()');
+    updates.push('updated_at = NOW()');
+    
+    params.push(id);
+    
+    const updateQuery = `
       UPDATE cronograma 
-      SET titulo = IFNULL(?, titulo),
-          descricao = IFNULL(?, descricao),
-          fase_atual = IFNULL(?, fase_atual),
-          data_inicio = IFNULL(?, data_inicio),
-          data_fim = IFNULL(?, data_fim),
-          responsavel_id = IFNULL(?, responsavel_id),
-          prioridade = IFNULL(?, prioridade),
-          status = IFNULL(?, status),
-          progresso_percentual = IFNULL(?, progresso_percentual),
-          observacoes = IFNULL(?, observacoes),
-          motivo_atraso = IFNULL(?, motivo_atraso),
-          data_ultima_atualizacao = CURDATE(),
-          updated_at = NOW()
+      SET ${updates.join(', ')}
       WHERE id = ?
-    `, [titulo, descricao, fase_atual, data_inicio, data_fim, responsavel_id, prioridade, status, progresso, observacoes, motivo_atraso, id]);
+    `;
+    
+    await executeQueryWithRetry(updateQuery, params);
     
     // Buscar o cronograma atualizado
     const updatedCronograma = await executeQueryWithRetry(`
@@ -172,10 +194,20 @@ exports.atualizarCronograma = async (req, res) => {
       WHERE c.id = ?
     `, [id]);
     
+    // Converter BigInt para Number se necessário
+    const cronograma = updatedCronograma[0];
+    if (cronograma) {
+      Object.keys(cronograma).forEach(key => {
+        if (typeof cronograma[key] === 'bigint') {
+          cronograma[key] = Number(cronograma[key]);
+        }
+      });
+    }
+    
     res.json({
       success: true,
       message: 'Cronograma atualizado com sucesso',
-      data: updatedCronograma[0]
+      data: cronograma
     });
   } catch (error) {
     console.error('❌ Erro ao atualizar cronograma:', error);
