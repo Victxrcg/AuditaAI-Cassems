@@ -79,7 +79,9 @@ exports.criarCronograma = async (req, res) => {
       data_fim,
       responsavel_id,
       prioridade = 'media',
-      observacoes
+      observacoes,
+      status = 'pendente',
+      motivo_atraso
     } = req.body;
     
     if (!titulo || !organizacao) {
@@ -95,9 +97,21 @@ exports.criarCronograma = async (req, res) => {
     const result = await executeQueryWithRetry(`
       INSERT INTO cronograma (
         titulo, descricao, organizacao, fase_atual, data_inicio, data_fim,
-        responsavel_id, prioridade, observacoes
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `, [titulo, descricao, organizacao, fase_atual, dataInicio, dataFim, responsavel_id, prioridade, observacoes]);
+        responsavel_id, prioridade, observacoes, status, motivo_atraso
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `, [
+      titulo,
+      descricao,
+      organizacao,
+      fase_atual,
+      dataInicio,
+      dataFim,
+      responsavel_id,
+      prioridade,
+      observacoes,
+      status,
+      motivo_atraso || null
+    ]);
     
     // Buscar o cronograma criado
     const newCronograma = await executeQueryWithRetry(`
