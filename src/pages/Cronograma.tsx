@@ -69,10 +69,10 @@ const Cronograma = () => {
   const [usuarios, setUsuarios] = useState<any[]>([]);
   const [editingCronograma, setEditingCronograma] = useState<CronogramaItem | null>(null);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
-  const [formData, setFormData] = useState({
+  const initialFormData = () => ({
     titulo: '',
     descricao: '',
-    organizacao: 'cassems',
+    organizacao: currentUser?.organizacao || 'cassems',
     fase_atual: 'inicio',
     data_inicio: '',
     data_fim: '',
@@ -82,6 +82,8 @@ const Cronograma = () => {
     motivo_atraso: '',
     responsavel_id: null as number | null
   });
+
+  const [formData, setFormData] = useState(initialFormData());
   const [filtroStatus, setFiltroStatus] = useState<string>('todos');
   const [filtroPrioridade, setFiltroPrioridade] = useState<string>('todos');
   const [filtroOrganizacao, setFiltroOrganizacao] = useState<string>('todos');
@@ -379,6 +381,8 @@ const Cronograma = () => {
         });
         setIsEditDialogOpen(false);
         setEditingCronograma(null);
+        // Resetar formulário para próxima criação
+        setFormData(initialFormData());
         fetchCronogramas();
         fetchEstatisticas();
       } else {
@@ -723,6 +727,8 @@ const Cronograma = () => {
             </Button>
             <Button onClick={() => {
               setEditingCronograma(null);
+              // Garantir formulário limpo ao abrir nova demanda
+              setFormData(initialFormData());
               setIsEditDialogOpen(true);
             }}>
               <Plus className="h-4 w-4 mr-2" />
