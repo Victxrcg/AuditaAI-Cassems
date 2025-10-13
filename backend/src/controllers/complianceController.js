@@ -25,7 +25,11 @@ exports.listCompetencias = async (req, res) => {
   try {
     console.log('🔍 Iniciando listagem de competências...');
     
-    const rows = await executeQueryWithRetry(`
+    // Obter organização do usuário
+    const userOrganization = req.headers['x-user-organization'] || req.query.organizacao;
+    console.log('🔍 Organização do usuário:', userOrganization);
+    
+    let query = `
       SELECT 
         cf.*,
         u.nome as created_by_nome,
@@ -36,8 +40,24 @@ exports.listCompetencias = async (req, res) => {
       FROM compliance_fiscal cf
       LEFT JOIN usuarios_cassems u ON cf.created_by = u.id
       LEFT JOIN usuarios_cassems u2 ON cf.ultima_alteracao_por = u2.id
-      ORDER BY cf.competencia_referencia DESC, cf.created_at DESC
-    `);
+    `;
+    
+    let params = [];
+    
+    // Se não for Portes, filtrar apenas competências da mesma organização
+    // Portes vê TODAS as competências de todas as organizações
+    if (userOrganization && userOrganization !== 'portes') {
+      query += ` WHERE cf.organizacao_criacao = ?`;
+      params.push(userOrganization);
+    }
+    // Se for Portes, não aplica filtro - vê tudo
+    
+    query += ` ORDER BY cf.competencia_referencia DESC, cf.created_at DESC`;
+    
+    console.log('🔍 Query SQL:', query);
+    console.log('🔍 Params:', params);
+    
+    const rows = await executeQueryWithRetry(query, params);
 
     console.log('🔍 Debug - Rows retornadas:', rows);
     console.log('🔍 Debug - Tipo de rows:', typeof rows);

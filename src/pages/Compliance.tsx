@@ -775,7 +775,7 @@ export default function Compliance() {
     id: number;
     nome: string;
     email: string;
-    organizacao: 'portes' | 'cassems';
+    organizacao: string;
     perfil: string;
     cor_identificacao: string;
   } | null>(null);
@@ -838,7 +838,12 @@ export default function Compliance() {
       console.log(' Health check:', healthData);
 
       // Depois testar a rota de competências (rota correta)
-      const response = await fetch(`${API_BASE}/compliance/competencias`);
+      const userOrg = currentUser?.organizacao || 'cassems';
+      const response = await fetch(`${API_BASE}/compliance/competencias?organizacao=${userOrg}`, {
+        headers: {
+          'x-user-organization': userOrg
+        }
+      });
       const data = await response.json();
       console.log(' Resposta do backend:', data);
       setError(null);
@@ -852,7 +857,16 @@ export default function Compliance() {
   const loadCompetencias = async () => {
     try {
       setLoading(true);
-      const response = await fetch(`${API_BASE}/compliance/competencias`);
+      
+      // Obter organização do usuário atual
+      const userOrg = currentUser?.organizacao || 'cassems';
+      
+      // Fazer requisição com filtro de organização
+      const response = await fetch(`${API_BASE}/compliance/competencias?organizacao=${userOrg}`, {
+        headers: {
+          'x-user-organization': userOrg
+        }
+      });
       const data = await response.json();
 
       console.log(' Debug - Resposta da API:', data);
@@ -1030,8 +1044,13 @@ export default function Compliance() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'x-user-organization': currentUser?.organizacao || 'cassems'
         },
-        body: JSON.stringify({ competencia_referencia, created_by }),
+        body: JSON.stringify({ 
+          competencia_referencia, 
+          created_by,
+          organizacao_criacao: currentUser?.organizacao || 'cassems'
+        }),
       });
 
       const data = await response.json();
@@ -1596,6 +1615,15 @@ export default function Compliance() {
           <h1 className="text-3xl font-bold">
             Compliance Fiscal
           </h1>
+          {currentUser?.organizacao === 'portes' ? (
+            <p className="text-sm text-green-600 mt-1">
+              Acesso completo a todas as competências do sistema.
+            </p>
+          ) : (
+            <p className="text-sm text-blue-600 mt-1">
+              Visualizando as competências da sua organização.
+            </p>
+          )}
         <div className="flex gap-2">
           <Button onClick={testConnection} variant="outline">
             Testar Conexão
