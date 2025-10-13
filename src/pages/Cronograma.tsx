@@ -404,11 +404,609 @@ const Cronograma = () => {
   const [cronogramaToDelete, setCronogramaToDelete] = useState<CronogramaItem | null>(null);
 
   // Estado para alternar entre modos de visualização
-  const [viewMode, setViewMode] = useState<'list' | 'timeline'>('timeline');
+  const [viewMode, setViewMode] = useState<'list' | 'timeline' | 'dashboard'>('timeline');
   
   
   // Estado para controlar fases expandidas
   const [fasesExpandidas, setFasesExpandidas] = useState<Set<string>>(new Set());
+  
+  // Estado para busca
+  const [busca, setBusca] = useState('');
+  
+  // Estado para controlar grupos de mês expandidos
+  const [gruposExpandidos, setGruposExpandidos] = useState<Set<string>>(new Set());
+
+  // Função para agrupar cronogramas por mês
+  const agruparPorMes = (cronogramas: CronogramaItem[]) => {
+    const grupos: Record<string, CronogramaItem[]> = {};
+    
+    cronogramas.forEach(cronograma => {
+      const dataFim = cronograma.data_fim ? new Date(cronograma.data_fim) : new Date();
+      const chaveMes = `${dataFim.toLocaleDateString('pt-BR', { month: 'short' })}/${dataFim.getFullYear()}`;
+      
+      if (!grupos[chaveMes]) {
+        grupos[chaveMes] = [];
+      }
+      grupos[chaveMes].push(cronograma);
+    });
+    
+    // Ordenar por data
+    const gruposOrdenados = Object.entries(grupos).sort(([a], [b]) => {
+      const mesA = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'].indexOf(a.split('/')[0]);
+      const mesB = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'].indexOf(b.split('/')[0]);
+      const anoA = parseInt(a.split('/')[1]);
+      const anoB = parseInt(b.split('/')[1]);
+      
+      const dataA = new Date(anoA, mesA);
+      const dataB = new Date(anoB, mesB);
+      return dataA.getTime() - dataB.getTime();
+    });
+    
+    return gruposOrdenados;
+  };
+
+  // Função para alternar expansão de grupo
+  const toggleGrupo = (chaveGrupo: string) => {
+    const novosGrupos = new Set(gruposExpandidos);
+    if (novosGrupos.has(chaveGrupo)) {
+      novosGrupos.delete(chaveGrupo);
+    } else {
+      novosGrupos.add(chaveGrupo);
+    }
+    setGruposExpandidos(novosGrupos);
+  };
+
+  // Função para expandir/recolher todos
+  const expandirTodos = () => {
+    const cronogramasFiltrados = cronogramas.filter(cronograma => {
+      const statusMatch = filtroStatus === 'todos' || cronograma.status === filtroStatus;
+      const prioridadeMatch = filtroPrioridade === 'todos' || cronograma.prioridade === filtroPrioridade;
+      const organizacaoMatch = filtroOrganizacao === 'todos' || cronograma.organizacao === filtroOrganizacao;
+      const buscaMatch = !busca || cronograma.titulo.toLowerCase().includes(busca.toLowerCase()) ||
+                        (cronograma.responsavel_nome && cronograma.responsavel_nome.toLowerCase().includes(busca.toLowerCase()));
+      return statusMatch && prioridadeMatch && organizacaoMatch && buscaMatch;
+    });
+    
+    const grupos = agruparPorMes(cronogramasFiltrados);
+    const todasChaves = grupos.map(([chave]) => chave);
+    setGruposExpandidos(new Set(todasChaves));
+  };
+
+  const recolherTodos = () => {
+    setGruposExpandidos(new Set());
+  };
+
+  // Função para obter cor do status
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'concluido':
+        return { bg: 'bg-green-100', text: 'text-green-800', icon: 'bg-green-500', label: 'Concluído' };
+      case 'em_andamento':
+        return { bg: 'bg-blue-100', text: 'text-blue-800', icon: 'bg-blue-500', label: 'Em andamento' };
+      case 'atrasado':
+        return { bg: 'bg-yellow-100', text: 'text-yellow-800', icon: 'bg-yellow-500', label: 'Em risco' };
+      default:
+        return { bg: 'bg-gray-100', text: 'text-gray-800', icon: 'bg-gray-500', label: 'Não iniciado' };
+    }
+  };
+
+  // Função para calcular progresso baseado no status
+  const calcularProgresso = (cronograma: CronogramaItem) => {
+    switch (cronograma.status) {
+      case 'concluido':
+        return 100;
+      case 'em_andamento':
+        // Se tem data de início e fim, calcular progresso baseado no tempo
+        if (cronograma.data_inicio && cronograma.data_fim) {
+          const inicio = new Date(cronograma.data_inicio);
+          const fim = new Date(cronograma.data_fim);
+          const hoje = new Date();
+          const total = fim.getTime() - inicio.getTime();
+          const decorrido = hoje.getTime() - inicio.getTime();
+          
+          // Se já passou do prazo, considerar 100% mas manter status
+          if (decorrido > total) {
+            return 100;
+          }
+          
+          const progresso = Math.max(0, Math.min(100, (decorrido / total) * 100));
+          return Math.round(progresso);
+        }
+        return 40; // Progresso médio se não tiver datas
+      case 'atrasado':
+        // Se tem datas, calcular progresso baseado no tempo
+        if (cronograma.data_inicio && cronograma.data_fim) {
+          const inicio = new Date(cronograma.data_inicio);
+          const fim = new Date(cronograma.data_fim);
+          const hoje = new Date();
+          const total = fim.getTime() - inicio.getTime();
+          const decorrido = hoje.getTime() - inicio.getTime();
+          
+          if (total > 0) {
+            const progresso = Math.max(0, Math.min(100, (decorrido / total) * 100));
+            return Math.round(progresso);
+          }
+        }
+        return 30; // Progresso baixo para atrasados
+      default:
+        return 0; // Não iniciado
+    }
+  };
+
+  // Função para obter label do status para dashboard
+  const getStatusLabel = (status: string) => {
+    switch (status) {
+      case 'concluido':
+        return { text: 'Finalizado', color: 'text-green-600' };
+      case 'em_andamento':
+        return { text: 'Em Andamento', color: 'text-orange-600' };
+      case 'atrasado':
+        return { text: 'Em Risco', color: 'text-red-600' };
+      default:
+        return { text: 'Pendente', color: 'text-gray-600' };
+    }
+  };
+
+  // Função para renderizar a visualização em dashboard
+  const renderDashboardView = () => {
+    // Filtrar cronogramas com busca
+    const cronogramasFiltradosComBusca = cronogramas.filter(cronograma => {
+      const statusMatch = filtroStatus === 'todos' || cronograma.status === filtroStatus;
+      const prioridadeMatch = filtroPrioridade === 'todos' || cronograma.prioridade === filtroPrioridade;
+      const organizacaoMatch = filtroOrganizacao === 'todos' || cronograma.organizacao === filtroOrganizacao;
+      const buscaMatch = !busca || cronograma.titulo.toLowerCase().includes(busca.toLowerCase()) ||
+                        (cronograma.responsavel_nome && cronograma.responsavel_nome.toLowerCase().includes(busca.toLowerCase()));
+      return statusMatch && prioridadeMatch && organizacaoMatch && buscaMatch;
+    });
+
+    return (
+      <div className="space-y-6">
+        {/* Cabeçalho do Dashboard */}
+        <div className="bg-white border-b border-gray-200 pb-6">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h1 className="text-2xl font-bold text-gray-900">
+                Status Atual do Projeto
+              </h1>
+              <p className="text-sm text-gray-600 mt-1">
+                Visão geral do progresso das atividades
+              </p>
+            </div>
+          </div>
+
+          {/* Barra de busca e controles */}
+          <div className="flex items-center justify-between gap-4">
+            <div className="flex-1 max-w-md">
+              <div className="relative">
+                <input
+                  type="text"
+                  placeholder="Buscar atividade..."
+                  value={busca}
+                  onChange={(e) => setBusca(e.target.value)}
+                  className="w-full px-4 py-2 pl-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                  <svg className="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                  </svg>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <Select value={filtroStatus} onValueChange={setFiltroStatus}>
+                <SelectTrigger className="w-40">
+                  <SelectValue placeholder="Todos status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="todos">Todos status</SelectItem>
+                  <SelectItem value="pendente">Pendente</SelectItem>
+                  <SelectItem value="em_andamento">Em Andamento</SelectItem>
+                  <SelectItem value="concluido">Concluído</SelectItem>
+                  <SelectItem value="atrasado">Atrasado</SelectItem>
+                </SelectContent>
+              </Select>
+              
+              <Button 
+                size="sm" 
+                className="bg-black text-white hover:bg-gray-800"
+                onClick={() => {
+                  setEditingCronograma(null);
+                  setFormData(initialFormData());
+                  setIsEditDialogOpen(true);
+                }}
+              >
+                <Plus className="h-4 w-4 mr-2" />
+                Nova atividade
+              </Button>
+            </div>
+          </div>
+        </div>
+
+        {/* Grid de atividades */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {cronogramasFiltradosComBusca.map((cronograma) => {
+            const progresso = calcularProgresso(cronograma);
+            const statusInfo = getStatusLabel(cronograma.status);
+            
+            return (
+              <div 
+                key={cronograma.id} 
+                className="bg-white border border-gray-200 rounded-lg p-6 hover:shadow-md transition-shadow cursor-pointer"
+                onClick={() => {
+                  setEditingCronograma(cronograma);
+                  setIsEditDialogOpen(true);
+                }}
+              >
+                {/* Barra de progresso */}
+                <div className="mb-4">
+                  <div className="w-full bg-gray-300 rounded-full h-2.5">
+                    <div 
+                      className={`h-2.5 rounded-full ${
+                        cronograma.status === 'concluido' ? 'bg-blue-600' : 
+                        cronograma.status === 'em_andamento' ? 'bg-blue-600' : 
+                        cronograma.status === 'atrasado' ? 'bg-blue-600' : 'bg-gray-400'
+                      }`}
+                      style={{ width: `${progresso}%` }}
+                    ></div>
+                  </div>
+                  <div className="flex justify-between items-center mt-2">
+                    <span className="text-sm font-medium text-gray-700">{progresso}%</span>
+                    <span className={`text-sm font-medium ${statusInfo.color}`}>
+                      {statusInfo.text}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Título da atividade */}
+                <h3 className="text-lg font-medium text-gray-900 mb-2 line-clamp-2">
+                  {cronograma.titulo}
+                </h3>
+
+                {/* Informações adicionais */}
+                <div className="space-y-2 text-sm text-gray-600">
+                  {cronograma.responsavel_nome && (
+                    <div className="flex items-center gap-2">
+                      <User className="h-4 w-4" />
+                      <span>{cronograma.responsavel_nome}</span>
+                    </div>
+                  )}
+                  
+                  {cronograma.data_fim && (
+                    <div className="flex items-center gap-2">
+                      <Calendar className="h-4 w-4" />
+                      <span>Prazo: {new Date(cronograma.data_fim).toLocaleDateString('pt-BR')}</span>
+                    </div>
+                  )}
+                  
+                  <div className="flex items-center gap-2">
+                    <Building className="h-4 w-4" />
+                    <span>{cronograma.organizacao.toUpperCase()}</span>
+                  </div>
+                </div>
+
+                {/* Badge de prioridade */}
+                {cronograma.prioridade !== 'media' && (
+                  <div className="mt-4">
+                    {getPrioridadeBadge(cronograma.prioridade)}
+                  </div>
+                )}
+
+                {/* Motivo do atraso se aplicável */}
+                {cronograma.motivo_atraso && (
+                  <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg">
+                    <div className="flex items-start gap-2">
+                      <AlertTriangle className="h-4 w-4 text-red-500 mt-0.5 flex-shrink-0" />
+                      <div>
+                        <p className="text-xs font-medium text-red-800">Motivo do atraso:</p>
+                        <p className="text-xs text-red-700 mt-1">{cronograma.motivo_atraso}</p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Mensagem quando não há resultados */}
+        {cronogramasFiltradosComBusca.length === 0 && (
+          <div className="text-center py-12">
+            <Target className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+            <h3 className="text-lg font-semibold text-gray-600 mb-2">Nenhuma atividade encontrada</h3>
+            <p className="text-gray-500">
+              {busca || filtroStatus !== 'todos' || filtroPrioridade !== 'todos' 
+                ? 'Tente ajustar os filtros ou termo de busca.'
+                : 'Não há atividades cadastradas no momento.'
+              }
+            </p>
+          </div>
+        )}
+
+        {/* Resumo estatístico */}
+        {cronogramasFiltradosComBusca.length > 0 && (
+          <div className="bg-gray-50 rounded-lg p-6">
+            <h4 className="text-lg font-semibold text-gray-900 mb-4">Resumo do Progresso</h4>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div className="text-center">
+                <div className="text-2xl font-bold text-green-600">
+                  {cronogramasFiltradosComBusca.filter(c => c.status === 'concluido').length}
+                </div>
+                <div className="text-sm text-gray-600">Finalizadas</div>
+              </div>
+              <div className="text-center">
+                <div className="text-2xl font-bold text-orange-600">
+                  {cronogramasFiltradosComBusca.filter(c => c.status === 'em_andamento').length}
+                </div>
+                <div className="text-sm text-gray-600">Em Andamento</div>
+              </div>
+              <div className="text-center">
+                <div className="text-2xl font-bold text-red-600">
+                  {cronogramasFiltradosComBusca.filter(c => c.status === 'atrasado').length}
+                </div>
+                <div className="text-sm text-gray-600">Em Risco</div>
+              </div>
+              <div className="text-center">
+                <div className="text-2xl font-bold text-gray-600">
+                  {cronogramasFiltradosComBusca.filter(c => c.status === 'pendente').length}
+                </div>
+                <div className="text-sm text-gray-600">Pendentes</div>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  // Função para renderizar a nova visualização em lista
+  const renderListView = () => {
+    // Filtrar cronogramas com busca
+    const cronogramasFiltradosComBusca = cronogramas.filter(cronograma => {
+      const statusMatch = filtroStatus === 'todos' || cronograma.status === filtroStatus;
+      const prioridadeMatch = filtroPrioridade === 'todos' || cronograma.prioridade === filtroPrioridade;
+      const organizacaoMatch = filtroOrganizacao === 'todos' || cronograma.organizacao === filtroOrganizacao;
+      const buscaMatch = !busca || cronograma.titulo.toLowerCase().includes(busca.toLowerCase()) ||
+                        (cronograma.responsavel_nome && cronograma.responsavel_nome.toLowerCase().includes(busca.toLowerCase()));
+      return statusMatch && prioridadeMatch && organizacaoMatch && buscaMatch;
+    });
+
+    const grupos = agruparPorMes(cronogramasFiltradosComBusca);
+
+    return (
+      <div className="space-y-6">
+        {/* Cabeçalho do Painel */}
+        <div className="bg-white border-b border-gray-200 pb-6">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h1 className="text-2xl font-bold text-gray-900">
+                Painel de Implantação — Rede Frota x Portes
+              </h1>
+              <p className="text-sm text-gray-600 mt-1">
+                Linha do tempo com títulos expansíveis • Admin (edição)
+              </p>
+            </div>
+          </div>
+
+          {/* Barra de busca e controles */}
+          <div className="flex items-center justify-between gap-4">
+            <div className="flex-1 max-w-md">
+              <div className="relative">
+                <input
+                  type="text"
+                  placeholder="Buscar etapa, atividade, respo"
+                  value={busca}
+                  onChange={(e) => setBusca(e.target.value)}
+                  className="w-full px-4 py-2 pl-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                  <svg className="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                  </svg>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <Select value={filtroStatus} onValueChange={setFiltroStatus}>
+                <SelectTrigger className="w-40">
+                  <SelectValue placeholder="Todos status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="todos">Todos status</SelectItem>
+                  <SelectItem value="pendente">Pendente</SelectItem>
+                  <SelectItem value="em_andamento">Em Andamento</SelectItem>
+                  <SelectItem value="concluido">Concluído</SelectItem>
+                  <SelectItem value="atrasado">Atrasado</SelectItem>
+                </SelectContent>
+              </Select>
+              
+              <Button 
+                size="sm" 
+                className="bg-black text-white hover:bg-gray-800"
+                onClick={() => {
+                  setEditingCronograma(null);
+                  setFormData(initialFormData());
+                  setIsEditDialogOpen(true);
+                }}
+              >
+                <Plus className="h-4 w-4 mr-2" />
+                Nova atividade
+              </Button>
+            </div>
+          </div>
+
+          {/* Botões de controle */}
+          <div className="flex items-center gap-4 mt-4">
+            <Button variant="outline" size="sm" onClick={expandirTodos}>
+              Expandir tudo
+            </Button>
+            <Button variant="outline" size="sm" onClick={recolherTodos}>
+              Recolher tudo
+            </Button>
+          </div>
+        </div>
+
+        {/* Timeline de atividades */}
+        <div className="space-y-4">
+          {grupos.map(([mesAno, cronogramasDoMes]) => {
+            const isExpanded = gruposExpandidos.has(mesAno);
+            
+            return (
+              <div key={mesAno} className="border border-gray-200 rounded-lg overflow-hidden">
+                {/* Cabeçalho do grupo */}
+                <div 
+                  className="bg-gray-50 px-6 py-4 cursor-pointer hover:bg-gray-100 transition-colors"
+                  onClick={() => toggleGrupo(mesAno)}
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className={`w-2 h-2 rounded-full ${isExpanded ? 'bg-blue-500' : 'bg-gray-400'}`}></div>
+                      <h3 className="text-lg font-semibold text-gray-900">
+                        {mesAno}
+                      </h3>
+                      <span className="text-sm text-gray-500">
+                        {cronogramasDoMes.length} atividade{cronogramasDoMes.length !== 1 ? 's' : ''}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <svg 
+                        className={`h-5 w-5 text-gray-500 transition-transform ${isExpanded ? 'rotate-90' : ''}`} 
+                        fill="none" 
+                        stroke="currentColor" 
+                        viewBox="0 0 24 24"
+                      >
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                      </svg>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Lista de atividades */}
+                {isExpanded && (
+                  <div className="divide-y divide-gray-100">
+                    {cronogramasDoMes.map((cronograma) => {
+                      const statusColor = getStatusColor(cronograma.status);
+                      const dataInicio = cronograma.data_inicio ? new Date(cronograma.data_inicio) : null;
+                      const dataFim = cronograma.data_fim ? new Date(cronograma.data_fim) : null;
+                      
+                      return (
+                        <div key={cronograma.id} className="p-6 hover:bg-gray-50 transition-colors">
+                          <div className="flex items-start gap-4">
+                            {/* Indicador visual */}
+                            <div className="flex-shrink-0 mt-1">
+                              <div className={`w-3 h-3 rounded-full ${statusColor.icon}`}></div>
+                            </div>
+
+                            {/* Conteúdo da atividade */}
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-start justify-between gap-4">
+                                <div className="flex-1 min-w-0">
+                                  <h4 className="text-lg font-medium text-gray-900 mb-2">
+                                    {cronograma.titulo}
+                                  </h4>
+                                  
+                                  {/* Status badges */}
+                                  <div className="flex items-center gap-2 mb-3">
+                                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${statusColor.bg} ${statusColor.text}`}>
+                                      {cronograma.status === 'concluido' && (
+                                        <svg className="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                                          <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                                        </svg>
+                                      )}
+                                      {cronograma.status === 'em_andamento' && (
+                                        <svg className="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                                          <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clipRule="evenodd" />
+                                        </svg>
+                                      )}
+                                      {cronograma.status === 'atrasado' && (
+                                        <svg className="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                                          <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                                        </svg>
+                                      )}
+                                      {cronograma.status === 'pendente' && (
+                                        <svg className="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                                          <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clipRule="evenodd" />
+                                        </svg>
+                                      )}
+                                      {statusColor.label}
+                                    </span>
+                                    
+                                    {(cronograma.status === 'em_andamento' || cronograma.status === 'pendente') && (
+                                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-800">
+                                        <svg className="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                                          <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                                        </svg>
+                                        Aguardando ação
+                                      </span>
+                                    )}
+                                  </div>
+
+                                  {/* Datas */}
+                                  <div className="text-sm text-gray-600">
+                                    {dataInicio && dataFim ? (
+                                      <span>
+                                        {dataInicio.toLocaleDateString('pt-BR')} — {dataFim.toLocaleDateString('pt-BR')}
+                                      </span>
+                                    ) : dataFim ? (
+                                      <span>
+                                        {dataFim.toLocaleDateString('pt-BR')}
+                                      </span>
+                                    ) : (
+                                      <span>Sem data definida</span>
+                                    )}
+                                  </div>
+                                </div>
+
+                                {/* Botões de ação */}
+                                <div className="flex gap-2">
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => {
+                                      setEditingCronograma(cronograma);
+                                      setIsEditDialogOpen(true);
+                                    }}
+                                  >
+                                    <Edit className="h-4 w-4" />
+                                  </Button>
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => openDeleteDialog(cronograma)}
+                                  >
+                                    <Trash2 className="h-4 w-4" />
+                                  </Button>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Mensagem quando não há resultados */}
+        {grupos.length === 0 && (
+          <div className="text-center py-12">
+            <Target className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+            <h3 className="text-lg font-semibold text-gray-600 mb-2">Nenhuma atividade encontrada</h3>
+            <p className="text-gray-500">
+              {busca || filtroStatus !== 'todos' || filtroPrioridade !== 'todos' 
+                ? 'Tente ajustar os filtros ou termo de busca.'
+                : 'Não há atividades cadastradas no momento.'
+              }
+            </p>
+          </div>
+        )}
+      </div>
+    );
+  };
 
   // Função para renderizar a visualização em timeline (Gantt)
   const renderTimelineView = () => {
@@ -700,6 +1298,15 @@ const Cronograma = () => {
           {/* Botões de alternância de visualização */}
           <div className="flex bg-gray-100 rounded-lg p-1 mr-2">
             <Button
+              variant={viewMode === 'dashboard' ? 'default' : 'ghost'}
+              size="sm"
+              onClick={() => setViewMode('dashboard')}
+              className={viewMode === 'dashboard' ? 'bg-white shadow-sm' : 'hover:bg-gray-200'}
+            >
+              <BarChart3 className="h-4 w-4 mr-2" />
+              Dashboard
+            </Button>
+            <Button
               variant={viewMode === 'list' ? 'default' : 'ghost'}
               size="sm"
               onClick={() => setViewMode('list')}
@@ -852,140 +1459,14 @@ const Cronograma = () => {
       </Card>
 
       {/* Conteúdo baseado no modo de visualização */}
-      {viewMode === 'list' ? (
-        <div className="space-y-4">
-        {loading ? (
-          <div className="flex justify-center py-8">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-          </div>
-        ) : cronogramasFiltrados.length === 0 ? (
-          <Card>
-            <CardContent className="text-center py-8">
-              <Target className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-              <h3 className="text-lg font-semibold text-gray-600 mb-2">Nenhuma demanda encontrada</h3>
-              <p className="text-gray-500">
-                {filtroStatus !== 'todos' || filtroPrioridade !== 'todos' 
-                  ? 'Tente ajustar os filtros para ver mais resultados.'
-                  : 'Não há demandas cadastradas no momento.'
-                }
-              </p>
-            </CardContent>
-          </Card>
-        ) : (
-          <>
-            {/* Tarefas */}
-            {cronogramasFiltrados.map((cronograma) => {
-            const diasAtraso = calcularDiasAtraso(cronograma.data_fim || '');
-            
-            return (
-              <Card key={cronograma.id} className={`hover:shadow-md transition-shadow ${
-                cronograma.status === 'concluido' ? 'bg-green-50 border-green-200' : ''
-              }`}>
-                <CardHeader>
-                  <div className="flex justify-between items-start gap-4">
-                    <div className="flex items-start gap-3 flex-1 min-w-0">
-                      <div className="flex-shrink-0 mt-1">
-                        {getStatusIcon(cronograma.status)}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <CardTitle className="text-lg break-words">{cronograma.titulo}</CardTitle>
-                        {cronograma.descricao && (
-                          <CardDescription className="mt-1 break-words">{cronograma.descricao}</CardDescription>
-                        )}
-                      </div>
-                    </div>
-                    <div className="flex gap-2 flex-shrink-0">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => {
-                          setEditingCronograma(cronograma);
-                          setIsEditDialogOpen(true);
-                        }}
-                        title="Editar demanda"
-                      >
-                        <Edit className="h-4 w-4" />
-                      </Button>
-                      <Button 
-                        variant="outline" 
-                        size="sm"
-                        onClick={() => openDeleteDialog(cronograma)}
-                        title="Excluir demanda"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </div>
-                </CardHeader>
-                <CardContent>
-
-                  {/* Informações */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 text-sm">
-                    <div>
-                      <Label className="text-xs text-gray-500">Fase Atual</Label>
-                      <div className="mt-1">{getFaseBadge(cronograma.fase_atual)}</div>
-                    </div>
-                    <div>
-                      <Label className="text-xs text-gray-500">Responsável</Label>
-                      <div className="mt-1 flex items-center gap-2">
-                        <Users className="h-4 w-4" />
-                        <span>{cronograma.responsavel_nome ? cronograma.responsavel_nome : 'Não atribuído'}</span>
-                      </div>
-                    </div>
-                    <div>
-                      <Label className="text-xs text-gray-500">Prazo</Label>
-                      <div className="mt-1 flex items-center gap-2">
-                        <Calendar className="h-4 w-4" />
-                        <span>{formatDate(cronograma.data_fim || '')}</span>
-                      </div>
-                    </div>
-                    <div>
-                      <Label className="text-xs text-gray-500">Organização</Label>
-                      <div className="mt-1 flex items-center gap-2">
-                        <Building className="h-4 w-4" />
-                        <span>{cronograma.responsavel_empresa || cronograma.organizacao}</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Status e Prioridade */}
-                  <div className="flex gap-2 mt-4">
-                    {getStatusBadge(cronograma.status)}
-                    {getPrioridadeBadge(cronograma.prioridade)}
-                    {diasAtraso > 0 && (
-                      <Badge variant="destructive">
-                        {diasAtraso} dia{diasAtraso > 1 ? 's' : ''} atrasado
-                      </Badge>
-                    )}
-                  </div>
-
-                  {/* Motivo do Atraso */}
-                  {cronograma.motivo_atraso && (
-                    <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg">
-                      <div className="flex items-start gap-2">
-                        <AlertCircle className="h-4 w-4 text-red-500 mt-0.5" />
-                        <div>
-                          <p className="text-sm font-medium text-red-800">Motivo do atraso:</p>
-                          <p className="text-sm text-red-700">{cronograma.motivo_atraso}</p>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Observações */}
-                  {cronograma.observacoes && (
-                    <div className="mt-4 p-3 bg-gray-50 border border-gray-200 rounded-lg">
-                      <p className="text-sm font-medium text-gray-800 mb-1">Observações:</p>
-                      <p className="text-sm text-gray-700">{cronograma.observacoes}</p>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            );
-          })}
-          </>
-        )}
+      {loading ? (
+        <div className="flex justify-center py-8">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
         </div>
+      ) : viewMode === 'dashboard' ? (
+        renderDashboardView()
+      ) : viewMode === 'list' ? (
+        renderListView()
       ) : (
         renderTimelineView()
       )}
