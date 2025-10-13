@@ -26,6 +26,13 @@ app.use(cors({
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+// Rotas
+app.use('/api/compliance', complianceRoutes);
+app.use('/api/documentos', documentosRoutes);
+app.use('/api/usuarios', usuariosRoutes);
+app.use('/api/auth', authRoutes);
+app.use('/api/cronograma', cronogramaRoutes);
+
 // Rota de teste
 app.get('/api/health', (req, res) => {
   res.json({ message: 'API funcionando!', timestamp: new Date() });
@@ -35,7 +42,7 @@ app.get('/api/health', (req, res) => {
 app.get('/api/db-status', async (req, res) => {
   try {
     const poolStatus = getPoolStatus();
-    
+
     // Tentar fazer uma query simples para testar a conexão
     let dbConnection = false;
     try {
@@ -48,7 +55,7 @@ app.get('/api/db-status', async (req, res) => {
       console.error('❌ Erro ao testar conexão DB:', error.message);
       dbConnection = false;
     }
-    
+
     res.json({
       api: 'OK',
       database: dbConnection ? 'OK' : 'ERROR',
