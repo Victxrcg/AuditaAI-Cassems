@@ -1,11 +1,21 @@
 // backend/src/controllers/complianceController.js
 const { getDbPoolWithTunnel, resetPool, executeQueryWithRetry } = require('../lib/db');
-const OpenAI = require('openai');
 
-// Configurar OpenAI
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY
-});
+// Configurar OpenAI (opcional)
+let openai = null;
+try {
+  if (process.env.OPENAI_API_KEY) {
+    const OpenAI = require('openai');
+    openai = new OpenAI({
+      apiKey: process.env.OPENAI_API_KEY
+    });
+    console.log('✅ OpenAI configurado com sucesso');
+  } else {
+    console.log('⚠️ OpenAI não configurado - funcionalidades de IA desabilitadas');
+  }
+} catch (error) {
+  console.log('⚠️ Erro ao configurar OpenAI:', error.message);
+}
 
 // Função auxiliar para registrar alterações no histórico
 const registrarAlteracao = async (pool, complianceId, campo, valorAnterior, valorNovo, userId, organizacao) => {
@@ -149,8 +159,11 @@ exports.createCompetencia = async (req, res) => {
   try {
     console.log('🔍 Debug - Iniciando criação de competência');
     console.log('🔍 Debug - Body recebido:', req.body);
+    console.log('🔍 Debug - Headers recebidos:', req.headers);
+
+  
     
-    const { competencia_referencia, created_by } = req.body;
+    const { competencia_referencia, created_by, organizacao_criacao } = req.body;
     
     if (!competencia_referencia || !created_by) {
       return res.status(400).json({
@@ -164,14 +177,27 @@ exports.createCompetencia = async (req, res) => {
       SELECT nome, organizacao FROM usuarios_cassems WHERE id = ?
     `, [created_by]);
     
+    console.log('🔍 Debug - Usuário encontrado:', userRows[0]);
+    
     const userName = userRows[0]?.nome || 'Usuário';
-    const userOrg = userRows[0]?.organizacao || 'cassems';
+    // Usar organizacao_criacao do body se fornecida, senão usar do usuário
+    const userOrg = organizacao_criacao || userRows[0]?.organizacao || 'cassems';
+    
+    console.log('🔍 Debug - Organização final:', userOrg);
+    
+    console.log('🔍 Debug - Executando INSERT com:', {
+      competencia_referencia,
+      created_by,
+      userOrg
+    });
     
     const result = await executeQueryWithRetry(`
       INSERT INTO compliance_fiscal (competencia_referencia, created_by, organizacao_criacao, status, ultima_alteracao_por, ultima_alteracao_em, ultima_alteracao_organizacao)
       VALUES (?, ?, ?, 'pendente', ?, NOW(), ?)
       `, [competencia_referencia, created_by, userOrg, created_by, userOrg]);
 
+    console.log('🔍 Debug - Resultado do INSERT:', result);
+    
     const insertId = result.insertId ? parseInt(result.insertId.toString()) : result.affectedRows;
 
     res.json({
@@ -424,6 +450,14 @@ exports.uploadAnexo = async (req, res) => {
 exports.gerarParecer = async (req, res) => {
   let pool, server;
   try {
+    // Verificar se OpenAI está disponível
+    if (!openai) {
+      return res.status(503).json({
+        error: 'Serviço de IA temporariamente indisponível',
+        details: 'OpenAI não configurado. Entre em contato com o administrador.'
+      });
+    }
+
     const { id } = req.params;
     ({ pool, server } = await getDbPoolWithTunnel());
     
@@ -597,6 +631,14 @@ exports.getHistorico = async (req, res) => {
 exports.generateParecer = async (req, res) => {
   let pool, server;
   try {
+    // Verificar se OpenAI está disponível
+    if (!openai) {
+      return res.status(503).json({
+        error: 'Serviço de IA temporariamente indisponível',
+        details: 'OpenAI não configurado. Entre em contato com o administrador.'
+      });
+    }
+
     const { competenciaId } = req.params;
     const { userId, organizacao } = req.body;
 

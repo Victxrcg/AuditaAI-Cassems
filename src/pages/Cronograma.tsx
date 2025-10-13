@@ -282,6 +282,17 @@ const Cronograma = () => {
     );
   };
 
+  const getStatusBadgeInfo = (status: string) => {
+    const variants = {
+      pendente: { variant: 'secondary', text: 'PENDENTE' },
+      em_andamento: { variant: 'default', text: 'EM ANDAMENTO' },
+      concluido: { variant: 'default', text: 'CONCLUÍDO' },
+      atrasado: { variant: 'destructive', text: 'ATRASADO' }
+    } as const;
+
+    return variants[status as keyof typeof variants] || { variant: 'secondary', text: 'PENDENTE' };
+  };
+
   const getPrioridadeBadge = (prioridade: string) => {
     const variants = {
       baixa: 'secondary',
@@ -399,10 +410,10 @@ const Cronograma = () => {
       return acc;
     }, {} as Record<string, CronogramaItem[]>);
 
-    // Calcular período de visualização (6 meses a partir de hoje)
+    // Calcular período de visualização (8 meses para melhor visualização)
     const hoje = new Date();
-    const inicioPeriodo = new Date(hoje.getFullYear(), hoje.getMonth() - 1, 1);
-    const fimPeriodo = new Date(hoje.getFullYear(), hoje.getMonth() + 5, 0);
+    const inicioPeriodo = new Date(hoje.getFullYear(), hoje.getMonth() - 2, 1);
+    const fimPeriodo = new Date(hoje.getFullYear(), hoje.getMonth() + 6, 0);
     
     // Gerar meses do período
     const meses = [];
@@ -420,18 +431,89 @@ const Cronograma = () => {
       'outros': 'bg-gray-500'
     };
 
+    // Cores por status
+    const coresStatus: Record<string, string> = {
+      'pendente': 'bg-gray-400',
+      'em_andamento': 'bg-blue-400',
+      'concluido': 'bg-green-400',
+      'atrasado': 'bg-red-400'
+    };
+
+    // Função para calcular posição da barra
+    const calcularPosicaoBarra = (dataInicio: Date | null, dataFim: Date | null) => {
+      if (!dataInicio || !dataFim) return { inicio: 0, largura: 96, colunaInicio: 0, colunaFim: 1 };
+      
+      const inicioRelativo = Math.max(0, dataInicio.getTime() - inicioPeriodo.getTime());
+      const fimRelativo = Math.min(dataFim.getTime() - inicioPeriodo.getTime(), fimPeriodo.getTime() - inicioPeriodo.getTime());
+      const larguraTotal = fimPeriodo.getTime() - inicioPeriodo.getTime();
+      
+      const inicioPercentual = inicioRelativo / larguraTotal;
+      const fimPercentual = fimRelativo / larguraTotal;
+      const larguraPercentual = fimPercentual - inicioPercentual;
+      
+      const larguraColuna = 96; // 96px por mês
+      const inicio = inicioPercentual * (meses.length * larguraColuna);
+      const largura = larguraPercentual * (meses.length * larguraColuna);
+      
+      const colunaInicio = Math.floor(inicioPercentual * meses.length);
+      const colunaFim = Math.ceil(fimPercentual * meses.length);
+      
+      return { inicio, largura, colunaInicio, colunaFim };
+    };
+
     return (
       <div className="space-y-6">
         {/* Cabeçalho da Timeline */}
         <Card>
           <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <BarChart3 className="h-5 w-5" />
-              Timeline do Projeto
-            </CardTitle>
-            <CardDescription>
-              Visualização temporal de todas as demandas por organização
-            </CardDescription>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="flex items-center gap-2">
+                  <BarChart3 className="h-5 w-5" />
+                  Timeline do Projeto
+                </CardTitle>
+                <CardDescription>
+                  Visualização temporal de todas as demandas por organização
+                </CardDescription>
+              </div>
+              
+              {/* Controles da Timeline */}
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    // Lógica para zoom out
+                    console.log('Zoom out');
+                  }}
+                  title="Diminuir zoom"
+                >
+                  <span className="text-lg">−</span>
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    // Lógica para zoom in
+                    console.log('Zoom in');
+                  }}
+                  title="Aumentar zoom"
+                >
+                  <span className="text-lg">+</span>
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    // Lógica para centralizar na data atual
+                    console.log('Centralizar hoje');
+                  }}
+                  title="Centralizar na data atual"
+                >
+                  <Calendar className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
           </CardHeader>
           <CardContent>
             {/* Timeline Header */}
@@ -470,62 +552,153 @@ const Cronograma = () => {
                       const dataInicio = cronograma.data_inicio ? new Date(cronograma.data_inicio) : null;
                       const dataFim = cronograma.data_fim ? new Date(cronograma.data_fim) : null;
                       
-                      // Calcular posição da barra
-                      let inicioCol = 0;
-                      let larguraCol = 0;
-                      
-                      if (dataInicio && dataFim) {
-                        const inicioRelativo = Math.max(0, dataInicio.getTime() - inicioPeriodo.getTime());
-                        const fimRelativo = dataFim.getTime() - inicioPeriodo.getTime();
-                        const larguraTotal = fimPeriodo.getTime() - inicioPeriodo.getTime();
-                        
-                        inicioCol = (inicioRelativo / larguraTotal) * (meses.length * 96); // 96px por mês
-                        larguraCol = ((fimRelativo - inicioRelativo) / larguraTotal) * (meses.length * 96);
-                      }
+                      const posicao = calcularPosicaoBarra(dataInicio, dataFim);
 
                       return (
-                        <div key={cronograma.id} className="flex items-center h-10 border-b border-gray-50">
+                        <div key={cronograma.id} className="flex items-center h-12 border-b border-gray-50 hover:bg-gray-25 transition-colors">
                           <div className="w-64 px-4 py-2 text-sm text-gray-700 border-r">
                             <div className="flex items-center justify-between">
-                              <span className="truncate">{cronograma.titulo}</span>
+                              <span 
+                                className="truncate cursor-pointer hover:text-blue-600 transition-colors"
+                                onClick={() => {
+                                  setEditingCronograma(cronograma);
+                                  setIsEditDialogOpen(true);
+                                }}
+                                title="Clique para editar"
+                              >
+                                {cronograma.titulo}
+                              </span>
                               <div className="flex items-center gap-1">
                                 <Badge 
-                                  variant={cronograma.status === 'concluido' ? 'default' : 
-                                         cronograma.status === 'atrasado' ? 'destructive' : 'secondary'}
+                                  variant={getStatusBadgeInfo(cronograma.status).variant as any}
                                   className="text-xs"
                                 >
-                                  {cronograma.status}
+                                  {getStatusBadgeInfo(cronograma.status).text}
                                 </Badge>
                               </div>
                             </div>
-                          </div>
-                          
-                          {/* Timeline bar */}
-                          <div className="relative flex-1 h-full">
-                            {dataInicio && dataFim && (
-                              <div className="absolute top-1/2 transform -translate-y-1/2 h-6 rounded">
-                                <div
-                                  className={`h-full rounded ${
-                                    cronograma.status === 'concluido' ? 'bg-green-400' :
-                                    cronograma.status === 'atrasado' ? 'bg-red-400' :
-                                    cronograma.status === 'em_andamento' ? 'bg-blue-400' :
-                                    'bg-gray-400'
-                                  } ${coresOrganizacao[organizacao] || 'bg-gray-400'}`}
-                                  style={{
-                                    left: `${Math.max(0, inicioCol)}px`,
-                                    width: `${Math.max(20, larguraCol)}px`,
-                                    minWidth: '20px'
-                                  }}
-                                  title={`${cronograma.titulo} - ${dataInicio.toLocaleDateString('pt-BR')} a ${dataFim.toLocaleDateString('pt-BR')}`}
-                                />
+                            {cronograma.responsavel_nome && (
+                              <div className="text-xs text-gray-500 mt-1">
+                                👤 {cronograma.responsavel_nome}
                               </div>
                             )}
+                          </div>
+                          
+                          {/* Timeline bar interativa */}
+                          <div className="relative flex-1 h-full">
+                            {dataInicio && dataFim && (
+                              <div
+                                className={`absolute top-1/2 transform -translate-y-1/2 h-8 rounded-lg ${coresStatus[cronograma.status]} shadow-sm hover:shadow-md transition-all cursor-pointer border-2 border-white hover:scale-105`}
+                                style={{
+                                  left: `${posicao.inicio}px`,
+                                  width: `${Math.max(posicao.largura, 20)}px`,
+                                  minWidth: '20px'
+                                }}
+                                onClick={() => {
+                                  setEditingCronograma(cronograma);
+                                  setIsEditDialogOpen(true);
+                                }}
+                                title={`${cronograma.titulo}
+Status: ${getStatusBadgeInfo(cronograma.status).text}
+Progresso: ${cronograma.progresso_percentual}%
+Período: ${dataInicio.toLocaleDateString('pt-BR')} a ${dataFim.toLocaleDateString('pt-BR')}
+${cronograma.responsavel_nome ? `Responsável: ${cronograma.responsavel_nome}` : ''}
+${cronograma.motivo_atraso ? `Motivo do atraso: ${cronograma.motivo_atraso}` : ''}
+Clique para editar`}
+                              >
+                                {/* Indicador de progresso dentro da barra */}
+                                {cronograma.progresso_percentual > 0 && (
+                                  <div 
+                                    className="h-full bg-white bg-opacity-30 rounded-l-lg"
+                                    style={{ width: `${cronograma.progresso_percentual}%` }}
+                                  />
+                                )}
+                                
+                                {/* Texto do progresso */}
+                                <div className="absolute inset-0 flex items-center justify-center text-xs font-medium text-white drop-shadow-sm">
+                                  {cronograma.progresso_percentual}%
+                                </div>
+                              </div>
+                            )}
+                            
+                            {/* Linha do tempo atual */}
+                            <div 
+                              className="absolute top-0 bottom-0 w-0.5 bg-red-500 z-10"
+                              style={{
+                                left: `${((hoje.getTime() - inicioPeriodo.getTime()) / (fimPeriodo.getTime() - inicioPeriodo.getTime())) * (meses.length * 96)}px`
+                              }}
+                              title={`Hoje: ${hoje.toLocaleDateString('pt-BR')}`}
+                            />
                           </div>
                         </div>
                       );
                     })}
                   </div>
                 ))}
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Legenda */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg">Legenda</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              {/* Status */}
+              <div>
+                <h4 className="font-semibold mb-2">Status das Demandas</h4>
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <div className="w-4 h-4 bg-gray-400 rounded"></div>
+                    <span className="text-sm">Pendente</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="w-4 h-4 bg-blue-400 rounded"></div>
+                    <span className="text-sm">Em Andamento</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="w-4 h-4 bg-green-400 rounded"></div>
+                    <span className="text-sm">Concluído</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="w-4 h-4 bg-red-400 rounded"></div>
+                    <span className="text-sm">Atrasado</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Organizações */}
+              <div>
+                <h4 className="font-semibold mb-2">Organizações</h4>
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <div className="w-3 h-3 bg-green-500 rounded-full"></div>
+                    <span className="text-sm">PORTES</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="w-3 h-3 bg-blue-500 rounded-full"></div>
+                    <span className="text-sm">CASSEMS</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="w-3 h-3 bg-purple-500 rounded-full"></div>
+                    <span className="text-sm">REDE FROTA</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Interações */}
+              <div>
+                <h4 className="font-semibold mb-2">Interações</h4>
+                <div className="space-y-2 text-sm text-gray-600">
+                  <div>• Clique no título para editar</div>
+                  <div>• Clique na barra para editar</div>
+                  <div>• Hover para ver detalhes</div>
+                  <div>• Linha vermelha = hoje</div>
+                  <div>• % dentro da barra = progresso</div>
+                </div>
               </div>
             </div>
           </CardContent>
@@ -598,7 +771,7 @@ const Cronograma = () => {
             </p>
           )}
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 items-center">
           {/* Botões de alternância de visualização */}
           <div className="flex bg-gray-100 rounded-lg p-1 mr-2">
             <Button
@@ -614,23 +787,32 @@ const Cronograma = () => {
               variant={viewMode === 'timeline' ? 'default' : 'ghost'}
               size="sm"
               onClick={() => setViewMode('timeline')}
-              className={viewMode === 'timeline' ? 'bg-white shadow-sm' : 'hover:bg-gray-200'}
+              className={`${viewMode === 'timeline' ? 'bg-white shadow-sm' : 'hover:bg-gray-200'} relative`}
             >
               <BarChart3 className="h-4 w-4 mr-2" />
               Timeline
+              {viewMode === 'timeline' && (
+                <span className="absolute -top-1 -right-1 bg-blue-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
+                  ✨
+                </span>
+              )}
             </Button>
           </div>
-          <Button variant="outline" onClick={fetchCronogramas} disabled={loading}>
-            <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
-            Recarregar
-          </Button>
-          <Button onClick={() => {
-            setEditingCronograma(null);
-            setIsEditDialogOpen(true);
-          }}>
-            <Plus className="h-4 w-4 mr-2" />
-            Nova Demanda
-          </Button>
+          
+          {/* Controles adicionais */}
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={fetchCronogramas} disabled={loading}>
+              <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
+              Recarregar
+            </Button>
+            <Button onClick={() => {
+              setEditingCronograma(null);
+              setIsEditDialogOpen(true);
+            }}>
+              <Plus className="h-4 w-4 mr-2" />
+              Nova Demanda
+            </Button>
+          </div>
         </div>
       </div>
 

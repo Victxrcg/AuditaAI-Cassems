@@ -1059,13 +1059,26 @@ export default function Compliance() {
       
       console.log('🔍 currentUser para criação:', currentUser);
       console.log('🔍 organizacao:', currentUser.organizacao);
+      console.log('🔍 created_by:', created_by);
+      console.log('🔍 typeof created_by:', typeof created_by);
 
       if (!created_by) {
+        console.error('❌ Erro: created_by é undefined ou null');
         setError('Usuário não encontrado. Faça login novamente.');
         return;
       }
 
-      console.log(' Criando nova competência:', { competencia_referencia, created_by });
+      if (!currentUser.organizacao) {
+        console.error('❌ Erro: organizacao é undefined ou null');
+        setError('Organização do usuário não encontrada. Faça login novamente.');
+        return;
+      }
+
+      console.log('🔍 Criando nova competência:', { 
+        competencia_referencia, 
+        created_by, 
+        organizacao_criacao: currentUser.organizacao 
+      });
 
       const response = await fetch(`${API_BASE}/compliance/competencias`, {
         method: 'POST',
@@ -1080,10 +1093,14 @@ export default function Compliance() {
         }),
       });
 
+      console.log('🔍 Status da resposta:', response.status);
+      console.log('🔍 Headers da resposta:', response.headers);
+      
       const data = await response.json();
+      console.log('🔍 Dados da resposta:', data);
 
       if (data.success) {
-        console.log(' Competência criada:', data.data);
+        console.log('✅ Competência criada:', data.data);
         setCurrentCompetenciaId(data.data.id.toString());
         setCurrentView('create');
         setComplianceItems(prev => prev.map(item => ({
@@ -1099,11 +1116,12 @@ export default function Compliance() {
         })));
         // REMOVER esta linha: loadComplianceData(data.data.id.toString());
       } else {
-        console.error(' Erro ao criar competência:', data.error);
-        setError(data.error);
+        console.error('❌ Erro ao criar competência:', data.error);
+        console.error('❌ Detalhes do erro:', data.details);
+        setError(data.error || 'Erro ao criar competência');
       }
     } catch (err) {
-      console.error(' Erro na requisição:', err);
+      console.error('❌ Erro na requisição:', err);
       setError('Erro ao criar competência');
     } finally {
       setLoading(false);
