@@ -24,7 +24,8 @@ import {
   RefreshCw,
   BarChart3,
   Building,
-  AlertTriangle
+  AlertTriangle,
+  List
 } from 'lucide-react';
 
 interface CronogramaItem {
@@ -361,6 +362,154 @@ const Cronograma = () => {
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [cronogramaToDelete, setCronogramaToDelete] = useState<CronogramaItem | null>(null);
 
+  // Estado para alternar entre modos de visualização
+  const [viewMode, setViewMode] = useState<'list' | 'timeline'>('list');
+
+  // Função para renderizar a visualização em timeline (Gantt)
+  const renderTimelineView = () => {
+    // Agrupar cronogramas por organização
+    const cronogramasPorOrganizacao = cronogramasFiltrados.reduce((acc, cronograma) => {
+      const org = cronograma.organizacao || 'outros';
+      if (!acc[org]) acc[org] = [];
+      acc[org].push(cronograma);
+      return acc;
+    }, {} as Record<string, CronogramaItem[]>);
+
+    // Calcular período de visualização (6 meses a partir de hoje)
+    const hoje = new Date();
+    const inicioPeriodo = new Date(hoje.getFullYear(), hoje.getMonth() - 1, 1);
+    const fimPeriodo = new Date(hoje.getFullYear(), hoje.getMonth() + 5, 0);
+    
+    // Gerar meses do período
+    const meses = [];
+    const currentDate = new Date(inicioPeriodo);
+    while (currentDate <= fimPeriodo) {
+      meses.push(new Date(currentDate));
+      currentDate.setMonth(currentDate.getMonth() + 1);
+    }
+
+    // Cores por organização
+    const coresOrganizacao: Record<string, string> = {
+      'portes': 'bg-green-500',
+      'cassems': 'bg-blue-500',
+      'rede_frota': 'bg-purple-500',
+      'outros': 'bg-gray-500'
+    };
+
+    return (
+      <div className="space-y-6">
+        {/* Cabeçalho da Timeline */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <BarChart3 className="h-5 w-5" />
+              Timeline do Projeto
+            </CardTitle>
+            <CardDescription>
+              Visualização temporal de todas as demandas por organização
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {/* Timeline Header */}
+            <div className="overflow-x-auto">
+              <div className="min-w-[800px]">
+                {/* Header dos meses */}
+                <div className="flex border-b-2 border-gray-200">
+                  <div className="w-64 px-4 py-3 font-semibold text-gray-700 bg-gray-50 border-r">
+                    Organização / Demanda
+                  </div>
+                  {meses.map((mes, index) => (
+                    <div key={index} className="w-24 px-2 py-3 text-center font-semibold text-gray-700 bg-gray-50 border-r">
+                      {mes.toLocaleDateString('pt-BR', { month: 'short', year: '2-digit' })}
+                    </div>
+                  ))}
+                </div>
+
+                {/* Linhas das organizações */}
+                {Object.entries(cronogramasPorOrganizacao).map(([organizacao, cronogramasOrg]) => (
+                  <div key={organizacao} className="border-b border-gray-100">
+                    {/* Header da organização */}
+                    <div className="flex items-center h-12 bg-gray-50">
+                      <div className="w-64 px-4 py-3 font-semibold text-gray-900 border-r">
+                        <div className="flex items-center gap-2">
+                          <div className={`w-3 h-3 rounded-full ${coresOrganizacao[organizacao] || 'bg-gray-400'}`}></div>
+                          {organizacao.toUpperCase()}
+                        </div>
+                      </div>
+                      {meses.map((_, index) => (
+                        <div key={index} className="w-24 border-r"></div>
+                      ))}
+                    </div>
+
+                    {/* Linhas das demandas */}
+                    {cronogramasOrg.map((cronograma) => {
+                      const dataInicio = cronograma.data_inicio ? new Date(cronograma.data_inicio) : null;
+                      const dataFim = cronograma.data_fim ? new Date(cronograma.data_fim) : null;
+                      
+                      // Calcular posição da barra
+                      let inicioCol = 0;
+                      let larguraCol = 0;
+                      
+                      if (dataInicio && dataFim) {
+                        const inicioRelativo = Math.max(0, dataInicio.getTime() - inicioPeriodo.getTime());
+                        const fimRelativo = dataFim.getTime() - inicioPeriodo.getTime();
+                        const larguraTotal = fimPeriodo.getTime() - inicioPeriodo.getTime();
+                        
+                        inicioCol = (inicioRelativo / larguraTotal) * (meses.length * 96); // 96px por mês
+                        larguraCol = ((fimRelativo - inicioRelativo) / larguraTotal) * (meses.length * 96);
+                      }
+
+                      return (
+                        <div key={cronograma.id} className="flex items-center h-10 border-b border-gray-50">
+                          <div className="w-64 px-4 py-2 text-sm text-gray-700 border-r">
+                            <div className="flex items-center justify-between">
+                              <span className="truncate">{cronograma.titulo}</span>
+                              <div className="flex items-center gap-1">
+                                <Badge 
+                                  variant={cronograma.status === 'concluido' ? 'default' : 
+                                         cronograma.status === 'atrasado' ? 'destructive' : 'secondary'}
+                                  className="text-xs"
+                                >
+                                  {cronograma.status}
+                                </Badge>
+                              </div>
+                            </div>
+                          </div>
+                          
+                          {/* Timeline bar */}
+                          <div className="relative flex-1 h-full">
+                            {dataInicio && dataFim && (
+                              <div className="absolute top-1/2 transform -translate-y-1/2 h-6 rounded">
+                                <div
+                                  className={`h-full rounded ${
+                                    cronograma.status === 'concluido' ? 'bg-green-400' :
+                                    cronograma.status === 'atrasado' ? 'bg-red-400' :
+                                    cronograma.status === 'em_andamento' ? 'bg-blue-400' :
+                                    'bg-gray-400'
+                                  } ${coresOrganizacao[organizacao] || 'bg-gray-400'}`}
+                                  style={{
+                                    left: `${Math.max(0, inicioCol)}px`,
+                                    width: `${Math.max(20, larguraCol)}px`,
+                                    minWidth: '20px'
+                                  }}
+                                  title={`${cronograma.titulo} - ${dataInicio.toLocaleDateString('pt-BR')} a ${dataFim.toLocaleDateString('pt-BR')}`}
+                                />
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  };
+
   // Abrir modal de confirmação de exclusão
   const openDeleteDialog = (cronograma: CronogramaItem) => {
     setCronogramaToDelete(cronograma);
@@ -426,6 +575,27 @@ const Cronograma = () => {
           )}
         </div>
         <div className="flex gap-2">
+          {/* Botões de alternância de visualização */}
+          <div className="flex bg-gray-100 rounded-lg p-1 mr-2">
+            <Button
+              variant={viewMode === 'list' ? 'default' : 'ghost'}
+              size="sm"
+              onClick={() => setViewMode('list')}
+              className={viewMode === 'list' ? 'bg-white shadow-sm' : 'hover:bg-gray-200'}
+            >
+              <List className="h-4 w-4 mr-2" />
+              Lista
+            </Button>
+            <Button
+              variant={viewMode === 'timeline' ? 'default' : 'ghost'}
+              size="sm"
+              onClick={() => setViewMode('timeline')}
+              className={viewMode === 'timeline' ? 'bg-white shadow-sm' : 'hover:bg-gray-200'}
+            >
+              <BarChart3 className="h-4 w-4 mr-2" />
+              Timeline
+            </Button>
+          </div>
           <Button variant="outline" onClick={fetchCronogramas} disabled={loading}>
             <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
             Recarregar
@@ -544,8 +714,9 @@ const Cronograma = () => {
         </CardContent>
       </Card>
 
-      {/* Lista de Cronogramas */}
-      <div className="space-y-4">
+      {/* Conteúdo baseado no modo de visualização */}
+      {viewMode === 'list' ? (
+        <div className="space-y-4">
         {loading ? (
           <div className="flex justify-center py-8">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
@@ -676,7 +847,10 @@ const Cronograma = () => {
             );
           })
         )}
-      </div>
+        </div>
+      ) : (
+        renderTimelineView()
+      )}
 
       {/* Dialog de Edição/Criação */}
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
