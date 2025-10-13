@@ -452,6 +452,10 @@ const Cronograma = () => {
       return (meses[mesA as keyof typeof meses] || 0) - (meses[mesB as keyof typeof meses] || 0);
     });
     
+    // Debug: log da ordenação
+    console.log('Grupos ordenados:', gruposOrdenados.map(([mes]) => mes));
+    console.log('Timestamp:', new Date().toISOString());
+    
     return gruposOrdenados;
   };
 
