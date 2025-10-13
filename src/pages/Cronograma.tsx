@@ -26,8 +26,7 @@ import {
   Building,
   AlertTriangle,
   List,
-  User,
-  ChevronRight
+  User
 } from 'lucide-react';
 
 interface CronogramaItem {
@@ -404,293 +403,12 @@ const Cronograma = () => {
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [cronogramaToDelete, setCronogramaToDelete] = useState<CronogramaItem | null>(null);
 
-  // Estado para controlar o modal de detalhes da atividade
-  const [isDetailsDialogOpen, setIsDetailsDialogOpen] = useState(false);
-  const [selectedCronograma, setSelectedCronograma] = useState<CronogramaItem | null>(null);
-
   // Estado para alternar entre modos de visualização
   const [viewMode, setViewMode] = useState<'list' | 'timeline'>('timeline');
   
   
   // Estado para controlar fases expandidas
   const [fasesExpandidas, setFasesExpandidas] = useState<Set<string>>(new Set());
-
-  // Função para renderizar a visualização em lista (estilo timeline horizontal)
-  const renderListView = () => {
-    // Agrupar cronogramas por mês/ano
-    const cronogramasPorMes = cronogramasFiltrados.reduce((acc, cronograma) => {
-      if (!cronograma.data_inicio) return acc;
-      
-      const dataInicio = new Date(cronograma.data_inicio);
-      const mesAno = `${dataInicio.toLocaleDateString('pt-BR', { month: 'short' })}/${dataInicio.getFullYear()}`;
-      
-      if (!acc[mesAno]) {
-        acc[mesAno] = [];
-      }
-      acc[mesAno].push(cronograma);
-      return acc;
-    }, {} as Record<string, CronogramaItem[]>);
-
-    // Ordenar meses cronologicamente
-    const mesesOrdenados = Object.keys(cronogramasPorMes).sort((a, b) => {
-      const [mesA, anoA] = a.split('/');
-      const [mesB, anoB] = b.split('/');
-      const dataA = new Date(parseInt(anoA), ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'].indexOf(mesA.toLowerCase()));
-      const dataB = new Date(parseInt(anoB), ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'].indexOf(mesB.toLowerCase()));
-      return dataA.getTime() - dataB.getTime();
-    });
-
-    // Ordenar atividades dentro de cada mês por proximidade do prazo
-    Object.keys(cronogramasPorMes).forEach(mes => {
-      cronogramasPorMes[mes].sort((a, b) => {
-        // Se não tem data_fim, coloca no final
-        if (!a.data_fim && !b.data_fim) return 0;
-        if (!a.data_fim) return 1;
-        if (!b.data_fim) return -1;
-        
-        // Ordenar por data_fim (mais próximo primeiro)
-        const dataA = new Date(a.data_fim);
-        const dataB = new Date(b.data_fim);
-        return dataA.getTime() - dataB.getTime();
-      });
-    });
-
-    // Cores por status
-    const coresStatus = {
-      'pendente': { bg: 'bg-gray-100', dot: 'bg-gray-400', text: 'text-gray-700' },
-      'em_andamento': { bg: 'bg-blue-50', dot: 'bg-blue-500', text: 'text-blue-700' },
-      'concluido': { bg: 'bg-green-50', dot: 'bg-green-500', text: 'text-green-700' },
-      'atrasado': { bg: 'bg-red-50', dot: 'bg-red-500', text: 'text-red-700' }
-    };
-
-    // Cores por prioridade
-    const coresPrioridade = {
-      'baixa': 'text-gray-600',
-      'media': 'text-blue-600',
-      'alta': 'text-orange-600',
-      'critica': 'text-red-600'
-    };
-
-    // Função para calcular urgência do prazo
-    const calcularUrgencia = (dataFim: string) => {
-      if (!dataFim) return { nivel: 'sem_prazo', dias: null, cor: 'text-gray-500' };
-      
-      const hoje = new Date();
-      const prazo = new Date(dataFim);
-      const diffTime = prazo.getTime() - hoje.getTime();
-      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-      
-      if (diffDays < 0) {
-        return { nivel: 'atrasado', dias: Math.abs(diffDays), cor: 'text-red-600' };
-      } else if (diffDays <= 3) {
-        return { nivel: 'urgente', dias: diffDays, cor: 'text-red-500' };
-      } else if (diffDays <= 7) {
-        return { nivel: 'proximo', dias: diffDays, cor: 'text-orange-500' };
-      } else if (diffDays <= 15) {
-        return { nivel: 'atenção', dias: diffDays, cor: 'text-yellow-600' };
-      } else {
-        return { nivel: 'normal', dias: diffDays, cor: 'text-green-600' };
-      }
-    };
-
-    return (
-      <div className="space-y-6">
-        {/* Cabeçalho */}
-        <Card>
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <div>
-                <CardTitle className="flex items-center gap-2">
-                  <List className="h-5 w-5" />
-                  Painel de Demandas
-                </CardTitle>
-                <CardDescription>
-                  Linha do tempo com atividades organizadas por período
-                </CardDescription>
-              </div>
-            </div>
-          </CardHeader>
-        </Card>
-
-        {/* Timeline por mês */}
-        {mesesOrdenados.length === 0 ? (
-          <Card>
-            <CardContent className="text-center py-8">
-              <Target className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-              <h3 className="text-lg font-semibold text-gray-600 mb-2">Nenhuma demanda encontrada</h3>
-              <p className="text-gray-500">
-                Não há demandas com datas de início cadastradas.
-              </p>
-            </CardContent>
-          </Card>
-        ) : (
-          <div className="space-y-6">
-            {mesesOrdenados.map((mesAno) => {
-              const cronogramasDoMes = cronogramasPorMes[mesAno];
-              
-              return (
-                <Card key={mesAno} className="overflow-hidden">
-                  <CardHeader className="bg-gray-50 border-b">
-                    <CardTitle className="text-lg font-semibold text-gray-800">
-                      {mesAno.toUpperCase()} - {cronogramasDoMes.length} atividade{cronogramasDoMes.length !== 1 ? 's' : ''}
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="p-0">
-                    <div className="divide-y divide-gray-100">
-                      {cronogramasDoMes.map((cronograma, index) => {
-                        const statusInfo = coresStatus[cronograma.status] || coresStatus.pendente;
-                        const prioridadeInfo = coresPrioridade[cronograma.prioridade] || coresPrioridade.media;
-                        const urgencia = calcularUrgencia(cronograma.data_fim || '');
-                        
-                        return (
-                          <div 
-                            key={cronograma.id} 
-                            className={`p-6 hover:bg-gray-50 transition-colors cursor-pointer ${statusInfo.bg} ${
-                              urgencia.nivel === 'atrasado' ? 'border-l-4 border-red-500' :
-                              urgencia.nivel === 'urgente' ? 'border-l-4 border-red-400' :
-                              urgencia.nivel === 'proximo' ? 'border-l-4 border-orange-400' :
-                              urgencia.nivel === 'atenção' ? 'border-l-4 border-yellow-400' : ''
-                            }`}
-                            onClick={() => {
-                              setSelectedCronograma(cronograma);
-                              setIsDetailsDialogOpen(true);
-                            }}
-                          >
-                            <div className="flex items-center gap-4">
-                              {/* Indicador de status */}
-                              <div className="flex-shrink-0">
-                                <div className={`w-3 h-3 rounded-full ${statusInfo.dot}`}></div>
-                              </div>
-                              
-                              {/* Seta para direita */}
-                              <div className="flex-shrink-0">
-                                <ChevronRight className="h-4 w-4 text-gray-400" />
-                              </div>
-                              
-                              {/* Conteúdo principal */}
-                              <div className="flex-1 min-w-0">
-                                <div className="flex items-center justify-between gap-4">
-                                  <div className="flex-1 min-w-0">
-                                    {/* Status e Título */}
-                                    <div className="flex items-center gap-3 mb-2">
-                                      <Badge 
-                                        variant={getStatusBadgeInfo(cronograma.status).variant as any}
-                                        className="text-xs"
-                                      >
-                                        {getStatusBadgeInfo(cronograma.status).text}
-                                      </Badge>
-                                      <h3 className="text-lg font-semibold text-gray-900 truncate">
-                                        {cronograma.titulo}
-                                      </h3>
-                                    </div>
-                                    
-                                    {/* Descrição */}
-                                    {cronograma.descricao && (
-                                      <p className="text-gray-600 mb-3 text-sm">
-                                        {cronograma.descricao}
-                                      </p>
-                                    )}
-                                    
-                                    {/* Informações da atividade */}
-                                    <div className="flex flex-wrap items-center gap-4 text-sm">
-                                      {/* Prioridade */}
-                                      <div className={`flex items-center gap-1 ${prioridadeInfo}`}>
-                                        <AlertTriangle className="h-3 w-3" />
-                                        <span className="text-xs font-medium">
-                                          {cronograma.prioridade.toUpperCase()}
-                                        </span>
-                                      </div>
-                                      
-                                      {/* Responsável */}
-                                      {cronograma.responsavel_nome && (
-                                        <div className="flex items-center gap-1 text-gray-600">
-                                          <User className="h-3 w-3" />
-                                          <span className="text-xs">{cronograma.responsavel_nome}</span>
-                                        </div>
-                                      )}
-                                      
-                                      {/* Período */}
-                                      {cronograma.data_inicio && cronograma.data_fim && (
-                                        <div className="flex items-center gap-1 text-gray-600">
-                                          <Calendar className="h-3 w-3" />
-                                          <span className="text-xs">
-                                            {new Date(cronograma.data_inicio).toLocaleDateString('pt-BR')} – {new Date(cronograma.data_fim).toLocaleDateString('pt-BR')}
-                                          </span>
-                                        </div>
-                                      )}
-
-                                      {/* Indicador de Urgência */}
-                                      {urgencia.nivel !== 'sem_prazo' && (
-                                        <div className={`flex items-center gap-1 ${urgencia.cor}`}>
-                                          <Clock className="h-3 w-3" />
-                                          <span className="text-xs font-medium">
-                                            {urgencia.nivel === 'atrasado' 
-                                              ? `${urgencia.dias} dia${urgencia.dias !== 1 ? 's' : ''} atrasado`
-                                              : urgencia.nivel === 'urgente'
-                                              ? `${urgencia.dias} dia${urgencia.dias !== 1 ? 's' : ''} restante${urgencia.dias !== 1 ? 's' : ''}`
-                                              : urgencia.nivel === 'proximo'
-                                              ? `${urgencia.dias} dia${urgencia.dias !== 1 ? 's' : ''} restante${urgencia.dias !== 1 ? 's' : ''}`
-                                              : urgencia.nivel === 'atenção'
-                                              ? `${urgencia.dias} dia${urgencia.dias !== 1 ? 's' : ''} restante${urgencia.dias !== 1 ? 's' : ''}`
-                                              : `${urgencia.dias} dia${urgencia.dias !== 1 ? 's' : ''} restante${urgencia.dias !== 1 ? 's' : ''}`
-                                            }
-                                          </span>
-                                        </div>
-                                      )}
-                                    </div>
-                                    
-                                    {/* Motivo do atraso */}
-                                    {cronograma.motivo_atraso && (
-                                      <div className="mt-3 p-3 bg-red-100 border border-red-200 rounded-lg">
-                                        <div className="flex items-start gap-2">
-                                          <AlertCircle className="h-4 w-4 text-red-500 mt-0.5" />
-                                          <div>
-                                            <p className="text-sm font-medium text-red-800">Aguardando ação</p>
-                                            <p className="text-sm text-red-700">{cronograma.motivo_atraso}</p>
-                                          </div>
-                                        </div>
-                                      </div>
-                                    )}
-                                  </div>
-                                  
-                                  {/* Ações */}
-                                  <div className="flex gap-2 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
-                                    <Button
-                                      variant="outline"
-                                      size="sm"
-                                      onClick={() => {
-                                        setEditingCronograma(cronograma);
-                                        setIsEditDialogOpen(true);
-                                      }}
-                                      title="Editar demanda"
-                                    >
-                                      <Edit className="h-4 w-4" />
-                                    </Button>
-                                    <Button 
-                                      variant="outline" 
-                                      size="sm"
-                                      onClick={() => openDeleteDialog(cronograma)}
-                                      title="Excluir demanda"
-                                    >
-                                      <Trash2 className="h-4 w-4" />
-                                    </Button>
-                                  </div>
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </CardContent>
-                </Card>
-              );
-            })}
-          </div>
-        )}
-      </div>
-    );
-  };
 
   // Função para renderizar a visualização em timeline (Gantt)
   const renderTimelineView = () => {
@@ -1134,12 +852,142 @@ const Cronograma = () => {
       </Card>
 
       {/* Conteúdo baseado no modo de visualização */}
-      {loading ? (
-        <div className="flex justify-center py-8">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+      {viewMode === 'list' ? (
+        <div className="space-y-4">
+        {loading ? (
+          <div className="flex justify-center py-8">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+          </div>
+        ) : cronogramasFiltrados.length === 0 ? (
+          <Card>
+            <CardContent className="text-center py-8">
+              <Target className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+              <h3 className="text-lg font-semibold text-gray-600 mb-2">Nenhuma demanda encontrada</h3>
+              <p className="text-gray-500">
+                {filtroStatus !== 'todos' || filtroPrioridade !== 'todos' 
+                  ? 'Tente ajustar os filtros para ver mais resultados.'
+                  : 'Não há demandas cadastradas no momento.'
+                }
+              </p>
+            </CardContent>
+          </Card>
+        ) : (
+          <>
+            {/* Tarefas */}
+            {cronogramasFiltrados.map((cronograma) => {
+            const diasAtraso = calcularDiasAtraso(cronograma.data_fim || '');
+            
+            return (
+              <Card key={cronograma.id} className={`hover:shadow-md transition-shadow ${
+                cronograma.status === 'concluido' ? 'bg-green-50 border-green-200' : ''
+              }`}>
+                <CardHeader>
+                  <div className="flex justify-between items-start gap-4">
+                    <div className="flex items-start gap-3 flex-1 min-w-0">
+                      <div className="flex-shrink-0 mt-1">
+                        {getStatusIcon(cronograma.status)}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <CardTitle className="text-lg break-words">{cronograma.titulo}</CardTitle>
+                        {cronograma.descricao && (
+                          <CardDescription className="mt-1 break-words">{cronograma.descricao}</CardDescription>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex gap-2 flex-shrink-0">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          setEditingCronograma(cronograma);
+                          setIsEditDialogOpen(true);
+                        }}
+                        title="Editar demanda"
+                      >
+                        <Edit className="h-4 w-4" />
+                      </Button>
+                      <Button 
+                        variant="outline" 
+                        size="sm"
+                        onClick={() => openDeleteDialog(cronograma)}
+                        title="Excluir demanda"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent>
+
+                  {/* Informações */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 text-sm">
+                    <div>
+                      <Label className="text-xs text-gray-500">Fase Atual</Label>
+                      <div className="mt-1">{getFaseBadge(cronograma.fase_atual)}</div>
+                    </div>
+                    <div>
+                      <Label className="text-xs text-gray-500">Responsável</Label>
+                      <div className="mt-1 flex items-center gap-2">
+                        <Users className="h-4 w-4" />
+                        <span>{cronograma.responsavel_nome ? cronograma.responsavel_nome : 'Não atribuído'}</span>
+                      </div>
+                    </div>
+                    <div>
+                      <Label className="text-xs text-gray-500">Prazo</Label>
+                      <div className="mt-1 flex items-center gap-2">
+                        <Calendar className="h-4 w-4" />
+                        <span>{formatDate(cronograma.data_fim || '')}</span>
+                      </div>
+                    </div>
+                    <div>
+                      <Label className="text-xs text-gray-500">Organização</Label>
+                      <div className="mt-1 flex items-center gap-2">
+                        <Building className="h-4 w-4" />
+                        <span>{cronograma.responsavel_empresa || cronograma.organizacao}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Status e Prioridade */}
+                  <div className="flex gap-2 mt-4">
+                    {getStatusBadge(cronograma.status)}
+                    {getPrioridadeBadge(cronograma.prioridade)}
+                    {diasAtraso > 0 && (
+                      <Badge variant="destructive">
+                        {diasAtraso} dia{diasAtraso > 1 ? 's' : ''} atrasado
+                      </Badge>
+                    )}
+                  </div>
+
+                  {/* Motivo do Atraso */}
+                  {cronograma.motivo_atraso && (
+                    <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg">
+                      <div className="flex items-start gap-2">
+                        <AlertCircle className="h-4 w-4 text-red-500 mt-0.5" />
+                        <div>
+                          <p className="text-sm font-medium text-red-800">Motivo do atraso:</p>
+                          <p className="text-sm text-red-700">{cronograma.motivo_atraso}</p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Observações */}
+                  {cronograma.observacoes && (
+                    <div className="mt-4 p-3 bg-gray-50 border border-gray-200 rounded-lg">
+                      <p className="text-sm font-medium text-gray-800 mb-1">Observações:</p>
+                      <p className="text-sm text-gray-700">{cronograma.observacoes}</p>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            );
+          })}
+          </>
+        )}
         </div>
       ) : (
-        viewMode === 'list' ? renderListView() : renderTimelineView()
+        renderTimelineView()
       )}
 
       {/* Dialog de Edição/Criação */}
@@ -1395,139 +1243,6 @@ const Cronograma = () => {
               </Button>
             </div>
           </div>
-        </DialogContent>
-      </Dialog>
-
-      {/* Modal de Detalhes da Atividade */}
-      <Dialog open={isDetailsDialogOpen} onOpenChange={setIsDetailsDialogOpen}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              {selectedCronograma && getStatusIcon(selectedCronograma.status)}
-              Detalhes da Atividade
-            </DialogTitle>
-            <DialogDescription>
-              Informações completas sobre a demanda selecionada
-            </DialogDescription>
-          </DialogHeader>
-
-          {selectedCronograma && (
-            <div className="space-y-6">
-              {/* Informações Principais */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div>
-                  <h3 className="text-lg font-semibold text-gray-900 mb-4">
-                    {selectedCronograma.titulo}
-                  </h3>
-                  
-                  {selectedCronograma.descricao && (
-                    <div className="mb-4">
-                      <h4 className="text-sm font-medium text-gray-700 mb-2">Descrição:</h4>
-                      <p className="text-sm text-gray-600">{selectedCronograma.descricao}</p>
-                    </div>
-                  )}
-
-                  {/* Status e Prioridade */}
-                  <div className="flex gap-2 mb-4">
-                    {getStatusBadge(selectedCronograma.status)}
-                    {getPrioridadeBadge(selectedCronograma.prioridade)}
-                  </div>
-                </div>
-
-                <div className="space-y-4">
-                  {/* Informações Detalhadas */}
-                  <div className="bg-gray-50 p-4 rounded-lg">
-                    <h4 className="text-sm font-medium text-gray-700 mb-3">Informações</h4>
-                    <div className="space-y-2 text-sm">
-                      <div className="flex items-center gap-2">
-                        <Building className="h-4 w-4 text-gray-500" />
-                        <span className="font-medium">Organização:</span>
-                        <span>{selectedCronograma.organizacao?.toUpperCase()}</span>
-                      </div>
-                      
-                      <div className="flex items-center gap-2">
-                        <Target className="h-4 w-4 text-gray-500" />
-                        <span className="font-medium">Fase Atual:</span>
-                        <span>{getFaseBadge(selectedCronograma.fase_atual)}</span>
-                      </div>
-                      
-                      {selectedCronograma.responsavel_nome && (
-                        <div className="flex items-center gap-2">
-                          <User className="h-4 w-4 text-gray-500" />
-                          <span className="font-medium">Responsável:</span>
-                          <span>{selectedCronograma.responsavel_nome}</span>
-                        </div>
-                      )}
-                      
-                      {selectedCronograma.data_inicio && (
-                        <div className="flex items-center gap-2">
-                          <Calendar className="h-4 w-4 text-gray-500" />
-                          <span className="font-medium">Período:</span>
-                          <span>
-                            {new Date(selectedCronograma.data_inicio).toLocaleDateString('pt-BR')} - 
-                            {selectedCronograma.data_fim ? new Date(selectedCronograma.data_fim).toLocaleDateString('pt-BR') : 'Sem data fim'}
-                          </span>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Observações */}
-              {selectedCronograma.observacoes && (
-                <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
-                  <h4 className="text-sm font-medium text-blue-800 mb-2">Observações:</h4>
-                  <p className="text-sm text-blue-700">{selectedCronograma.observacoes}</p>
-                </div>
-              )}
-
-              {/* Motivo do Atraso */}
-              {selectedCronograma.motivo_atraso && (
-                <div className="bg-red-50 p-4 rounded-lg border border-red-200">
-                  <h4 className="text-sm font-medium text-red-800 mb-2">Motivo do Atraso:</h4>
-                  <p className="text-sm text-red-700">{selectedCronograma.motivo_atraso}</p>
-                </div>
-              )}
-
-              {/* Informações de Controle */}
-              <div className="bg-gray-50 p-4 rounded-lg">
-                <h4 className="text-sm font-medium text-gray-700 mb-3">Controle</h4>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-                  <div>
-                    <span className="font-medium text-gray-600">Criado em:</span>
-                    <span className="ml-2">{new Date(selectedCronograma.created_at).toLocaleDateString('pt-BR')}</span>
-                  </div>
-                  <div>
-                    <span className="font-medium text-gray-600">Última atualização:</span>
-                    <span className="ml-2">
-                      {selectedCronograma.updated_at ? new Date(selectedCronograma.updated_at).toLocaleDateString('pt-BR') : 'N/A'}
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Botões de Ação */}
-              <div className="flex justify-end gap-3 pt-4 border-t">
-                <Button
-                  variant="outline"
-                  onClick={() => setIsDetailsDialogOpen(false)}
-                >
-                  Fechar
-                </Button>
-                <Button
-                  onClick={() => {
-                    setIsDetailsDialogOpen(false);
-                    setEditingCronograma(selectedCronograma);
-                    setIsEditDialogOpen(true);
-                  }}
-                >
-                  <Edit className="h-4 w-4 mr-2" />
-                  Editar
-                </Button>
-              </div>
-            </div>
-          )}
         </DialogContent>
       </Dialog>
 
