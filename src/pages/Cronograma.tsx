@@ -438,18 +438,26 @@ const Cronograma = () => {
         'jul': 6, 'ago': 7, 'set': 8, 'out': 9, 'nov': 10, 'dez': 11
       };
       
-      const mesA = a.split('/')[0].toLowerCase();
+      // Remover ponto final se existir (ex: "nov." -> "nov")
+      const mesA = a.split('/')[0].toLowerCase().replace('.', '');
       const anoA = parseInt(a.split('/')[1]);
-      const mesB = b.split('/')[0].toLowerCase();
+      const mesB = b.split('/')[0].toLowerCase().replace('.', '');
       const anoB = parseInt(b.split('/')[1]);
+      
+      console.log(`Comparando: ${a} (${mesA}/${anoA}) vs ${b} (${mesB}/${anoB})`);
       
       // Primeiro compara o ano
       if (anoA !== anoB) {
+        console.log(`Anos diferentes: ${anoA} vs ${anoB}, retornando ${anoA - anoB}`);
         return anoA - anoB;
       }
       
       // Se o ano for igual, compara o mês
-      return (meses[mesA as keyof typeof meses] || 0) - (meses[mesB as keyof typeof meses] || 0);
+      const numMesA = meses[mesA as keyof typeof meses] || 0;
+      const numMesB = meses[mesB as keyof typeof meses] || 0;
+      console.log(`Anos iguais: ${anoA}, comparando meses: ${mesA}(${numMesA}) vs ${mesB}(${numMesB}), retornando ${numMesA - numMesB}`);
+      
+      return numMesA - numMesB;
     });
     
     // Debug: log da ordenação
