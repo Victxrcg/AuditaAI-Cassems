@@ -244,11 +244,27 @@ const Cronograma = () => {
 
   // Filtrar cronogramas
   const cronogramasFiltrados = cronogramas.filter(cronograma => {
+    // Lógica especial para "Apenas Concluídas"
+    if (filtroStatus === 'apenas_concluidas') {
+      const prioridadeMatch = filtroPrioridade === 'todos' || cronograma.prioridade === filtroPrioridade;
+      const organizacaoMatch = filtroOrganizacao === 'todos' || cronograma.organizacao === filtroOrganizacao;
+      return cronograma.status === 'concluido' && prioridadeMatch && organizacaoMatch;
+    }
+    
+    // Lógica normal para outros filtros
     const statusMatch = filtroStatus === 'todos' || cronograma.status === filtroStatus;
     const prioridadeMatch = filtroPrioridade === 'todos' || cronograma.prioridade === filtroPrioridade;
     const organizacaoMatch = filtroOrganizacao === 'todos' || cronograma.organizacao === filtroOrganizacao;
-    return statusMatch && prioridadeMatch && organizacaoMatch;
+    
+    // Por padrão, ocultar concluídas (exceto quando especificamente selecionadas)
+    const concluidasMatch = filtroStatus === 'concluido' || filtroStatus === 'apenas_concluidas' ? true : cronograma.status !== 'concluido';
+    
+    return statusMatch && prioridadeMatch && organizacaoMatch && concluidasMatch;
   });
+
+  // Separar cronogramas em ativos e concluídos para exibição
+  const cronogramasAtivos = cronogramas.filter(c => c.status !== 'concluido');
+  const cronogramasConcluidos = cronogramas.filter(c => c.status === 'concluido');
 
   const getStatusIcon = (status: string) => {
     switch (status) {
@@ -396,67 +412,58 @@ const Cronograma = () => {
   const [cronogramaToDelete, setCronogramaToDelete] = useState<CronogramaItem | null>(null);
 
   // Estado para alternar entre modos de visualização
-  const [viewMode, setViewMode] = useState<'list' | 'timeline'>('list');
+  const [viewMode, setViewMode] = useState<'list' | 'timeline'>('timeline');
   
-  // Estado para controlar o zoom da timeline
-  const [zoomLevel, setZoomLevel] = useState(1);
-  const [timelineOffset, setTimelineOffset] = useState(0);
-  const [timeGranularity, setTimeGranularity] = useState<'months' | 'days'>('months');
+  
+  // Estado para controlar fases expandidas
+  const [fasesExpandidas, setFasesExpandidas] = useState<Set<string>>(new Set());
 
   // Função para renderizar a visualização em timeline (Gantt)
   const renderTimelineView = () => {
+    // Usar cronogramas filtrados diretamente
+    const cronogramasParaTimeline = cronogramasFiltrados;
+    
     // Agrupar cronogramas por organização
-    const cronogramasPorOrganizacao = cronogramasFiltrados.reduce((acc, cronograma) => {
+    const cronogramasPorOrganizacao = cronogramasParaTimeline.reduce((acc, cronograma) => {
       const org = cronograma.organizacao || 'outros';
       if (!acc[org]) acc[org] = [];
       acc[org].push(cronograma);
       return acc;
     }, {} as Record<string, CronogramaItem[]>);
 
-    // Calcular período de visualização baseado no zoom e granularidade
+    // Calcular período de visualização (fixo em meses)
     const hoje = new Date();
     
-    // Determinar granularidade baseada no zoom
-    const newGranularity = zoomLevel >= 1.5 ? 'days' : 'months';
-    if (newGranularity !== timeGranularity) {
-      setTimeGranularity(newGranularity);
-    }
+    // Visualização por meses (período fixo)
+    const mesesVisiveis = 8; // 8 meses
+    const inicioPeriodo = new Date(hoje.getFullYear(), hoje.getMonth() - Math.floor(mesesVisiveis / 2), 1);
+    const fimPeriodo = new Date(hoje.getFullYear(), hoje.getMonth() + Math.floor(mesesVisiveis / 2), 0);
     
-    let inicioPeriodo: Date, fimPeriodo: Date;
-    let timeUnits: Date[] = [];
-    
-    if (timeGranularity === 'days') {
-      // Visualização por dias (zoom alto)
-      const diasVisiveis = Math.max(14, Math.floor(60 / zoomLevel)); // 14 a 60 dias
-      inicioPeriodo = new Date(hoje.getTime() - (diasVisiveis / 2) * 24 * 60 * 60 * 1000);
-      fimPeriodo = new Date(hoje.getTime() + (diasVisiveis / 2) * 24 * 60 * 60 * 1000);
-      
-      // Gerar dias do período
-      const currentDate = new Date(inicioPeriodo);
-      while (currentDate <= fimPeriodo) {
-        timeUnits.push(new Date(currentDate));
-        currentDate.setDate(currentDate.getDate() + 1);
-      }
-    } else {
-      // Visualização por meses (zoom baixo)
-      const mesesVisiveis = Math.max(3, Math.floor(8 / zoomLevel)); // 3 a 8 meses
-      inicioPeriodo = new Date(hoje.getFullYear(), hoje.getMonth() - Math.floor(mesesVisiveis / 2), 1);
-      fimPeriodo = new Date(hoje.getFullYear(), hoje.getMonth() + Math.floor(mesesVisiveis / 2), 0);
-      
-      // Gerar meses do período
-      const currentDate = new Date(inicioPeriodo);
-      while (currentDate <= fimPeriodo) {
-        timeUnits.push(new Date(currentDate));
-        currentDate.setMonth(currentDate.getMonth() + 1);
-      }
+    // Gerar meses do período
+    const timeUnits: Date[] = [];
+    const currentDate = new Date(inicioPeriodo);
+    while (currentDate <= fimPeriodo) {
+      timeUnits.push(new Date(currentDate));
+      currentDate.setMonth(currentDate.getMonth() + 1);
     }
 
-    // Cores por organização
-    const coresOrganizacao: Record<string, string> = {
-      'portes': 'bg-green-500',
-      'cassems': 'bg-blue-500',
-      'rede_frota': 'bg-purple-500',
-      'outros': 'bg-gray-500'
+    // Cores por organização (fases)
+    const coresOrganizacao: Record<string, { bg: string; text: string; light: string }> = {
+      'portes': { bg: '#3B82F6', text: '#FFFFFF', light: '#EFF6FF' },
+      'cassems': { bg: '#10B981', text: '#FFFFFF', light: '#ECFDF5' },
+      'rede_frota': { bg: '#8B5CF6', text: '#FFFFFF', light: '#F3E8FF' },
+      'outros': { bg: '#6B7280', text: '#FFFFFF', light: '#F9FAFB' }
+    };
+
+    // Função para alternar expansão de fase
+    const toggleFase = (organizacao: string) => {
+      const novasFases = new Set(fasesExpandidas);
+      if (novasFases.has(organizacao)) {
+        novasFases.delete(organizacao);
+      } else {
+        novasFases.add(organizacao);
+      }
+      setFasesExpandidas(novasFases);
     };
 
     // Cores por status
@@ -470,8 +477,7 @@ const Cronograma = () => {
     // Função para calcular posição da barra
     const calcularPosicaoBarra = (dataInicio: Date | null, dataFim: Date | null) => {
       if (!dataInicio || !dataFim) {
-        const larguraColuna = timeGranularity === 'days' ? 24 * zoomLevel : 96 * zoomLevel;
-        return { inicio: 0, largura: larguraColuna, colunaInicio: 0, colunaFim: 1 };
+        return { inicio: 0, largura: 0, colunaInicio: 0, colunaFim: 1 };
       }
       
       const inicioRelativo = Math.max(0, dataInicio.getTime() - inicioPeriodo.getTime());
@@ -482,14 +488,16 @@ const Cronograma = () => {
       const fimPercentual = fimRelativo / larguraTotal;
       const larguraPercentual = fimPercentual - inicioPercentual;
       
-      const larguraColuna = timeGranularity === 'days' ? 24 * zoomLevel : 96 * zoomLevel;
-      const inicio = inicioPercentual * (timeUnits.length * larguraColuna);
-      const largura = larguraPercentual * (timeUnits.length * larguraColuna);
-      
+      // Usar percentuais para largura flexível
       const colunaInicio = Math.floor(inicioPercentual * timeUnits.length);
       const colunaFim = Math.ceil(fimPercentual * timeUnits.length);
       
-      return { inicio, largura, colunaInicio, colunaFim };
+      return { 
+        inicio: `${(inicioPercentual * 100).toFixed(2)}%`, 
+        largura: `${(larguraPercentual * 100).toFixed(2)}%`, 
+        colunaInicio, 
+        colunaFim 
+      };
     };
 
     return (
@@ -504,66 +512,27 @@ const Cronograma = () => {
                   Timeline de Demandas
                 </CardTitle>
                 <CardDescription>
-                  Visualização temporal de todas as demandas por organização
+                  {filtroStatus === 'apenas_concluidas' 
+                    ? `Visualização temporal das tarefas concluídas (${cronogramasConcluidos.length} tarefas)`
+                    : 'Visualização temporal das demandas por organização'
+                  }
                 </CardDescription>
               </div>
               
-              {/* Controles da Timeline */}
-              <div className="flex items-center gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => {
-                    setZoomLevel(prev => Math.max(0.5, prev - 0.25));
-                  }}
-                  title="Diminuir zoom"
-                  disabled={zoomLevel <= 0.5}
-                >
-                  <span className="text-lg">−</span>
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => {
-                    setZoomLevel(prev => Math.min(3, prev + 0.25));
-                  }}
-                  title="Aumentar zoom"
-                  disabled={zoomLevel >= 3}
-                >
-                  <span className="text-lg">+</span>
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => {
-                    setZoomLevel(1);
-                    setTimelineOffset(0);
-                  }}
-                  title="Resetar zoom e centralizar"
-                >
-                  <Calendar className="h-4 w-4" />
-                </Button>
-                <span className="text-sm text-gray-500 ml-2">
-                  {Math.round(zoomLevel * 100)}% • {timeGranularity === 'days' ? 'Dias' : 'Meses'}
-                </span>
-              </div>
             </div>
           </CardHeader>
           <CardContent>
-            {/* Timeline Header */}
-            <div className="overflow-x-auto" style={{ transform: `translateX(${timelineOffset}px)` }}>
-              <div className="min-w-[800px]" style={{ transform: `scale(${zoomLevel})`, transformOrigin: 'left top' }}>
+        {/* Timeline Header */}
+        <div className="w-full">
+          <div className="w-full">
                 {/* Header dos meses */}
                 <div className="flex border-b-2 border-gray-200">
-                  <div className="w-64 px-4 py-3 font-semibold text-gray-700 bg-gray-50 border-r">
+                  <div className="w-80 px-4 py-4 font-semibold text-gray-700 bg-gray-100 border-r">
                     Organização / Demanda
                   </div>
                   {timeUnits.map((timeUnit, index) => (
-                    <div key={index} className="px-2 py-3 text-center font-semibold text-gray-700 bg-gray-50 border-r" style={{ width: `${timeGranularity === 'days' ? 24 * zoomLevel : 96 * zoomLevel}px` }}>
-                      {timeGranularity === 'days' 
-                        ? timeUnit.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })
-                        : timeUnit.toLocaleDateString('pt-BR', { month: 'short', year: '2-digit' })
-                      }
+                    <div key={index} className="px-2 py-4 text-center font-semibold text-gray-700 bg-gray-50 border-r flex-1">
+                      {timeUnit.toLocaleDateString('pt-BR', { month: 'short', year: '2-digit' })}
                     </div>
                   ))}
                 </div>
@@ -572,15 +541,15 @@ const Cronograma = () => {
                 {Object.entries(cronogramasPorOrganizacao).map(([organizacao, cronogramasOrg]) => (
                   <div key={organizacao} className="border-b border-gray-100">
                     {/* Header da organização */}
-                    <div className="flex items-center h-12 bg-gray-50">
-                      <div className="w-64 px-4 py-3 font-semibold text-gray-900 border-r">
+                    <div className="flex items-center h-16 bg-gray-100">
+                      <div className="w-80 px-4 py-4 font-semibold text-gray-900 border-r">
                         <div className="flex items-center gap-2">
                           <div className={`w-3 h-3 rounded-full ${coresOrganizacao[organizacao] || 'bg-gray-400'}`}></div>
-                          {organizacao.toUpperCase()}
+                          <span className="truncate">{organizacao.toUpperCase()}</span>
                         </div>
                       </div>
                       {timeUnits.map((_, index) => (
-                        <div key={index} className="border-r" style={{ width: `${timeGranularity === 'days' ? 24 * zoomLevel : 96 * zoomLevel}px` }}></div>
+                        <div key={index} className="border-r flex-1"></div>
                       ))}
                     </div>
 
@@ -592,43 +561,44 @@ const Cronograma = () => {
                       const posicao = calcularPosicaoBarra(dataInicio, dataFim);
 
                       return (
-                        <div key={cronograma.id} className="flex items-center h-12 border-b border-gray-50 hover:bg-gray-25 transition-colors">
-                          <div className="w-64 px-4 py-2 text-sm text-gray-700 border-r">
-                            <div className="flex items-center justify-between">
-                              <span 
-                                className="truncate cursor-pointer hover:text-blue-600 transition-colors"
-                                onClick={() => {
-                                  setEditingCronograma(cronograma);
-                                  setIsEditDialogOpen(true);
-                                }}
-                                title={`Clique para editar: ${cronograma.titulo}`}
-                              >
-                                 {cronograma.titulo}
-                              </span>
-                              <div className="flex items-center gap-1">
+                        <div key={cronograma.id} className="flex items-center h-16 border-b border-gray-100 bg-gray-50 hover:bg-gray-100 transition-colors">
+                          <div className="w-80 px-4 py-3 text-sm text-gray-700 border-r">
+                            <div className="flex flex-col gap-2">
+                              <div className="flex items-start justify-between gap-2">
+                                <span 
+                                  className="truncate cursor-pointer hover:text-blue-600 transition-colors flex-1"
+                                  onClick={() => {
+                                    setEditingCronograma(cronograma);
+                                    setIsEditDialogOpen(true);
+                                  }}
+                                  title={`Clique para editar: ${cronograma.titulo}`}
+                                >
+                                   {cronograma.titulo}
+                                </span>
                                 <Badge 
                                   variant={getStatusBadgeInfo(cronograma.status).variant as any}
-                                  className="text-xs"
+                                  className="text-xs whitespace-nowrap"
                                 >
                                   {getStatusBadgeInfo(cronograma.status).text}
                                 </Badge>
                               </div>
+                              {cronograma.responsavel_nome && (
+                                <div className="text-xs text-gray-500 truncate">
+                                  {cronograma.responsavel_nome}
+                                </div>
+                              )}
                             </div>
-                            {cronograma.responsavel_nome && (
-                              <div className="text-xs text-gray-500 mt-1">
-                              </div>
-                            )}
                           </div>
                           
                           {/* Timeline bar interativa */}
                           <div className="relative flex-1 h-full">
                             {dataInicio && dataFim && (
                               <div
-                                className={`absolute top-1/2 transform -translate-y-1/2 h-8 rounded-lg ${coresStatus[cronograma.status]} shadow-sm hover:shadow-md transition-all cursor-pointer border-2 border-white hover:scale-105`}
+                                className={`absolute top-1/2 transform -translate-y-1/2 h-10 rounded-lg ${coresStatus[cronograma.status]} shadow-sm hover:shadow-md transition-all cursor-pointer border-2 border-white hover:scale-105`}
                                 style={{
-                                  left: `${posicao.inicio}px`,
-                                  width: `${Math.max(posicao.largura, 20)}px`,
-                                  minWidth: '20px'
+                                  left: posicao.inicio,
+                                  width: posicao.largura,
+                                  minWidth: '60px'
                                 }}
                                 onClick={() => {
                                   setEditingCronograma(cronograma);
@@ -641,6 +611,15 @@ const Cronograma = () => {
                               ${cronograma.motivo_atraso ? `Atraso: ${cronograma.motivo_atraso}` : ''}
                                Clique para editar`}
                               >
+                                <span className="text-white text-xs font-medium px-2 truncate">
+                                  {parseFloat(posicao.largura.toString()) > 10 ? 
+                                    (parseFloat(posicao.largura.toString()) > 20 ? 
+                                      cronograma.titulo : 
+                                      `${cronograma.titulo.substring(0, Math.max(10, Math.floor(parseFloat(posicao.largura.toString()) * 3)))}...`
+                                    ) : 
+                                    `${cronograma.titulo.substring(0, 8)}...`
+                                  }
+                                </span>
                               </div>
                             )}
                             
@@ -648,7 +627,7 @@ const Cronograma = () => {
                             <div 
                               className="absolute top-0 bottom-0 w-0.5 bg-red-500 z-10"
                               style={{
-                                left: `${((hoje.getTime() - inicioPeriodo.getTime()) / (fimPeriodo.getTime() - inicioPeriodo.getTime())) * (timeUnits.length * (timeGranularity === 'days' ? 24 : 96) * zoomLevel)}px`
+                                left: `${((hoje.getTime() - inicioPeriodo.getTime()) / (fimPeriodo.getTime() - inicioPeriodo.getTime())) * 100}%`
                               }}
                               title={`Hoje: ${hoje.toLocaleDateString('pt-BR')}`}
                             />
@@ -872,6 +851,15 @@ const Cronograma = () => {
               </div>
             )}
           </div>
+          
+          {/* Contador de tarefas concluídas */}
+          {filtroStatus === 'apenas_concluidas' && (
+            <div className="mt-4 flex items-center gap-4">
+              <div className="text-sm text-gray-600">
+                ({cronogramasConcluidos.length} tarefa{cronogramasConcluidos.length !== 1 ? 's' : ''} concluída{cronogramasConcluidos.length !== 1 ? 's' : ''})
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -896,23 +884,29 @@ const Cronograma = () => {
             </CardContent>
           </Card>
         ) : (
-          cronogramasFiltrados.map((cronograma) => {
+          <>
+            {/* Tarefas */}
+            {cronogramasFiltrados.map((cronograma) => {
             const diasAtraso = calcularDiasAtraso(cronograma.data_fim || '');
             
             return (
-              <Card key={cronograma.id} className="hover:shadow-md transition-shadow">
+              <Card key={cronograma.id} className={`hover:shadow-md transition-shadow ${
+                cronograma.status === 'concluido' ? 'bg-green-50 border-green-200' : ''
+              }`}>
                 <CardHeader>
-                  <div className="flex justify-between items-start">
-                    <div className="flex items-center gap-3">
-                      {getStatusIcon(cronograma.status)}
-                      <div>
-                        <CardTitle className="text-lg">{cronograma.titulo}</CardTitle>
+                  <div className="flex justify-between items-start gap-4">
+                    <div className="flex items-start gap-3 flex-1 min-w-0">
+                      <div className="flex-shrink-0 mt-1">
+                        {getStatusIcon(cronograma.status)}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <CardTitle className="text-lg break-words">{cronograma.titulo}</CardTitle>
                         {cronograma.descricao && (
-                          <CardDescription className="mt-1">{cronograma.descricao}</CardDescription>
+                          <CardDescription className="mt-1 break-words">{cronograma.descricao}</CardDescription>
                         )}
                       </div>
                     </div>
-                    <div className="flex gap-2">
+                    <div className="flex gap-2 flex-shrink-0">
                       <Button
                         variant="outline"
                         size="sm"
@@ -1000,7 +994,8 @@ const Cronograma = () => {
                 </CardContent>
               </Card>
             );
-          })
+          })}
+          </>
         )}
         </div>
       ) : (
