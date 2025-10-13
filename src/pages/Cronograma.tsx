@@ -25,7 +25,8 @@ import {
   BarChart3,
   Building,
   AlertTriangle,
-  List
+  List,
+  User
 } from 'lucide-react';
 
 interface CronogramaItem {
@@ -66,6 +67,7 @@ const Cronograma = () => {
   const [estatisticas, setEstatisticas] = useState<Estatisticas | null>(null);
   const [loading, setLoading] = useState(false);
   const [currentUser, setCurrentUser] = useState<any>(null);
+  const [usuarios, setUsuarios] = useState<any[]>([]);
   const [editingCronograma, setEditingCronograma] = useState<CronogramaItem | null>(null);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [formData, setFormData] = useState({
@@ -79,7 +81,8 @@ const Cronograma = () => {
     status: 'pendente',
     prioridade: 'media',
     observacoes: '',
-    motivo_atraso: ''
+    motivo_atraso: '',
+    responsavel_id: null as number | null
   });
   const [filtroStatus, setFiltroStatus] = useState<string>('todos');
   const [filtroPrioridade, setFiltroPrioridade] = useState<string>('todos');
@@ -124,6 +127,24 @@ const Cronograma = () => {
     setLoading(false);
   };
 
+  // Buscar usuários para atribuição
+  const fetchUsuarios = async () => {
+    try {
+      const userOrg = currentUser?.organizacao || 'cassems';
+      const res = await fetch(`${API_BASE}/usuarios?organizacao=${userOrg}`, {
+        headers: {
+          'x-user-organization': userOrg
+        }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setUsuarios(data);
+      }
+    } catch (error) {
+      console.error('Erro ao buscar usuários:', error);
+    }
+  };
+
   // Carregar estatísticas
   const fetchEstatisticas = async () => {
     try {
@@ -148,6 +169,7 @@ const Cronograma = () => {
     if (currentUser) {
       fetchCronogramas();
       fetchEstatisticas();
+      fetchUsuarios();
     }
   }, [currentUser]);
 
@@ -193,7 +215,8 @@ const Cronograma = () => {
         status: editingCronograma.status,
         prioridade: editingCronograma.prioridade,
         observacoes: editingCronograma.observacoes || '',
-        motivo_atraso: editingCronograma.motivo_atraso || ''
+        motivo_atraso: editingCronograma.motivo_atraso || '',
+        responsavel_id: editingCronograma.responsavel_id || null
       });
     } else {
       setFormData({
@@ -207,7 +230,8 @@ const Cronograma = () => {
         status: 'pendente',
         prioridade: 'media',
         observacoes: '',
-        motivo_atraso: ''
+        motivo_atraso: '',
+        responsavel_id: null
       });
     }
   }, [editingCronograma, currentUser]);
@@ -247,7 +271,7 @@ const Cronograma = () => {
     const variants = {
       pendente: 'secondary',
       em_andamento: 'default',
-      concluido: 'success',
+      concluido: 'default',
       atrasado: 'destructive'
     } as const;
 
@@ -888,37 +912,64 @@ const Cronograma = () => {
                 />
               </div>
 
-              {currentUser?.organizacao === 'portes' ? (
-                <div>
-                  <Label htmlFor="organizacao">Organização</Label>
-                  <Select
-                    value={formData.organizacao}
-                    onValueChange={(value) => setFormData({...formData, organizacao: value})}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Selecione a organização" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="cassems">CASSEMS</SelectItem>
-                      <SelectItem value="portes">PORTES</SelectItem>
-                      <SelectItem value="rede_frota">REDE FROTA</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              ) : (
-                <div>
-                  <Label htmlFor="organizacao">Organização</Label>
-                  <div className="flex items-center gap-2 p-2 bg-gray-50 border rounded-md">
-                    <Building className="h-4 w-4 text-gray-500" />
-                    <span className="text-sm font-medium text-gray-700">
-                      {currentUser?.nome_empresa || currentUser?.organizacao_nome || 'Sua organização'}
-                    </span>
-                  </div>
-                  <p className="text-xs text-gray-500 mt-1">
-                    Organização fixada para sua conta
-                  </p>
-                </div>
-              )}
+              <div>
+                <Label htmlFor="organizacao">Organização</Label>
+                <Select
+                  value={formData.organizacao}
+                  onValueChange={(value) => setFormData({...formData, organizacao: value})}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione a organização" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {/* Sempre mostrar a organização do usuário */}
+                    <SelectItem value={currentUser?.organizacao || 'cassems'}>
+                      <div className="flex items-center gap-2">
+                        <Building className="h-4 w-4" />
+                        {currentUser?.nome_empresa || currentUser?.organizacao_nome || 
+                         (currentUser?.organizacao === 'portes' ? 'PORTES' : 
+                          currentUser?.organizacao === 'cassems' ? 'CASSEMS' : 
+                          currentUser?.organizacao === 'rede_frota' ? 'REDE FROTA' : 
+                          'SUA ORGANIZAÇÃO')}
+                      </div>
+                    </SelectItem>
+                    
+                    {/* Sempre mostrar PORTES como opção adicional */}
+                    {currentUser?.organizacao !== 'portes' && (
+                      <SelectItem value="portes">
+                        <div className="flex items-center gap-2">
+                          <Building className="h-4 w-4" />
+                          PORTES
+                        </div>
+                      </SelectItem>
+                    )}
+                    
+                    {/* Mostrar outras organizações se for Portes */}
+                    {currentUser?.organizacao === 'portes' && (
+                      <>
+                        <SelectItem value="cassems">
+                          <div className="flex items-center gap-2">
+                            <Building className="h-4 w-4" />
+                            CASSEMS
+                          </div>
+                        </SelectItem>
+                        <SelectItem value="rede_frota">
+                          <div className="flex items-center gap-2">
+                            <Building className="h-4 w-4" />
+                            REDE FROTA
+                          </div>
+                        </SelectItem>
+                      </>
+                    )}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-gray-500 mt-1">
+                  {currentUser?.organizacao !== 'portes' 
+                    ? 'Você pode criar demandas para sua organização ou para a Portes'
+                    : 'Selecione a organização para a demanda'
+                  }
+                </p>
+              </div>
 
               <div>
                 <Label htmlFor="fase_atual">Fase Atual</Label>
@@ -1005,6 +1056,37 @@ const Cronograma = () => {
                   value={formData.data_fim}
                   onChange={(e) => setFormData({...formData, data_fim: e.target.value})}
                 />
+              </div>
+
+              <div>
+                <Label htmlFor="responsavel_id">Responsável</Label>
+                <Select
+                  value={formData.responsavel_id?.toString() || ''}
+                  onValueChange={(value) => setFormData({...formData, responsavel_id: value ? parseInt(value) : null})}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione um responsável" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="">
+                      <div className="flex items-center gap-2">
+                        <User className="h-4 w-4" />
+                        Não atribuído
+                      </div>
+                    </SelectItem>
+                    {usuarios.map((usuario) => (
+                      <SelectItem key={usuario.id} value={usuario.id.toString()}>
+                        <div className="flex items-center gap-2">
+                          <User className="h-4 w-4" />
+                          {usuario.nome}
+                          {usuario.nome_empresa && (
+                            <span className="text-xs text-gray-500">({usuario.nome_empresa})</span>
+                          )}
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
 
               <div className="md:col-span-2">
