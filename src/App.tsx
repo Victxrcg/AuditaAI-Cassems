@@ -10,6 +10,7 @@ import Compliance from "./pages/Compliance";
 import Register from "./pages/Register";
 import Users from "./pages/Users";
 import Cronograma from "./pages/Cronograma";
+import Documentos from "./pages/Documentos";
 
 const queryClient = new QueryClient();
 
@@ -24,6 +25,7 @@ const App = () => (
           <Route path="/registrar" element={<Register />} />
           <Route path="/compliance" element={<Layout><Compliance /></Layout>} />
           <Route path="/cronograma" element={<Layout><Cronograma /></Layout>} />
+          <Route path="/documentos" element={<Layout><Documentos /></Layout>} />
           <Route path="/usuarios" element={<Layout><Users /></Layout>} />
           {/* Redireciona / e /dashboard para /compliance */}
           <Route path="/" element={<Navigate to="/compliance" />} />

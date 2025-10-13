@@ -87,6 +87,12 @@ const Sidebar = ({ isOpen, onOpenChange }: SidebarProps) => {
       badge: null
     },
     {
+      name: "Documentos",
+      icon: FileText,
+      path: "/documentos",
+      badge: null
+    },
+    {
       name: "Usuários",
       icon: Settings,
       path: "/usuarios",

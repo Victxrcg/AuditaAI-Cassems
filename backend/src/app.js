@@ -2,11 +2,11 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const complianceRoutes = require('./routes/complianceRoutes');
+const documentosRoutes = require('./routes/documentosRoutes');
 const usuariosRoutes = require('./routes/usuariosRoutes');
 const authRoutes = require('./routes/authRoutes');
 const cronogramaRoutes = require('./routes/cronogramaRoutes');
 const { getPoolStatus, getDbPool } = require('./lib/db');
-ta 
 const app = express();
 
 // Middlewares
@@ -16,6 +16,7 @@ app.use(express.urlencoded({ extended: true }));
 
 // Rotas
 app.use('/api/compliance', complianceRoutes);
+app.use('/api/documentos', documentosRoutes);
 app.use('/api/usuarios', usuariosRoutes);
 app.use('/api/auth', authRoutes); // Mudança: de /api para /api/auth
 app.use('/api/cronograma', cronogramaRoutes);
