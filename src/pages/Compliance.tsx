@@ -838,7 +838,15 @@ export default function Compliance() {
       console.log(' Health check:', healthData);
 
       // Depois testar a rota de competências (rota correta)
-      const userOrg = currentUser?.organizacao || 'cassems';
+      let userOrg = currentUser?.organizacao;
+      if (!userOrg) {
+        const userFromStorage = localStorage.getItem('user');
+        if (userFromStorage) {
+          const parsedUser = JSON.parse(userFromStorage);
+          userOrg = parsedUser.organizacao;
+        }
+      }
+      userOrg = userOrg || 'cassems';
       const response = await fetch(`${API_BASE}/compliance/competencias?organizacao=${userOrg}`, {
         headers: {
           'x-user-organization': userOrg
@@ -858,8 +866,20 @@ export default function Compliance() {
     try {
       setLoading(true);
       
-      // Obter organização do usuário atual
-      const userOrg = currentUser?.organizacao || 'cassems';
+      // Obter organização do usuário atual (com fallback para localStorage)
+      let userOrg = currentUser?.organizacao;
+      if (!userOrg) {
+        const userFromStorage = localStorage.getItem('user');
+        if (userFromStorage) {
+          const parsedUser = JSON.parse(userFromStorage);
+          userOrg = parsedUser.organizacao;
+        }
+      }
+      userOrg = userOrg || 'cassems';
+      
+      console.log('🔍 Organização detectada:', userOrg);
+      console.log('🔍 currentUser:', currentUser);
+      console.log('🔍 localStorage user:', localStorage.getItem('user'));
       
       // Fazer requisição com filtro de organização
       const response = await fetch(`${API_BASE}/compliance/competencias?organizacao=${userOrg}`, {
@@ -869,7 +889,11 @@ export default function Compliance() {
       });
       const data = await response.json();
 
-      console.log(' Debug - Resposta da API:', data);
+      console.log('🔍 Debug - Resposta da API:', data);
+      console.log('🔍 Total de competências recebidas:', data.data?.length || 0);
+      if (data.data && data.data.length > 0) {
+        console.log('🔍 Organizações nas competências recebidas:', [...new Set(data.data.map(c => c.organizacao_criacao))]);
+      }
 
       if (data.success) {
         // Se data.data é um objeto, converter para array
@@ -1032,6 +1056,9 @@ export default function Compliance() {
       // Obter ID do usuário logado do localStorage
       const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
       const created_by = currentUser.id;
+      
+      console.log('🔍 currentUser para criação:', currentUser);
+      console.log('🔍 organizacao:', currentUser.organizacao);
 
       if (!created_by) {
         setError('Usuário não encontrado. Faça login novamente.');
@@ -1044,12 +1071,12 @@ export default function Compliance() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'x-user-organization': currentUser?.organizacao || 'cassems'
+          'x-user-organization': currentUser.organizacao || 'cassems'
         },
         body: JSON.stringify({ 
           competencia_referencia, 
           created_by,
-          organizacao_criacao: currentUser?.organizacao || 'cassems'
+          organizacao_criacao: currentUser.organizacao || 'cassems'
         }),
       });
 
@@ -1297,6 +1324,16 @@ export default function Compliance() {
   // Função para carregar dados do usuário atual
   const loadCurrentUser = async () => {
     try {
+      // Primeiro tentar carregar do localStorage
+      const userFromStorage = localStorage.getItem('user');
+      if (userFromStorage) {
+        const parsedUser = JSON.parse(userFromStorage);
+        console.log('🔍 Usuário carregado do localStorage:', parsedUser);
+        setCurrentUser(parsedUser);
+        return;
+      }
+
+      // Se não estiver no localStorage, tentar carregar via API
       const userId = localStorage.getItem('userId');
       if (!userId) return;
 
@@ -1304,6 +1341,7 @@ export default function Compliance() {
       const data = await response.json();
 
       if (data.success) {
+        console.log('🔍 Usuário carregado via API:', data.data);
         setCurrentUser(data.data);
       }
     } catch (error) {
@@ -1579,8 +1617,10 @@ export default function Compliance() {
   // Carregar dados na inicialização
   useEffect(() => {
     console.log(' Carregando competências...');
-    loadCompetencias();
-  }, []);
+    if (currentUser) {
+      loadCompetencias();
+    }
+  }, [currentUser]);
 
   // Carregar dados do usuário na inicialização
   useEffect(() => {
@@ -1621,7 +1661,7 @@ export default function Compliance() {
             </p>
           ) : (
             <p className="text-sm text-blue-600 mt-1">
-              Visualizando as competências da sua organização.
+              Visualizando as competências da sua organização ({currentUser?.organizacao || 'carregando...'}).
             </p>
           )}
         <div className="flex gap-2">

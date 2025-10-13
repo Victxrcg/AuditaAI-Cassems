@@ -28,6 +28,8 @@ exports.listCompetencias = async (req, res) => {
     // Obter organização do usuário
     const userOrganization = req.headers['x-user-organization'] || req.query.organizacao;
     console.log('🔍 Organização do usuário:', userOrganization);
+    console.log('🔍 Headers recebidos:', req.headers);
+    console.log('🔍 Query params:', req.query);
     
     let query = `
       SELECT 
@@ -49,8 +51,10 @@ exports.listCompetencias = async (req, res) => {
     if (userOrganization && userOrganization !== 'portes') {
       query += ` WHERE cf.organizacao_criacao = ?`;
       params.push(userOrganization);
+      console.log('🔍 FILTRO APLICADO: Apenas competências da organização:', userOrganization);
+    } else {
+      console.log('🔍 SEM FILTRO: Mostrando todas as competências (usuário Portes ou sem organização definida)');
     }
-    // Se for Portes, não aplica filtro - vê tudo
     
     query += ` ORDER BY cf.competencia_referencia DESC, cf.created_at DESC`;
     
@@ -58,6 +62,16 @@ exports.listCompetencias = async (req, res) => {
     console.log('🔍 Params:', params);
     
     const rows = await executeQueryWithRetry(query, params);
+    
+    console.log('🔍 Total de competências encontradas:', rows.length);
+    console.log('🔍 Primeiras 3 competências:', rows.slice(0, 3).map(r => ({ id: r.id, organizacao_criacao: r.organizacao_criacao })));
+    
+    // Log adicional para debug
+    if (userOrganization && userOrganization !== 'portes') {
+      const competenciasFiltradas = rows.filter(r => r.organizacao_criacao === userOrganization);
+      console.log('🔍 Competências da organização solicitada:', competenciasFiltradas.length);
+      console.log('🔍 Organizações presentes nos resultados:', [...new Set(rows.map(r => r.organizacao_criacao))]);
+    }
 
     console.log('🔍 Debug - Rows retornadas:', rows);
     console.log('🔍 Debug - Tipo de rows:', typeof rows);
