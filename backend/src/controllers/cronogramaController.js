@@ -95,8 +95,8 @@ exports.criarCronograma = async (req, res) => {
     const result = await executeQueryWithRetry(`
       INSERT INTO cronograma (
         titulo, descricao, organizacao, fase_atual, data_inicio, data_fim,
-        responsavel_id, prioridade, observacoes, progresso_percentual
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
+        responsavel_id, prioridade, observacoes
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     `, [titulo, descricao, organizacao, fase_atual, dataInicio, dataFim, responsavel_id, prioridade, observacoes]);
     
     // Buscar o cronograma criado
@@ -149,21 +149,11 @@ exports.atualizarCronograma = async (req, res) => {
       responsavel_id,
       prioridade,
       status,
-      progresso_percentual,
       observacoes,
       motivo_atraso
     } = req.body;
     
     
-    // Calcular progresso baseado na fase se não fornecido
-    let progresso = progresso_percentual;
-    if (!progresso && fase_atual) {
-      const fases = ['inicio', 'planejamento', 'execucao', 'revisao', 'conclusao'];
-      const indexFase = fases.indexOf(fase_atual);
-      if (indexFase !== -1) {
-        progresso = Math.round((indexFase + 1) * (100 / fases.length));
-      }
-    }
     
     // Construir query dinamicamente para evitar conflitos de collation
     const updates = [];
@@ -177,7 +167,6 @@ exports.atualizarCronograma = async (req, res) => {
     if (responsavel_id !== undefined) { updates.push('responsavel_id = ?'); params.push(responsavel_id); }
     if (prioridade !== undefined) { updates.push('prioridade = ?'); params.push(prioridade); }
     if (status !== undefined) { updates.push('status = ?'); params.push(status); }
-    if (progresso !== undefined) { updates.push('progresso_percentual = ?'); params.push(progresso); }
     if (observacoes !== undefined) { updates.push('observacoes = ?'); params.push(observacoes); }
     if (motivo_atraso !== undefined) { updates.push('motivo_atraso = ?'); params.push(motivo_atraso); }
     
@@ -324,7 +313,6 @@ exports.estatisticasCronograma = async (req, res) => {
         SUM(CASE WHEN status = 'em_andamento' THEN 1 ELSE 0 END) as em_andamento,
         SUM(CASE WHEN status = 'concluido' THEN 1 ELSE 0 END) as concluidos,
         SUM(CASE WHEN status = 'atrasado' THEN 1 ELSE 0 END) as atrasados,
-        COALESCE(AVG(progresso_percentual), 0) as progresso_medio,
         COUNT(DISTINCT organizacao) as total_organizacoes
       FROM cronograma 
       ${whereClause}

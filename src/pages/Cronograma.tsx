@@ -35,7 +35,6 @@ interface CronogramaItem {
   descricao?: string;
   organizacao: string;
   fase_atual: string;
-  progresso_percentual: number;
   data_inicio?: string;
   data_fim?: string;
   status: 'pendente' | 'em_andamento' | 'concluido' | 'atrasado';
@@ -75,7 +74,6 @@ const Cronograma = () => {
     descricao: '',
     organizacao: 'cassems',
     fase_atual: 'inicio',
-    progresso_percentual: 0,
     data_inicio: '',
     data_fim: '',
     status: 'pendente',
@@ -209,7 +207,6 @@ const Cronograma = () => {
         descricao: editingCronograma.descricao || '',
         organizacao: editingCronograma.organizacao,
         fase_atual: editingCronograma.fase_atual,
-        progresso_percentual: editingCronograma.progresso_percentual,
         data_inicio: formatDateForInput(editingCronograma.data_inicio || ''),
         data_fim: formatDateForInput(editingCronograma.data_fim || ''),
         status: editingCronograma.status,
@@ -224,7 +221,6 @@ const Cronograma = () => {
         descricao: '',
         organizacao: currentUser?.organizacao || 'cassems',
         fase_atual: 'inicio',
-        progresso_percentual: 0,
         data_inicio: '',
         data_fim: '',
         status: 'pendente',
@@ -284,40 +280,42 @@ const Cronograma = () => {
 
   const getStatusBadgeInfo = (status: string) => {
     const variants = {
-      pendente: { variant: 'secondary', text: 'PENDENTE' },
-      em_andamento: { variant: 'default', text: 'EM ANDAMENTO' },
-      concluido: { variant: 'default', text: 'CONCLUÍDO' },
-      atrasado: { variant: 'destructive', text: 'ATRASADO' }
+      pendente: { variant: 'secondary', text: '⏳ PENDENTE', icon: '⏳' },
+      em_andamento: { variant: 'default', text: '🔄 EM ANDAMENTO', icon: '🔄' },
+      concluido: { variant: 'default', text: '✅ CONCLUÍDO', icon: '✅' },
+      atrasado: { variant: 'destructive', text: '⚠️ ATRASADO', icon: '⚠️' }
     } as const;
 
-    return variants[status as keyof typeof variants] || { variant: 'secondary', text: 'PENDENTE' };
+    return variants[status as keyof typeof variants] || { variant: 'secondary', text: '⏳ PENDENTE', icon: '⏳' };
   };
 
   const getPrioridadeBadge = (prioridade: string) => {
     const variants = {
-      baixa: 'secondary',
-      media: 'default',
-      alta: 'destructive',
-      critica: 'destructive'
+      baixa: { variant: 'secondary', text: '🟢 BAIXA', icon: '🟢' },
+      media: { variant: 'default', text: '🟡 MÉDIA', icon: '🟡' },
+      alta: { variant: 'destructive', text: '🟠 ALTA', icon: '🟠' },
+      critica: { variant: 'destructive', text: '🔴 CRÍTICA', icon: '🔴' }
     } as const;
 
+    const badgeInfo = variants[prioridade as keyof typeof variants] || variants.baixa;
+
     return (
-      <Badge variant={variants[prioridade as keyof typeof variants] || 'secondary'}>
-        {prioridade.toUpperCase()}
+      <Badge variant={badgeInfo.variant as any} className="text-xs">
+        {badgeInfo.text}
       </Badge>
     );
   };
 
   const getFaseBadge = (fase: string) => {
     const fases = {
-      inicio: { label: 'Início', color: 'bg-gray-100 text-gray-800' },
-      planejamento: { label: 'Planejamento', color: 'bg-blue-100 text-blue-800' },
-      execucao: { label: 'Execução', color: 'bg-yellow-100 text-yellow-800' },
-      revisao: { label: 'Revisão', color: 'bg-purple-100 text-purple-800' },
-      conclusao: { label: 'Conclusão', color: 'bg-green-100 text-green-800' }
+      inicio: { label: '🚀 Início', color: 'bg-gray-100 text-gray-800' },
+      planejamento: { label: '📋 Planejamento', color: 'bg-blue-100 text-blue-800' },
+      execucao: { label: '⚡ Execução', color: 'bg-yellow-100 text-yellow-800' },
+      revisao: { label: '🔍 Revisão', color: 'bg-purple-100 text-purple-800' },
+      conclusao: { label: '🎯 Conclusão', color: 'bg-green-100 text-green-800' }
     };
 
-    const faseConfig = fases[fase as keyof typeof fases] || { label: fase, color: 'bg-gray-100 text-gray-800' };
+    const faseConfig = fases[fase as keyof typeof fases] || { label: `📌 ${fase}`, color: 'bg-gray-100 text-gray-800' };
 
     return (
       <Badge className={faseConfig.color}>
@@ -564,9 +562,9 @@ const Cronograma = () => {
                                   setEditingCronograma(cronograma);
                                   setIsEditDialogOpen(true);
                                 }}
-                                title="Clique para editar"
+                                title={`✏️ Clique para editar: ${cronograma.titulo}`}
                               >
-                                {cronograma.titulo}
+                                ✏️ {cronograma.titulo}
                               </span>
                               <div className="flex items-center gap-1">
                                 <Badge 
@@ -598,26 +596,13 @@ const Cronograma = () => {
                                   setEditingCronograma(cronograma);
                                   setIsEditDialogOpen(true);
                                 }}
-                                title={`${cronograma.titulo}
-Status: ${getStatusBadgeInfo(cronograma.status).text}
-Progresso: ${cronograma.progresso_percentual}%
-Período: ${dataInicio.toLocaleDateString('pt-BR')} a ${dataFim.toLocaleDateString('pt-BR')}
-${cronograma.responsavel_nome ? `Responsável: ${cronograma.responsavel_nome}` : ''}
-${cronograma.motivo_atraso ? `Motivo do atraso: ${cronograma.motivo_atraso}` : ''}
-Clique para editar`}
+                                title={`📋 ${cronograma.titulo}
+📊 Status: ${getStatusBadgeInfo(cronograma.status).text}
+📅 Período: ${dataInicio.toLocaleDateString('pt-BR')} a ${dataFim.toLocaleDateString('pt-BR')}
+👤 ${cronograma.responsavel_nome ? `Responsável: ${cronograma.responsavel_nome}` : 'Sem responsável'}
+${cronograma.motivo_atraso ? `⚠️ Atraso: ${cronograma.motivo_atraso}` : ''}
+✏️ Clique para editar`}
                               >
-                                {/* Indicador de progresso dentro da barra */}
-                                {cronograma.progresso_percentual > 0 && (
-                                  <div 
-                                    className="h-full bg-white bg-opacity-30 rounded-l-lg"
-                                    style={{ width: `${cronograma.progresso_percentual}%` }}
-                                  />
-                                )}
-                                
-                                {/* Texto do progresso */}
-                                <div className="absolute inset-0 flex items-center justify-center text-xs font-medium text-white drop-shadow-sm">
-                                  {cronograma.progresso_percentual}%
-                                </div>
                               </div>
                             )}
                             
@@ -640,69 +625,6 @@ Clique para editar`}
           </CardContent>
         </Card>
 
-        {/* Legenda */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-lg">Legenda</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              {/* Status */}
-              <div>
-                <h4 className="font-semibold mb-2">Status das Demandas</h4>
-                <div className="space-y-2">
-                  <div className="flex items-center gap-2">
-                    <div className="w-4 h-4 bg-gray-400 rounded"></div>
-                    <span className="text-sm">Pendente</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <div className="w-4 h-4 bg-blue-400 rounded"></div>
-                    <span className="text-sm">Em Andamento</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <div className="w-4 h-4 bg-green-400 rounded"></div>
-                    <span className="text-sm">Concluído</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <div className="w-4 h-4 bg-red-400 rounded"></div>
-                    <span className="text-sm">Atrasado</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Organizações */}
-              <div>
-                <h4 className="font-semibold mb-2">Organizações</h4>
-                <div className="space-y-2">
-                  <div className="flex items-center gap-2">
-                    <div className="w-3 h-3 bg-green-500 rounded-full"></div>
-                    <span className="text-sm">PORTES</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <div className="w-3 h-3 bg-blue-500 rounded-full"></div>
-                    <span className="text-sm">CASSEMS</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <div className="w-3 h-3 bg-purple-500 rounded-full"></div>
-                    <span className="text-sm">REDE FROTA</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Interações */}
-              <div>
-                <h4 className="font-semibold mb-2">Interações</h4>
-                <div className="space-y-2 text-sm text-gray-600">
-                  <div>• Clique no título para editar</div>
-                  <div>• Clique na barra para editar</div>
-                  <div>• Hover para ver detalhes</div>
-                  <div>• Linha vermelha = hoje</div>
-                  <div>• % dentro da barra = progresso</div>
-                </div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
       </div>
     );
   };
@@ -810,7 +732,7 @@ Clique para editar`}
               setIsEditDialogOpen(true);
             }}>
               <Plus className="h-4 w-4 mr-2" />
-              Nova Demanda
+              ➕ Nova Demanda
             </Button>
           </div>
         </div>
@@ -958,35 +880,29 @@ Clique para editar`}
                       </div>
                     </div>
                     <div className="flex gap-2">
-                      <Button 
-                        variant="outline" 
+                      <Button
+                        variant="outline"
                         size="sm"
                         onClick={() => {
                           setEditingCronograma(cronograma);
                           setIsEditDialogOpen(true);
                         }}
+                        title="✏️ Editar demanda"
                       >
-                        <Edit className="h-4 w-4" />
+                        ✏️
                       </Button>
                       <Button 
                         variant="outline" 
                         size="sm"
                         onClick={() => openDeleteDialog(cronograma)}
+                        title="🗑️ Excluir demanda"
                       >
-                        <Trash2 className="h-4 w-4" />
+                        🗑️
                       </Button>
                     </div>
                   </div>
                 </CardHeader>
                 <CardContent>
-                  {/* Progresso */}
-                  <div className="mb-4">
-                    <div className="flex justify-between items-center mb-2">
-                      <span className="text-sm font-medium">Progresso</span>
-                      <span className="text-sm text-gray-600">{cronograma.progresso_percentual}%</span>
-                    </div>
-                    <Progress value={cronograma.progresso_percentual} className="h-2" />
-                  </div>
 
                   {/* Informações */}
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 text-sm">
@@ -998,21 +914,21 @@ Clique para editar`}
                       <Label className="text-xs text-gray-500">Responsável</Label>
                       <div className="mt-1 flex items-center gap-2">
                         <Users className="h-4 w-4" />
-                        <span>{cronograma.responsavel_nome || 'Não atribuído'}</span>
+                        <span>{cronograma.responsavel_nome ? `👤 ${cronograma.responsavel_nome}` : '❌ Não atribuído'}</span>
                       </div>
                     </div>
                     <div>
                       <Label className="text-xs text-gray-500">Prazo</Label>
                       <div className="mt-1 flex items-center gap-2">
                         <Calendar className="h-4 w-4" />
-                        <span>{formatDate(cronograma.data_fim || '')}</span>
+                        <span>📅 {formatDate(cronograma.data_fim || '')}</span>
                       </div>
                     </div>
                     <div>
                       <Label className="text-xs text-gray-500">Organização</Label>
                       <div className="mt-1 flex items-center gap-2">
                         <Building className="h-4 w-4" />
-                        <span>{cronograma.responsavel_empresa || cronograma.organizacao}</span>
+                        <span>🏢 {cronograma.responsavel_empresa || cronograma.organizacao}</span>
                       </div>
                     </div>
                   </div>
@@ -1208,17 +1124,6 @@ Clique para editar`}
                 </Select>
               </div>
 
-              <div>
-                <Label htmlFor="progresso">Progresso (%)</Label>
-                <Input
-                  id="progresso"
-                  type="number"
-                  min="0"
-                  max="100"
-                  value={formData.progresso_percentual}
-                  onChange={(e) => setFormData({...formData, progresso_percentual: parseInt(e.target.value) || 0})}
-                />
-              </div>
 
               <div>
                 <Label htmlFor="data_inicio">Data de Início</Label>

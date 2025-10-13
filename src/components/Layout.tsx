@@ -37,7 +37,7 @@ const Layout = ({ children }: LayoutProps) => {
       case '/auditoria':
         return 'Auditoria';
       default:
-        return 'Compliance Cassems';
+        return 'Compliance';
     }
   };
 

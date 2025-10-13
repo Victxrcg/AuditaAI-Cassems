@@ -6,7 +6,7 @@ const usuariosRoutes = require('./routes/usuariosRoutes');
 const authRoutes = require('./routes/authRoutes');
 const cronogramaRoutes = require('./routes/cronogramaRoutes');
 const { getPoolStatus, getDbPool } = require('./lib/db');
-
+ta 
 const app = express();
 
 // Middlewares

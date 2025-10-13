@@ -17,6 +17,7 @@ export default defineConfig(({ mode }) => {
       host: '0.0.0.0',
       port: frontPort,
       allowedHosts: [
+        'localhost',
         'auditaai.portes.com.br',
         'api-auditaai.portes.com.br',
         'cassems.portes.com.br',
