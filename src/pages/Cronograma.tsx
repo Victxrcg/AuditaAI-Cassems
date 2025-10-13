@@ -792,7 +792,7 @@ const Cronograma = () => {
           <div className="flex gap-4">
             <div className="flex-1">
               <Label htmlFor="status-filter">Status</Label>
-              <Select value={filtroStatus} onValueChange={setFiltroStatus}>
+              <Select key={`status-${filtroStatus}`} value={filtroStatus} onValueChange={setFiltroStatus}>
                 <SelectTrigger>
                   <SelectValue placeholder="Todos os status" />
                 </SelectTrigger>
@@ -807,7 +807,7 @@ const Cronograma = () => {
             </div>
             <div className="flex-1">
               <Label htmlFor="prioridade-filter">Prioridade</Label>
-              <Select value={filtroPrioridade} onValueChange={setFiltroPrioridade}>
+              <Select key={`prioridade-${filtroPrioridade}`} value={filtroPrioridade} onValueChange={setFiltroPrioridade}>
                 <SelectTrigger>
                   <SelectValue placeholder="Todas as prioridades" />
                 </SelectTrigger>
@@ -823,7 +823,7 @@ const Cronograma = () => {
             {currentUser?.organizacao === 'portes' && (
               <div className="flex-1">
                 <Label htmlFor="organizacao-filter">Organização</Label>
-                <Select value={filtroOrganizacao} onValueChange={setFiltroOrganizacao}>
+                <Select key={`org-${filtroOrganizacao}`} value={filtroOrganizacao} onValueChange={setFiltroOrganizacao}>
                   <SelectTrigger>
                     <SelectValue placeholder="Todas as organizações" />
                   </SelectTrigger>
