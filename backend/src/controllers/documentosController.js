@@ -19,7 +19,12 @@ const storage = multer.diskStorage({
   }
 });
 
-exports.upload = multer({ storage });
+exports.upload = multer({ 
+  storage,
+  limits: {
+    fileSize: 50 * 1024 * 1024 // 50MB
+  }
+});
 
 async function ensureTable() {
   await executeQueryWithRetry(`
