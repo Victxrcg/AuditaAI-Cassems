@@ -57,7 +57,16 @@ exports.listar = async (req, res) => {
       ${where}
       ORDER BY created_at DESC
     `, params);
-    res.json(rows);
+    
+    // Converter BigInt para Number para evitar erro de serialização JSON
+    const processedRows = rows.map(row => ({
+      ...row,
+      id: Number(row.id),
+      tamanho: Number(row.tamanho),
+      enviado_por: row.enviado_por ? Number(row.enviado_por) : null
+    }));
+    
+    res.json(processedRows);
   } catch (err) {
     console.error('❌ Erro ao listar documentos:', err);
     res.status(500).json({ error: 'Erro ao listar documentos', details: err.message });
@@ -75,7 +84,7 @@ exports.enviar = async (req, res) => {
       INSERT INTO documentos (nome_arquivo, caminho, tamanho, mimetype, organizacao, enviado_por)
       VALUES (?, ?, ?, ?, ?, ?)
     `, [originalname, filePath, size, mimetype, org, userId || null]);
-    res.json({ success: true, id: result.insertId, filename: originalname, size });
+    res.json({ success: true, id: Number(result.insertId), filename: originalname, size });
   } catch (err) {
     console.error('❌ Erro ao enviar documento:', err);
     res.status(500).json({ error: 'Erro ao enviar documento', details: err.message });

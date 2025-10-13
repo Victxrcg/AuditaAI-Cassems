@@ -4,7 +4,7 @@ import path from 'path';
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
-  const frontPort = Number(env['FRONT-PORTA'] || 4011);
+  const frontPort = Number(env['FRONT-PORTA'] || process.env['FRONT-PORTA'] || 4011);
 
   return {
     plugins: [react()],
@@ -24,7 +24,7 @@ export default defineConfig(({ mode }) => {
         'api-cassems.portes.com.br'
       ],
       fs: {
-        allow: ['..']
+        allow: ['..', '../.env']
       }
     },
   };
