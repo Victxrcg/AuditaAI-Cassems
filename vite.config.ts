@@ -22,7 +22,10 @@ export default defineConfig(({ mode }) => {
         'api-auditaai.portes.com.br',
         'cassems.portes.com.br',
         'api-cassems.portes.com.br'
-      ]
+      ],
+      fs: {
+        allow: ['..']
+      }
     },
   };
 });
