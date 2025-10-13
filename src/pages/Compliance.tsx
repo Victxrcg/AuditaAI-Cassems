@@ -117,6 +117,12 @@ const getOrganizationBadge = (organizacao: 'portes' | 'cassems' | undefined) => 
 
   const org = config[organizacao];
 
+  // Verificar se org existe antes de acessar suas propriedades
+  if (!org) {
+    console.warn('Organização não reconhecida:', organizacao);
+    return null;
+  }
+
   return (
     <Badge
       style={{
