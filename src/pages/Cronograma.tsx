@@ -23,7 +23,8 @@ import {
   Filter,
   RefreshCw,
   BarChart3,
-  Building
+  Building,
+  AlertTriangle
 } from 'lucide-react';
 
 interface CronogramaItem {
@@ -166,15 +167,12 @@ const Cronograma = () => {
       
       // Verificar se a data é válida
       if (isNaN(date.getTime())) {
-        console.log('⚠️ Data inválida:', dateString);
         return '';
       }
       
       const formatted = date.toISOString().split('T')[0];
-      console.log('✅ Data formatada:', dateString, '→', formatted);
       return formatted;
     } catch (error) {
-      console.log('❌ Erro ao formatar data:', dateString, error);
       return '';
     }
   };
@@ -182,11 +180,6 @@ const Cronograma = () => {
   // Atualizar formData quando editingCronograma muda
   useEffect(() => {
     if (editingCronograma) {
-      console.log('🔍 Editando cronograma:', editingCronograma);
-      console.log('🔍 Data início original:', editingCronograma.data_inicio);
-      console.log('🔍 Data fim original:', editingCronograma.data_fim);
-      console.log('🔍 Data início formatada:', formatDateForInput(editingCronograma.data_inicio || ''));
-      console.log('🔍 Data fim formatada:', formatDateForInput(editingCronograma.data_fim || ''));
       
       setFormData({
         titulo: editingCronograma.titulo,
@@ -329,11 +322,6 @@ const Cronograma = () => {
         data_fim: formData.data_fim || null
       };
       
-      // Debug: Log dos dados que estão sendo enviados
-      console.log('🔍 Dados sendo enviados:', dadosParaEnvio);
-      console.log('🔍 URL:', url);
-      console.log('🔍 Method:', method);
-      console.log('🔍 User Org:', userOrg);
       
       const response = await fetch(url, {
         method,
@@ -344,12 +332,8 @@ const Cronograma = () => {
         body: JSON.stringify(dadosParaEnvio)
       });
 
-      console.log('🔍 Response Status:', response.status);
-      console.log('🔍 Response OK:', response.ok);
-
       if (response.ok) {
         const responseData = await response.json();
-        console.log('✅ Response Data:', responseData);
         
         toast({
           title: "Sucesso",
@@ -361,7 +345,6 @@ const Cronograma = () => {
         fetchEstatisticas();
       } else {
         const errorData = await response.text();
-        console.error('❌ Error Response:', errorData);
         throw new Error(`Erro ${response.status}: ${errorData}`);
       }
     } catch (error) {
@@ -374,16 +357,24 @@ const Cronograma = () => {
     }
   };
 
-  // Deletar cronograma
-  const deleteCronograma = async (id: number) => {
-    if (!confirm('Tem certeza que deseja excluir este cronograma?')) {
-      return;
-    }
+  // Estado para controlar o modal de confirmação de exclusão
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [cronogramaToDelete, setCronogramaToDelete] = useState<CronogramaItem | null>(null);
+
+  // Abrir modal de confirmação de exclusão
+  const openDeleteDialog = (cronograma: CronogramaItem) => {
+    setCronogramaToDelete(cronograma);
+    setIsDeleteDialogOpen(true);
+  };
+
+  // Confirmar exclusão
+  const confirmDelete = async () => {
+    if (!cronogramaToDelete) return;
 
     try {
       const userOrg = currentUser?.organizacao || 'cassems';
       
-      const response = await fetch(`${API_BASE}/cronograma/${id}`, {
+      const response = await fetch(`${API_BASE}/cronograma/${cronogramaToDelete.id}`, {
         method: 'DELETE',
         headers: {
           'x-user-organization': userOrg
@@ -397,6 +388,8 @@ const Cronograma = () => {
         });
         fetchCronogramas();
         fetchEstatisticas();
+        setIsDeleteDialogOpen(false);
+        setCronogramaToDelete(null);
       } else {
         throw new Error('Erro ao excluir cronograma');
       }
@@ -601,7 +594,7 @@ const Cronograma = () => {
                       <Button 
                         variant="outline" 
                         size="sm"
-                        onClick={() => deleteCronograma(cronograma.id)}
+                        onClick={() => openDeleteDialog(cronograma)}
                       >
                         <Trash2 className="h-4 w-4" />
                       </Button>
@@ -890,6 +883,81 @@ const Cronograma = () => {
                 {editingCronograma ? 'Atualizar' : 'Criar'}
               </Button>
             </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal de Confirmação de Exclusão */}
+      <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Trash2 className="h-5 w-5 text-red-500" />
+              Confirmar Exclusão
+            </DialogTitle>
+            <DialogDescription>
+              Tem certeza que deseja excluir esta demanda? Esta ação não pode ser desfeita.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            {/* Informações do cronograma */}
+            {cronogramaToDelete && (
+              <div className="bg-gray-50 p-4 rounded-lg border">
+                <h4 className="font-semibold text-gray-900 mb-2">{cronogramaToDelete.titulo}</h4>
+                <div className="space-y-1 text-sm text-gray-600">
+                  <p><strong>Organização:</strong> {cronogramaToDelete.organizacao?.toUpperCase()}</p>
+                  <p><strong>Status:</strong> {cronogramaToDelete.status}</p>
+                  <p><strong>Prioridade:</strong> {cronogramaToDelete.prioridade}</p>
+                  {cronogramaToDelete.data_inicio && (
+                    <p><strong>Data de Início:</strong> {new Date(cronogramaToDelete.data_inicio).toLocaleDateString('pt-BR')}</p>
+                  )}
+                  {cronogramaToDelete.data_fim && (
+                    <p><strong>Data de Fim:</strong> {new Date(cronogramaToDelete.data_fim).toLocaleDateString('pt-BR')}</p>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Alerta de atenção */}
+            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+              <div className="flex items-start gap-3">
+                <div className="flex-shrink-0">
+                  <AlertTriangle className="h-5 w-5 text-yellow-600" />
+                </div>
+                <div>
+                  <h4 className="font-semibold text-yellow-800 mb-2">ATENÇÃO: Todos os dados relacionados serão excluídos permanentemente:</h4>
+                  <ul className="space-y-1 text-sm text-yellow-700">
+                    <li>• Dados da demanda</li>
+                    <li>• Histórico de alterações</li>
+                    <li>• Observações e comentários</li>
+                    <li>• Motivos de atraso registrados</li>
+                    <li>• Progresso e fases</li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Botões de ação */}
+          <div className="flex justify-end gap-3 pt-4 border-t">
+            <Button 
+              variant="outline" 
+              onClick={() => {
+                setIsDeleteDialogOpen(false);
+                setCronogramaToDelete(null);
+              }}
+            >
+              Cancelar
+            </Button>
+            <Button 
+              variant="destructive" 
+              onClick={confirmDelete}
+              className="bg-red-600 hover:bg-red-700"
+            >
+              <Trash2 className="h-4 w-4 mr-2" />
+              Sim, Excluir
+            </Button>
           </div>
         </DialogContent>
       </Dialog>

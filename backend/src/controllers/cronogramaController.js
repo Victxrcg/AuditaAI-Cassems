@@ -154,8 +154,6 @@ exports.atualizarCronograma = async (req, res) => {
       motivo_atraso
     } = req.body;
     
-    console.log('🔍 Atualizando cronograma ID:', id);
-    console.log('🔍 Dados recebidos:', req.body);
     
     // Calcular progresso baseado na fase se não fornecido
     let progresso = progresso_percentual;
@@ -195,11 +193,7 @@ exports.atualizarCronograma = async (req, res) => {
       WHERE id = ?
     `;
     
-    console.log('🔍 Query SQL:', updateQuery);
-    console.log('🔍 Params:', params);
-    
     await executeQueryWithRetry(updateQuery, params);
-    console.log('✅ Query executada com sucesso');
     
     // Buscar o cronograma atualizado
     const updatedCronograma = await executeQueryWithRetry(`
