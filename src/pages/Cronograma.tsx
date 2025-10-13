@@ -242,24 +242,12 @@ const Cronograma = () => {
   // Obter organizações únicas para filtro (apenas para Portes)
   const organizacoesUnicas = [...new Set(cronogramas.map(c => c.organizacao))];
 
-  // Filtrar cronogramas
+  // Filtrar cronogramas ("Todos" deve incluir concluídos)
   const cronogramasFiltrados = cronogramas.filter(cronograma => {
-    // Lógica especial para "Apenas Concluídas"
-    if (filtroStatus === 'apenas_concluidas') {
-      const prioridadeMatch = filtroPrioridade === 'todos' || cronograma.prioridade === filtroPrioridade;
-      const organizacaoMatch = filtroOrganizacao === 'todos' || cronograma.organizacao === filtroOrganizacao;
-      return cronograma.status === 'concluido' && prioridadeMatch && organizacaoMatch;
-    }
-    
-    // Lógica normal para outros filtros
     const statusMatch = filtroStatus === 'todos' || cronograma.status === filtroStatus;
     const prioridadeMatch = filtroPrioridade === 'todos' || cronograma.prioridade === filtroPrioridade;
     const organizacaoMatch = filtroOrganizacao === 'todos' || cronograma.organizacao === filtroOrganizacao;
-    
-    // Por padrão, ocultar concluídas (exceto quando especificamente selecionadas)
-    const concluidasMatch = filtroStatus === 'concluido' || filtroStatus === 'apenas_concluidas' ? true : cronograma.status !== 'concluido';
-    
-    return statusMatch && prioridadeMatch && organizacaoMatch && concluidasMatch;
+    return statusMatch && prioridadeMatch && organizacaoMatch;
   });
 
   // Separar cronogramas em ativos e concluídos para exibição
@@ -594,7 +582,7 @@ const Cronograma = () => {
                           <div className="relative flex-1 h-full">
                             {dataInicio && dataFim && (
                               <div
-                                className={`absolute top-1/2 transform -translate-y-1/2 h-10 rounded-lg ${coresStatus[cronograma.status]} shadow-sm hover:shadow-md transition-all cursor-pointer border-2 border-white hover:scale-105`}
+                                className={`absolute top-1/2 transform -translate-y-1/2 h-10 rounded-lg ${coresStatus[cronograma.status]} shadow-sm hover:shadow-md transition-all cursor-pointer border-2 border-white hover:scale-105 overflow-hidden`}
                                 style={{
                                   left: posicao.inicio,
                                   width: posicao.largura,
@@ -611,14 +599,8 @@ const Cronograma = () => {
                               ${cronograma.motivo_atraso ? `Atraso: ${cronograma.motivo_atraso}` : ''}
                                Clique para editar`}
                               >
-                                <span className="text-white text-xs font-medium px-2 truncate">
-                                  {parseFloat(posicao.largura.toString()) > 10 ? 
-                                    (parseFloat(posicao.largura.toString()) > 20 ? 
-                                      cronograma.titulo : 
-                                      `${cronograma.titulo.substring(0, Math.max(10, Math.floor(parseFloat(posicao.largura.toString()) * 3)))}...`
-                                    ) : 
-                                    `${cronograma.titulo.substring(0, 8)}...`
-                                  }
+                                <span className="text-white text-xs font-medium px-2 whitespace-nowrap overflow-hidden text-ellipsis block">
+                                  {cronograma.titulo}
                                 </span>
                               </div>
                             )}
