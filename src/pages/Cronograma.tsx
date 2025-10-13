@@ -401,6 +401,7 @@ const Cronograma = () => {
   // Estado para controlar o zoom da timeline
   const [zoomLevel, setZoomLevel] = useState(1);
   const [timelineOffset, setTimelineOffset] = useState(0);
+  const [timeGranularity, setTimeGranularity] = useState<'months' | 'days'>('months');
 
   // Função para renderizar a visualização em timeline (Gantt)
   const renderTimelineView = () => {
@@ -412,18 +413,42 @@ const Cronograma = () => {
       return acc;
     }, {} as Record<string, CronogramaItem[]>);
 
-    // Calcular período de visualização baseado no zoom
+    // Calcular período de visualização baseado no zoom e granularidade
     const hoje = new Date();
-    const mesesVisiveis = Math.max(3, Math.floor(8 / zoomLevel)); // 3 a 8 meses baseado no zoom
-    const inicioPeriodo = new Date(hoje.getFullYear(), hoje.getMonth() - Math.floor(mesesVisiveis / 2), 1);
-    const fimPeriodo = new Date(hoje.getFullYear(), hoje.getMonth() + Math.floor(mesesVisiveis / 2), 0);
     
-    // Gerar meses do período
-    const meses = [];
-    const currentDate = new Date(inicioPeriodo);
-    while (currentDate <= fimPeriodo) {
-      meses.push(new Date(currentDate));
-      currentDate.setMonth(currentDate.getMonth() + 1);
+    // Determinar granularidade baseada no zoom
+    const newGranularity = zoomLevel >= 1.5 ? 'days' : 'months';
+    if (newGranularity !== timeGranularity) {
+      setTimeGranularity(newGranularity);
+    }
+    
+    let inicioPeriodo: Date, fimPeriodo: Date;
+    let timeUnits: Date[] = [];
+    
+    if (timeGranularity === 'days') {
+      // Visualização por dias (zoom alto)
+      const diasVisiveis = Math.max(14, Math.floor(60 / zoomLevel)); // 14 a 60 dias
+      inicioPeriodo = new Date(hoje.getTime() - (diasVisiveis / 2) * 24 * 60 * 60 * 1000);
+      fimPeriodo = new Date(hoje.getTime() + (diasVisiveis / 2) * 24 * 60 * 60 * 1000);
+      
+      // Gerar dias do período
+      const currentDate = new Date(inicioPeriodo);
+      while (currentDate <= fimPeriodo) {
+        timeUnits.push(new Date(currentDate));
+        currentDate.setDate(currentDate.getDate() + 1);
+      }
+    } else {
+      // Visualização por meses (zoom baixo)
+      const mesesVisiveis = Math.max(3, Math.floor(8 / zoomLevel)); // 3 a 8 meses
+      inicioPeriodo = new Date(hoje.getFullYear(), hoje.getMonth() - Math.floor(mesesVisiveis / 2), 1);
+      fimPeriodo = new Date(hoje.getFullYear(), hoje.getMonth() + Math.floor(mesesVisiveis / 2), 0);
+      
+      // Gerar meses do período
+      const currentDate = new Date(inicioPeriodo);
+      while (currentDate <= fimPeriodo) {
+        timeUnits.push(new Date(currentDate));
+        currentDate.setMonth(currentDate.getMonth() + 1);
+      }
     }
 
     // Cores por organização
@@ -444,7 +469,10 @@ const Cronograma = () => {
 
     // Função para calcular posição da barra
     const calcularPosicaoBarra = (dataInicio: Date | null, dataFim: Date | null) => {
-      if (!dataInicio || !dataFim) return { inicio: 0, largura: 96, colunaInicio: 0, colunaFim: 1 };
+      if (!dataInicio || !dataFim) {
+        const larguraColuna = timeGranularity === 'days' ? 24 * zoomLevel : 96 * zoomLevel;
+        return { inicio: 0, largura: larguraColuna, colunaInicio: 0, colunaFim: 1 };
+      }
       
       const inicioRelativo = Math.max(0, dataInicio.getTime() - inicioPeriodo.getTime());
       const fimRelativo = Math.min(dataFim.getTime() - inicioPeriodo.getTime(), fimPeriodo.getTime() - inicioPeriodo.getTime());
@@ -454,12 +482,12 @@ const Cronograma = () => {
       const fimPercentual = fimRelativo / larguraTotal;
       const larguraPercentual = fimPercentual - inicioPercentual;
       
-      const larguraColuna = 96 * zoomLevel; // Largura ajustada pelo zoom
-      const inicio = inicioPercentual * (meses.length * larguraColuna);
-      const largura = larguraPercentual * (meses.length * larguraColuna);
+      const larguraColuna = timeGranularity === 'days' ? 24 * zoomLevel : 96 * zoomLevel;
+      const inicio = inicioPercentual * (timeUnits.length * larguraColuna);
+      const largura = larguraPercentual * (timeUnits.length * larguraColuna);
       
-      const colunaInicio = Math.floor(inicioPercentual * meses.length);
-      const colunaFim = Math.ceil(fimPercentual * meses.length);
+      const colunaInicio = Math.floor(inicioPercentual * timeUnits.length);
+      const colunaFim = Math.ceil(fimPercentual * timeUnits.length);
       
       return { inicio, largura, colunaInicio, colunaFim };
     };
@@ -497,10 +525,10 @@ const Cronograma = () => {
                   variant="outline"
                   size="sm"
                   onClick={() => {
-                    setZoomLevel(prev => Math.min(2, prev + 0.25));
+                    setZoomLevel(prev => Math.min(3, prev + 0.25));
                   }}
                   title="Aumentar zoom"
-                  disabled={zoomLevel >= 2}
+                  disabled={zoomLevel >= 3}
                 >
                   <span className="text-lg">+</span>
                 </Button>
@@ -516,7 +544,7 @@ const Cronograma = () => {
                   <Calendar className="h-4 w-4" />
                 </Button>
                 <span className="text-sm text-gray-500 ml-2">
-                  {Math.round(zoomLevel * 100)}%
+                  {Math.round(zoomLevel * 100)}% • {timeGranularity === 'days' ? 'Dias' : 'Meses'}
                 </span>
               </div>
             </div>
@@ -530,9 +558,12 @@ const Cronograma = () => {
                   <div className="w-64 px-4 py-3 font-semibold text-gray-700 bg-gray-50 border-r">
                     Organização / Demanda
                   </div>
-                  {meses.map((mes, index) => (
-                    <div key={index} className="px-2 py-3 text-center font-semibold text-gray-700 bg-gray-50 border-r" style={{ width: `${96 * zoomLevel}px` }}>
-                      {mes.toLocaleDateString('pt-BR', { month: 'short', year: '2-digit' })}
+                  {timeUnits.map((timeUnit, index) => (
+                    <div key={index} className="px-2 py-3 text-center font-semibold text-gray-700 bg-gray-50 border-r" style={{ width: `${timeGranularity === 'days' ? 24 * zoomLevel : 96 * zoomLevel}px` }}>
+                      {timeGranularity === 'days' 
+                        ? timeUnit.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })
+                        : timeUnit.toLocaleDateString('pt-BR', { month: 'short', year: '2-digit' })
+                      }
                     </div>
                   ))}
                 </div>
@@ -548,8 +579,8 @@ const Cronograma = () => {
                           {organizacao.toUpperCase()}
                         </div>
                       </div>
-                      {meses.map((_, index) => (
-                        <div key={index} className="border-r" style={{ width: `${96 * zoomLevel}px` }}></div>
+                      {timeUnits.map((_, index) => (
+                        <div key={index} className="border-r" style={{ width: `${timeGranularity === 'days' ? 24 * zoomLevel : 96 * zoomLevel}px` }}></div>
                       ))}
                     </div>
 
@@ -617,7 +648,7 @@ const Cronograma = () => {
                             <div 
                               className="absolute top-0 bottom-0 w-0.5 bg-red-500 z-10"
                               style={{
-                                left: `${((hoje.getTime() - inicioPeriodo.getTime()) / (fimPeriodo.getTime() - inicioPeriodo.getTime())) * (meses.length * 96 * zoomLevel)}px`
+                                left: `${((hoje.getTime() - inicioPeriodo.getTime()) / (fimPeriodo.getTime() - inicioPeriodo.getTime())) * (timeUnits.length * (timeGranularity === 'days' ? 24 : 96) * zoomLevel)}px`
                               }}
                               title={`Hoje: ${hoje.toLocaleDateString('pt-BR')}`}
                             />
