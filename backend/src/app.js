@@ -10,16 +10,21 @@ const { getPoolStatus, getDbPool } = require('./lib/db');
 const app = express();
 
 // Middlewares
-app.use(cors());
+app.use(cors({
+  origin: [
+    'http://localhost:4011',
+    'http://localhost:3000',
+    'http://127.0.0.1:4011',
+    'http://127.0.0.1:3000',
+    'https://cassems.portes.com.br',
+    'https://api-cassems.portes.com.br'
+  ],
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'x-user-organization']
+}));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-
-// Rotas
-app.use('/api/compliance', complianceRoutes);
-app.use('/api/documentos', documentosRoutes);
-app.use('/api/usuarios', usuariosRoutes);
-app.use('/api/auth', authRoutes); // Mudança: de /api para /api/auth
-app.use('/api/cronograma', cronogramaRoutes);
 
 // Rota de teste
 app.get('/api/health', (req, res) => {
