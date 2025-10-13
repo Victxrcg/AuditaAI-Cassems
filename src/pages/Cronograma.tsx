@@ -430,16 +430,26 @@ const Cronograma = () => {
       grupos[chaveMes].push(cronograma);
     });
     
-    // Ordenar por data
+    // Ordenar por data de forma cronológica (mais antigo primeiro)
     const gruposOrdenados = Object.entries(grupos).sort(([a], [b]) => {
-      const mesA = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'].indexOf(a.split('/')[0]);
-      const mesB = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'].indexOf(b.split('/')[0]);
+      // Mapeamento dos meses para números
+      const meses = {
+        'jan': 0, 'fev': 1, 'mar': 2, 'abr': 3, 'mai': 4, 'jun': 5,
+        'jul': 6, 'ago': 7, 'set': 8, 'out': 9, 'nov': 10, 'dez': 11
+      };
+      
+      const mesA = a.split('/')[0].toLowerCase();
       const anoA = parseInt(a.split('/')[1]);
+      const mesB = b.split('/')[0].toLowerCase();
       const anoB = parseInt(b.split('/')[1]);
       
-      const dataA = new Date(anoA, mesA);
-      const dataB = new Date(anoB, mesB);
-      return dataA.getTime() - dataB.getTime();
+      // Primeiro compara o ano
+      if (anoA !== anoB) {
+        return anoA - anoB;
+      }
+      
+      // Se o ano for igual, compara o mês
+      return (meses[mesA as keyof typeof meses] || 0) - (meses[mesB as keyof typeof meses] || 0);
     });
     
     return gruposOrdenados;
