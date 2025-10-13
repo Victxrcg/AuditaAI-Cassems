@@ -280,21 +280,21 @@ const Cronograma = () => {
 
   const getStatusBadgeInfo = (status: string) => {
     const variants = {
-      pendente: { variant: 'secondary', text: '⏳ PENDENTE', icon: '⏳' },
-      em_andamento: { variant: 'default', text: '🔄 EM ANDAMENTO', icon: '🔄' },
-      concluido: { variant: 'default', text: '✅ CONCLUÍDO', icon: '✅' },
-      atrasado: { variant: 'destructive', text: '⚠️ ATRASADO', icon: '⚠️' }
+      pendente: { variant: 'secondary', text: 'PENDENTE' },
+      em_andamento: { variant: 'default', text: 'EM ANDAMENTO' },
+      concluido: { variant: 'default', text: 'CONCLUÍDO' },
+      atrasado: { variant: 'destructive', text: 'ATRASADO' }
     } as const;
 
-    return variants[status as keyof typeof variants] || { variant: 'secondary', text: '⏳ PENDENTE', icon: '⏳' };
+    return variants[status as keyof typeof variants] || { variant: 'secondary', text: 'PENDENTE' };
   };
 
   const getPrioridadeBadge = (prioridade: string) => {
     const variants = {
-      baixa: { variant: 'secondary', text: '🟢 BAIXA', icon: '🟢' },
-      media: { variant: 'default', text: '🟡 MÉDIA', icon: '🟡' },
-      alta: { variant: 'destructive', text: '🟠 ALTA', icon: '🟠' },
-      critica: { variant: 'destructive', text: '🔴 CRÍTICA', icon: '🔴' }
+      baixa: { variant: 'secondary', text: 'BAIXA' },
+      media: { variant: 'default', text: 'MÉDIA' },
+      alta: { variant: 'destructive', text: 'ALTA' },
+      critica: { variant: 'destructive', text: 'CRÍTICA' }
     } as const;
 
     const badgeInfo = variants[prioridade as keyof typeof variants] || variants.baixa;
@@ -308,14 +308,14 @@ const Cronograma = () => {
 
   const getFaseBadge = (fase: string) => {
     const fases = {
-      inicio: { label: '🚀 Início', color: 'bg-gray-100 text-gray-800' },
-      planejamento: { label: '📋 Planejamento', color: 'bg-blue-100 text-blue-800' },
-      execucao: { label: '⚡ Execução', color: 'bg-yellow-100 text-yellow-800' },
-      revisao: { label: '🔍 Revisão', color: 'bg-purple-100 text-purple-800' },
-      conclusao: { label: '🎯 Conclusão', color: 'bg-green-100 text-green-800' }
+      inicio: { label: 'Início', color: 'bg-gray-100 text-gray-800' },
+      planejamento: { label: 'Planejamento', color: 'bg-blue-100 text-blue-800' },
+      execucao: { label: 'Execução', color: 'bg-yellow-100 text-yellow-800' },
+      revisao: { label: 'Revisão', color: 'bg-purple-100 text-purple-800' },
+      conclusao: { label: 'Conclusão', color: 'bg-green-100 text-green-800' }
     };
 
-    const faseConfig = fases[fase as keyof typeof fases] || { label: `📌 ${fase}`, color: 'bg-gray-100 text-gray-800' };
+    const faseConfig = fases[fase as keyof typeof fases] || { label: `${fase}`, color: 'bg-gray-100 text-gray-800' };
 
     return (
       <Badge className={faseConfig.color}>
@@ -397,6 +397,10 @@ const Cronograma = () => {
 
   // Estado para alternar entre modos de visualização
   const [viewMode, setViewMode] = useState<'list' | 'timeline'>('list');
+  
+  // Estado para controlar o zoom da timeline
+  const [zoomLevel, setZoomLevel] = useState(1);
+  const [timelineOffset, setTimelineOffset] = useState(0);
 
   // Função para renderizar a visualização em timeline (Gantt)
   const renderTimelineView = () => {
@@ -408,10 +412,11 @@ const Cronograma = () => {
       return acc;
     }, {} as Record<string, CronogramaItem[]>);
 
-    // Calcular período de visualização (8 meses para melhor visualização)
+    // Calcular período de visualização baseado no zoom
     const hoje = new Date();
-    const inicioPeriodo = new Date(hoje.getFullYear(), hoje.getMonth() - 2, 1);
-    const fimPeriodo = new Date(hoje.getFullYear(), hoje.getMonth() + 6, 0);
+    const mesesVisiveis = Math.max(3, Math.floor(8 / zoomLevel)); // 3 a 8 meses baseado no zoom
+    const inicioPeriodo = new Date(hoje.getFullYear(), hoje.getMonth() - Math.floor(mesesVisiveis / 2), 1);
+    const fimPeriodo = new Date(hoje.getFullYear(), hoje.getMonth() + Math.floor(mesesVisiveis / 2), 0);
     
     // Gerar meses do período
     const meses = [];
@@ -449,7 +454,7 @@ const Cronograma = () => {
       const fimPercentual = fimRelativo / larguraTotal;
       const larguraPercentual = fimPercentual - inicioPercentual;
       
-      const larguraColuna = 96; // 96px por mês
+      const larguraColuna = 96 * zoomLevel; // Largura ajustada pelo zoom
       const inicio = inicioPercentual * (meses.length * larguraColuna);
       const largura = larguraPercentual * (meses.length * larguraColuna);
       
@@ -468,7 +473,7 @@ const Cronograma = () => {
               <div>
                 <CardTitle className="flex items-center gap-2">
                   <BarChart3 className="h-5 w-5" />
-                  Timeline do Projeto
+                  Timeline de Demandas
                 </CardTitle>
                 <CardDescription>
                   Visualização temporal de todas as demandas por organização
@@ -481,10 +486,10 @@ const Cronograma = () => {
                   variant="outline"
                   size="sm"
                   onClick={() => {
-                    // Lógica para zoom out
-                    console.log('Zoom out');
+                    setZoomLevel(prev => Math.max(0.5, prev - 0.25));
                   }}
                   title="Diminuir zoom"
+                  disabled={zoomLevel <= 0.5}
                 >
                   <span className="text-lg">−</span>
                 </Button>
@@ -492,10 +497,10 @@ const Cronograma = () => {
                   variant="outline"
                   size="sm"
                   onClick={() => {
-                    // Lógica para zoom in
-                    console.log('Zoom in');
+                    setZoomLevel(prev => Math.min(2, prev + 0.25));
                   }}
                   title="Aumentar zoom"
+                  disabled={zoomLevel >= 2}
                 >
                   <span className="text-lg">+</span>
                 </Button>
@@ -503,27 +508,30 @@ const Cronograma = () => {
                   variant="outline"
                   size="sm"
                   onClick={() => {
-                    // Lógica para centralizar na data atual
-                    console.log('Centralizar hoje');
+                    setZoomLevel(1);
+                    setTimelineOffset(0);
                   }}
-                  title="Centralizar na data atual"
+                  title="Resetar zoom e centralizar"
                 >
                   <Calendar className="h-4 w-4" />
                 </Button>
+                <span className="text-sm text-gray-500 ml-2">
+                  {Math.round(zoomLevel * 100)}%
+                </span>
               </div>
             </div>
           </CardHeader>
           <CardContent>
             {/* Timeline Header */}
-            <div className="overflow-x-auto">
-              <div className="min-w-[800px]">
+            <div className="overflow-x-auto" style={{ transform: `translateX(${timelineOffset}px)` }}>
+              <div className="min-w-[800px]" style={{ transform: `scale(${zoomLevel})`, transformOrigin: 'left top' }}>
                 {/* Header dos meses */}
                 <div className="flex border-b-2 border-gray-200">
                   <div className="w-64 px-4 py-3 font-semibold text-gray-700 bg-gray-50 border-r">
                     Organização / Demanda
                   </div>
                   {meses.map((mes, index) => (
-                    <div key={index} className="w-24 px-2 py-3 text-center font-semibold text-gray-700 bg-gray-50 border-r">
+                    <div key={index} className="px-2 py-3 text-center font-semibold text-gray-700 bg-gray-50 border-r" style={{ width: `${96 * zoomLevel}px` }}>
                       {mes.toLocaleDateString('pt-BR', { month: 'short', year: '2-digit' })}
                     </div>
                   ))}
@@ -541,7 +549,7 @@ const Cronograma = () => {
                         </div>
                       </div>
                       {meses.map((_, index) => (
-                        <div key={index} className="w-24 border-r"></div>
+                        <div key={index} className="border-r" style={{ width: `${96 * zoomLevel}px` }}></div>
                       ))}
                     </div>
 
@@ -562,9 +570,9 @@ const Cronograma = () => {
                                   setEditingCronograma(cronograma);
                                   setIsEditDialogOpen(true);
                                 }}
-                                title={`✏️ Clique para editar: ${cronograma.titulo}`}
+                                title={`Clique para editar: ${cronograma.titulo}`}
                               >
-                                ✏️ {cronograma.titulo}
+                                 {cronograma.titulo}
                               </span>
                               <div className="flex items-center gap-1">
                                 <Badge 
@@ -577,7 +585,6 @@ const Cronograma = () => {
                             </div>
                             {cronograma.responsavel_nome && (
                               <div className="text-xs text-gray-500 mt-1">
-                                👤 {cronograma.responsavel_nome}
                               </div>
                             )}
                           </div>
@@ -596,12 +603,12 @@ const Cronograma = () => {
                                   setEditingCronograma(cronograma);
                                   setIsEditDialogOpen(true);
                                 }}
-                                title={`📋 ${cronograma.titulo}
-📊 Status: ${getStatusBadgeInfo(cronograma.status).text}
-📅 Período: ${dataInicio.toLocaleDateString('pt-BR')} a ${dataFim.toLocaleDateString('pt-BR')}
-👤 ${cronograma.responsavel_nome ? `Responsável: ${cronograma.responsavel_nome}` : 'Sem responsável'}
-${cronograma.motivo_atraso ? `⚠️ Atraso: ${cronograma.motivo_atraso}` : ''}
-✏️ Clique para editar`}
+                                title={`${cronograma.titulo}
+                               Status: ${getStatusBadgeInfo(cronograma.status).text}
+                               Período: ${dataInicio.toLocaleDateString('pt-BR')} a ${dataFim.toLocaleDateString('pt-BR')}
+                              ${cronograma.responsavel_nome ? `Responsável: ${cronograma.responsavel_nome}` : 'Sem responsável'}
+                              ${cronograma.motivo_atraso ? `Atraso: ${cronograma.motivo_atraso}` : ''}
+                               Clique para editar`}
                               >
                               </div>
                             )}
@@ -610,7 +617,7 @@ ${cronograma.motivo_atraso ? `⚠️ Atraso: ${cronograma.motivo_atraso}` : ''}
                             <div 
                               className="absolute top-0 bottom-0 w-0.5 bg-red-500 z-10"
                               style={{
-                                left: `${((hoje.getTime() - inicioPeriodo.getTime()) / (fimPeriodo.getTime() - inicioPeriodo.getTime())) * (meses.length * 96)}px`
+                                left: `${((hoje.getTime() - inicioPeriodo.getTime()) / (fimPeriodo.getTime() - inicioPeriodo.getTime())) * (meses.length * 96 * zoomLevel)}px`
                               }}
                               title={`Hoje: ${hoje.toLocaleDateString('pt-BR')}`}
                             />
@@ -689,7 +696,7 @@ ${cronograma.motivo_atraso ? `⚠️ Atraso: ${cronograma.motivo_atraso}` : ''}
             </p>
           ) : (
             <p className="text-sm text-blue-600 mt-1">
-              Visualizando as demandas da sua organização.
+              Visualizando as demandas.
             </p>
           )}
         </div>
@@ -713,11 +720,6 @@ ${cronograma.motivo_atraso ? `⚠️ Atraso: ${cronograma.motivo_atraso}` : ''}
             >
               <BarChart3 className="h-4 w-4 mr-2" />
               Timeline
-              {viewMode === 'timeline' && (
-                <span className="absolute -top-1 -right-1 bg-blue-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
-                  ✨
-                </span>
-              )}
             </Button>
           </div>
           
@@ -732,7 +734,7 @@ ${cronograma.motivo_atraso ? `⚠️ Atraso: ${cronograma.motivo_atraso}` : ''}
               setIsEditDialogOpen(true);
             }}>
               <Plus className="h-4 w-4 mr-2" />
-              ➕ Nova Demanda
+              Nova Demanda
             </Button>
           </div>
         </div>
@@ -887,17 +889,17 @@ ${cronograma.motivo_atraso ? `⚠️ Atraso: ${cronograma.motivo_atraso}` : ''}
                           setEditingCronograma(cronograma);
                           setIsEditDialogOpen(true);
                         }}
-                        title="✏️ Editar demanda"
+                        title="Editar demanda"
                       >
-                        ✏️
+                        <Edit className="h-4 w-4" />
                       </Button>
                       <Button 
                         variant="outline" 
                         size="sm"
                         onClick={() => openDeleteDialog(cronograma)}
-                        title="🗑️ Excluir demanda"
+                        title="Excluir demanda"
                       >
-                        🗑️
+                        <Trash2 className="h-4 w-4" />
                       </Button>
                     </div>
                   </div>
@@ -914,21 +916,21 @@ ${cronograma.motivo_atraso ? `⚠️ Atraso: ${cronograma.motivo_atraso}` : ''}
                       <Label className="text-xs text-gray-500">Responsável</Label>
                       <div className="mt-1 flex items-center gap-2">
                         <Users className="h-4 w-4" />
-                        <span>{cronograma.responsavel_nome ? `👤 ${cronograma.responsavel_nome}` : '❌ Não atribuído'}</span>
+                        <span>{cronograma.responsavel_nome ? cronograma.responsavel_nome : 'Não atribuído'}</span>
                       </div>
                     </div>
                     <div>
                       <Label className="text-xs text-gray-500">Prazo</Label>
                       <div className="mt-1 flex items-center gap-2">
                         <Calendar className="h-4 w-4" />
-                        <span>📅 {formatDate(cronograma.data_fim || '')}</span>
+                        <span>{formatDate(cronograma.data_fim || '')}</span>
                       </div>
                     </div>
                     <div>
                       <Label className="text-xs text-gray-500">Organização</Label>
                       <div className="mt-1 flex items-center gap-2">
                         <Building className="h-4 w-4" />
-                        <span>🏢 {cronograma.responsavel_empresa || cronograma.organizacao}</span>
+                        <span>{cronograma.responsavel_empresa || cronograma.organizacao}</span>
                       </div>
                     </div>
                   </div>
@@ -1199,7 +1201,7 @@ ${cronograma.motivo_atraso ? `⚠️ Atraso: ${cronograma.motivo_atraso}` : ''}
                     className="border-red-200 focus:border-red-500"
                   />
                   <p className="text-xs text-red-600 mt-1">
-                    ⚠️ Este campo é obrigatório quando o status é "Atrasado"
+                    Este campo é obrigatório quando o status é "Atrasado"
                   </p>
                 </div>
               )}

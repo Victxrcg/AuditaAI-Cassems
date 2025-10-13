@@ -60,7 +60,7 @@ interface ComplianceItem {
   status: 'pendente' | 'concluido' | 'em_analise';
   lastUpdated?: string;
   updatedBy?: string;
-  organizacao?: 'portes' | 'cassems'; // ← NOVO
+  organizacao?: string; // Aceitar qualquer organização
   isExpanded?: boolean;
 }
 
@@ -72,7 +72,7 @@ interface Competencia {
   parecer_gerado: boolean;
   created_at: string;
   created_by_nome: string;
-  created_by_organizacao?: 'portes' | 'cassems';
+  created_by_organizacao?: string; // Aceitar qualquer organização
   created_by_cor?: string;
   competencia_formatada?: string;
   competencia_referencia?: string;
@@ -80,7 +80,7 @@ interface Competencia {
   // Adicionar propriedades para última alteração
   ultima_alteracao_por?: string;
   ultima_alteracao_por_nome?: string;
-  ultima_alteracao_organizacao?: 'portes' | 'cassems';
+  ultima_alteracao_organizacao?: string; // Aceitar qualquer organização
   ultima_alteracao_em?: string;
 }
 
@@ -91,16 +91,50 @@ interface HistoricoAlteracao {
   valor_anterior: string;
   valor_novo: string;
   alterado_por_nome: string;
-  alterado_por_organizacao: 'portes' | 'cassems';
+  alterado_por_organizacao: string; // Aceitar qualquer organização
   alterado_por_cor: string;
   alterado_em: string;
 }
 
+// Função auxiliar para formatar nome da organização
+const formatOrganizationName = (org: string | undefined) => {
+  if (!org) return 'Organização';
+  
+  const nomes: Record<string, string> = {
+    'portes': 'PORTES',
+    'cassems': 'CASSEMS',
+    'rede_frota': 'REDE FROTA'
+  };
+  
+  return nomes[org.toLowerCase()] || org.toUpperCase().replace(/_/g, ' ');
+};
+
+// Função auxiliar para clarear uma cor hex
+const lightenColor = (hex: string) => {
+  // Converter hex para RGB
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  // Retornar com opacidade baixa para clarear
+  return `rgba(${r}, ${g}, ${b}, 0.15)`;
+};
+
+// Função auxiliar para escurecer uma cor hex
+const darkenColor = (hex: string) => {
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  // Reduzir valores para escurecer
+  const darken = (val: number) => Math.max(0, Math.floor(val * 0.6));
+  return `rgb(${darken(r)}, ${darken(g)}, ${darken(b)})`;
+};
+
 // Mover as funções para FORA do componente principal
-const getOrganizationBadge = (organizacao: 'portes' | 'cassems' | undefined) => {
+const getOrganizationBadge = (organizacao: string | undefined, cor?: string) => {
   if (!organizacao) return null;
 
-  const config = {
+  // Configuração padrão para organizações conhecidas
+  const configPadrao: Record<string, { nome: string; cor: string; corClara: string; corTexto: string }> = {
     portes: {
       nome: 'PORTES',
       cor: '#10B981',
@@ -115,12 +149,22 @@ const getOrganizationBadge = (organizacao: 'portes' | 'cassems' | undefined) => 
     }
   };
 
-  const org = config[organizacao];
-
-  // Verificar se org existe antes de acessar suas propriedades
-  if (!org) {
-    console.warn('Organização não reconhecida:', organizacao);
-    return null;
+  // Verificar se existe configuração padrão
+  const orgConfig = configPadrao[organizacao.toLowerCase()];
+  
+  let org;
+  if (orgConfig) {
+    // Usar configuração padrão
+    org = orgConfig;
+  } else {
+    // Criar configuração dinâmica baseada na cor fornecida
+    const corBase = cor || '#8B5CF6'; // Roxo como padrão
+    org = {
+      nome: organizacao.toUpperCase().replace(/_/g, ' '),
+      cor: corBase,
+      corClara: lightenColor(corBase),
+      corTexto: darkenColor(corBase)
+    };
   }
 
   return (
@@ -137,10 +181,11 @@ const getOrganizationBadge = (organizacao: 'portes' | 'cassems' | undefined) => 
   );
 };
 
-const getEditIndicator = (item: ComplianceItem) => {
+const getEditIndicator = (item: ComplianceItem, cor?: string) => {
   if (!item.updatedBy || !item.organizacao) return null;
 
-  const config = {
+  // Configuração padrão para organizações conhecidas
+  const configPadrao: Record<string, { nome: string; cor: string }> = {
     portes: {
       nome: 'Portes',
       cor: '#10B981'
@@ -151,7 +196,19 @@ const getEditIndicator = (item: ComplianceItem) => {
     }
   };
 
-  const org = config[item.organizacao];
+  // Verificar se existe configuração padrão
+  const orgConfig = configPadrao[item.organizacao.toLowerCase()];
+  
+  let org;
+  if (orgConfig) {
+    org = orgConfig;
+  } else {
+    // Criar configuração dinâmica
+    org = {
+      nome: item.organizacao.charAt(0).toUpperCase() + item.organizacao.slice(1).replace(/_/g, ' '),
+      cor: cor || '#8B5CF6'
+    };
+  }
 
   return (
     <div className="text-xs text-gray-500 flex items-center gap-1">
@@ -724,15 +781,7 @@ const HistoricoAlteracoes = ({ historico, loading }: { historico: HistoricoAlter
                 <span className="font-medium text-sm">
                   {alteracao.alterado_por_nome}
                 </span>
-                <Badge
-                  style={{
-                    backgroundColor: alteracao.alterado_por_organizacao === 'portes' ? '#D1FAE5' : '#DBEAFE',
-                    color: alteracao.alterado_por_organizacao === 'portes' ? '#065F46' : '#1E40AF'
-                  }}
-                  className="text-xs"
-                >
-                  {alteracao.alterado_por_organizacao === 'portes' ? 'PORTES' : 'CASSEMS'}
-                </Badge>
+                {getOrganizationBadge(alteracao.alterado_por_organizacao, alteracao.alterado_por_cor)}
                 <span className="text-xs text-gray-500">
                   {formatDateTimeBR(alteracao.alterado_em)}
                 </span>
@@ -1785,7 +1834,7 @@ export default function Compliance() {
                   </h3>
 
                   {/* Badge de organização */}
-                  {getOrganizationBadge(competencia.created_by_organizacao)}
+                  {getOrganizationBadge(competencia.created_by_organizacao, competencia.created_by_cor)}
 
                   <Badge 
                     className={competencia.parecer_texto 
@@ -1802,8 +1851,8 @@ export default function Compliance() {
                   <div className="flex items-center gap-2">
                     <p>
                       {competencia.ultima_alteracao_por 
-                        ? `Última alteração por ${competencia.ultima_alteracao_por_nome || competencia.ultima_alteracao_por} (${competencia.ultima_alteracao_organizacao === 'portes' ? 'PORTES' : 'CASSEMS'})`
-                        : `Criado por ${competencia.created_by_nome || 'Usuário'} (${competencia.created_by_organizacao === 'portes' ? 'PORTES' : 'CASSEMS'})`
+                        ? `Última alteração por ${competencia.ultima_alteracao_por_nome || competencia.ultima_alteracao_por} (${formatOrganizationName(competencia.ultima_alteracao_organizacao)})`
+                        : `Criado por ${competencia.created_by_nome || 'Usuário'} (${formatOrganizationName(competencia.created_by_organizacao)})`
                       }
                     </p>
                     {/* Indicador visual da organização */}
@@ -1816,7 +1865,7 @@ export default function Compliance() {
                           }}
                         />
                         <span className="text-xs font-medium">
-                          {competencia.created_by_organizacao === 'portes' ? 'Portes' : 'Cassems'}
+                          {formatOrganizationName(competencia.created_by_organizacao)}
                         </span>
                       </div>
                     )}
