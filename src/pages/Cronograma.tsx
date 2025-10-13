@@ -1061,14 +1061,14 @@ const Cronograma = () => {
               <div>
                 <Label htmlFor="responsavel_id">Responsável</Label>
                 <Select
-                  value={formData.responsavel_id?.toString() || ''}
-                  onValueChange={(value) => setFormData({...formData, responsavel_id: value ? parseInt(value) : null})}
+                  value={formData.responsavel_id?.toString() || 'none'}
+                  onValueChange={(value) => setFormData({...formData, responsavel_id: value === 'none' ? null : parseInt(value)})}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Selecione um responsável" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">
+                    <SelectItem value="none">
                       <div className="flex items-center gap-2">
                         <User className="h-4 w-4" />
                         Não atribuído
