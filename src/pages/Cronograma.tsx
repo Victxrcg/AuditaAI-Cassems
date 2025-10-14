@@ -586,7 +586,64 @@ const Cronograma = () => {
     const grupos = agruparPorMes(cronogramasFiltradosComBusca);
 
     return (
-       {/* Timeline de atividades */}
+      <div className="space-y-6">
+        {/* Cabeçalho do Painel */}
+        <div className="bg-white border-b border-gray-200 pb-6 rounded-lg">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h1 className="text-2xl font-bold text-gray-900">
+                Painel de Implantação
+              </h1>
+            </div>
+          </div>
+
+          {/* Barra de busca e controles */}
+          <div className="flex items-center justify-between gap-4">
+            <div className="flex-1 max-w-md">
+              <div className="relative">
+                <input
+                  type="text"
+                  placeholder="Buscar etapa, atividade, respo"
+                  value={busca}
+                  onChange={(e) => setBusca(e.target.value)}
+                  className="w-full px-4 py-2 pl-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                  <svg className="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                  </svg>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <Button 
+                size="sm" 
+                className="bg-black text-white hover:bg-gray-800"
+                onClick={() => {
+                  setEditingCronograma(null);
+                  setFormData(initialFormData());
+                  setIsEditDialogOpen(true);
+                }}
+              >
+                <Plus className="h-4 w-4 mr-2" />
+                Nova atividade
+              </Button>
+            </div>
+          </div>
+
+          {/* Botões de controle */}
+          <div className="flex items-center gap-4 mt-4">
+            <Button variant="outline" size="sm" onClick={expandirTodos}>
+              Expandir tudo
+            </Button>
+            <Button variant="outline" size="sm" onClick={recolherTodos}>
+              Recolher tudo
+            </Button>
+          </div>
+        </div>
+
+        {/* Timeline de atividades */}
         <div className="space-y-4">
           {grupos.map(([mesAno, cronogramasDoMes]) => {
             const isExpanded = gruposExpandidos.has(mesAno);
