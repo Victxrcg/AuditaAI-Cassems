@@ -850,7 +850,7 @@ const initializeComplianceItems = (): ComplianceItem[] => {
   const savedState = loadCardsState();
 
   return defaultItems.map(item => {
-    const savedItem = savedState.find(saved => saved.id === item.id);
+    const savedItem = savedState[item.id];
     if (savedItem) {
       return {
         ...item,
