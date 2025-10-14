@@ -702,20 +702,19 @@ exports.generateParecer = async (req, res) => {
 
     const dados = competencia[0];
 
-    // Preparar dados para a IA
-    const dadosParaIA = {
-      competencia_referencia: dados.competencia_referencia,
-      relatorio_inicial_texto: dados.relatorio_inicial_texto,
-      relatorio_faturamento_texto: dados.relatorio_faturamento_texto,
-      imposto_compensado_texto: dados.imposto_compensado_texto,
-      emails_texto: dados.emails_texto,
-      valor_compensado_texto: dados.valor_compensado_texto,
-      estabelecimento_texto: dados.estabelecimento_texto,
-      resumo_folha_pagamento_texto: dados.resumo_folha_pagamento_texto,
-      planilha_quantidade_empregados_texto: dados.planilha_quantidade_empregados_texto,
-      decreto_3048_1999_vigente_texto: dados.decreto_3048_1999_vigente_texto,
-      solucao_consulta_cosit_79_2023_vigente_texto: dados.solucao_consulta_cosit_79_2023_vigente_texto
-    };
+    // Preparar dados para a IA (validando tipos)
+    const dadosParaIA = {};
+    const camposParaIA = [
+      'competencia_referencia', 'relatorio_inicial_texto', 'relatorio_faturamento_texto',
+      'imposto_compensado_texto', 'emails_texto', 'valor_compensado_texto',
+      'estabelecimento_texto', 'resumo_folha_pagamento_texto', 'planilha_quantidade_empregados_texto',
+      'decreto_3048_1999_vigente_texto', 'solucao_consulta_cosit_79_2023_vigente_texto'
+    ];
+    
+    camposParaIA.forEach(campo => {
+      const valor = dados[campo];
+      dadosParaIA[campo] = (valor && typeof valor === 'string') ? valor : '';
+    });
 
     // Extrair conteúdo dos arquivos anexados
     console.log('📁 Extraindo conteúdo dos arquivos anexados...');
@@ -748,6 +747,21 @@ exports.generateParecer = async (req, res) => {
   }
 };
 
+// Função para determinar estratégia de processamento baseada no tamanho
+const determinarEstrategiaProcessamento = (tamanhoArquivo, tipoArquivo) => {
+  const tamanhoMB = tamanhoArquivo / (1024 * 1024);
+  
+  if (tamanhoMB > 50) {
+    return 'resumo'; // Apenas resumo para arquivos > 50MB
+  } else if (tamanhoMB > 10) {
+    return 'parcial'; // Processamento parcial para arquivos > 10MB
+  } else if (tipoArquivo === '.csv' && tamanhoMB > 5) {
+    return 'csv_grande'; // Estratégia especial para CSVs grandes
+  } else {
+    return 'completo'; // Processamento completo para arquivos menores
+  }
+};
+
 // Função para extrair conteúdo dos arquivos anexados
 const extrairConteudoArquivos = async (pool, competenciaId) => {
   try {
@@ -770,12 +784,15 @@ const extrairConteudoArquivos = async (pool, competenciaId) => {
 
     const conteudos = [];
 
-    for (const anexo of anexos) {
-      try {
-        console.log(`📄 Processando arquivo: ${anexo.nome_arquivo} (${anexo.tipo_mime})`);
-        
-        let conteudo = '';
-        const extensao = path.extname(anexo.nome_arquivo).toLowerCase();
+        for (const anexo of anexos) {
+          try {
+            console.log(`📄 Processando arquivo: ${anexo.nome_arquivo} (${anexo.tipo_mime}) - ${(anexo.tamanho_arquivo / (1024*1024)).toFixed(2)}MB`);
+            
+            let conteudo = '';
+            const extensao = path.extname(anexo.nome_arquivo).toLowerCase();
+            const estrategia = determinarEstrategiaProcessamento(anexo.tamanho_arquivo, extensao);
+            
+            console.log(`🔧 Estratégia escolhida: ${estrategia}`);
         
         // Extrair conteúdo baseado no tipo de arquivo
         if (anexo.file_data) {
@@ -784,13 +801,29 @@ const extrairConteudoArquivos = async (pool, competenciaId) => {
           
           if (extensao === '.txt') {
             conteudo = buffer.toString('utf-8');
-          } else if (extensao === '.csv') {
-            const csvData = csv.parse(buffer.toString('utf-8'), { 
-              columns: true, 
-              skip_empty_lines: true 
-            });
-            conteudo = `Dados CSV (${csvData.length} linhas):\n${JSON.stringify(csvData, null, 2)}`;
-          } else if (extensao === '.pdf') {
+            } else if (extensao === '.csv') {
+              if (estrategia === 'resumo') {
+                conteudo = `[ARQUIVO CSV MUITO GRANDE - ${(anexo.tamanho_arquivo / (1024*1024)).toFixed(2)}MB] - Apenas resumo disponível`;
+              } else if (estrategia === 'csv_grande') {
+                // Para CSVs grandes, ler apenas as primeiras linhas
+                const csvText = buffer.toString('utf-8');
+                const linhas = csvText.split('\n').slice(0, 100); // Primeiras 100 linhas
+                const csvParcial = linhas.join('\n');
+                const csvData = csv.parse(csvParcial, { 
+                  columns: true, 
+                  skip_empty_lines: true 
+                });
+                const totalLinhas = csvText.split('\n').length;
+                conteudo = `CSV GRANDE (${csvData.length} linhas de ${totalLinhas} total):\n${JSON.stringify(csvData.slice(0, 10), null, 2)}\n... [${totalLinhas - csvData.length} linhas omitidas]`;
+              } else {
+                const csvText = buffer.toString('utf-8');
+                const csvData = csv.parse(csvText, { 
+                  columns: true, 
+                  skip_empty_lines: true 
+                });
+                conteudo = `Dados CSV (${csvData.length} linhas):\n${JSON.stringify(csvData, null, 2)}`;
+              }
+            } else if (extensao === '.pdf') {
             const pdfData = await pdf(buffer);
             conteudo = pdfData.text;
           } else if (extensao === '.eml') {
@@ -806,36 +839,64 @@ const extrairConteudoArquivos = async (pool, competenciaId) => {
           
           if (extensao === '.txt') {
             conteudo = buffer.toString('utf-8');
-          } else if (extensao === '.csv') {
-            const csvData = csv.parse(buffer.toString('utf-8'), { 
-              columns: true, 
-              skip_empty_lines: true 
-            });
-            conteudo = `Dados CSV (${csvData.length} linhas):\n${JSON.stringify(csvData, null, 2)}`;
-          } else if (extensao === '.pdf') {
+            } else if (extensao === '.csv') {
+              if (estrategia === 'resumo') {
+                conteudo = `[ARQUIVO CSV MUITO GRANDE - ${(anexo.tamanho_arquivo / (1024*1024)).toFixed(2)}MB] - Apenas resumo disponível`;
+              } else if (estrategia === 'csv_grande') {
+                // Para CSVs grandes, ler apenas as primeiras linhas
+                const csvText = buffer.toString('utf-8');
+                const linhas = csvText.split('\n').slice(0, 100); // Primeiras 100 linhas
+                const csvParcial = linhas.join('\n');
+                const csvData = csv.parse(csvParcial, { 
+                  columns: true, 
+                  skip_empty_lines: true 
+                });
+                const totalLinhas = csvText.split('\n').length;
+                conteudo = `CSV GRANDE (${csvData.length} linhas de ${totalLinhas} total):\n${JSON.stringify(csvData.slice(0, 10), null, 2)}\n... [${totalLinhas - csvData.length} linhas omitidas]`;
+              } else {
+                const csvText = buffer.toString('utf-8');
+                const csvData = csv.parse(csvText, { 
+                  columns: true, 
+                  skip_empty_lines: true 
+                });
+                conteudo = `Dados CSV (${csvData.length} linhas):\n${JSON.stringify(csvData, null, 2)}`;
+              }
+            } else if (extensao === '.pdf') {
             const pdfData = await pdf(buffer);
             conteudo = pdfData.text;
           } else if (extensao === '.eml') {
             const email = await simpleParser(buffer);
             conteudo = `Email de: ${email.from?.text || 'N/A'}\nPara: ${email.to?.text || 'N/A'}\nAssunto: ${email.subject || 'N/A'}\n\nConteúdo:\n${email.text || email.html || 'Sem conteúdo'}`;
-          } else {
-            conteudo = buffer.toString('utf-8');
-          }
+            } else {
+              if (estrategia === 'resumo') {
+                conteudo = `[ARQUIVO MUITO GRANDE - ${(anexo.tamanho_arquivo / (1024*1024)).toFixed(2)}MB] - Apenas resumo disponível`;
+              } else {
+                conteudo = buffer.toString('utf-8');
+              }
+            }
         }
 
-        if (conteudo && conteudo.trim()) {
-          conteudos.push({
-            tipo: anexo.tipo_anexo,
-            nome: anexo.nome_arquivo,
-            mime: anexo.tipo_mime,
-            conteudo: conteudo.trim(),
-            tamanho: anexo.tamanho_arquivo
-          });
-          
-          console.log(`✅ Conteúdo extraído: ${conteudo.length} caracteres`);
-        } else {
-          console.log(`⚠️ Nenhum conteúdo extraído de: ${anexo.nome_arquivo}`);
-        }
+            if (conteudo && conteudo.trim()) {
+              conteudos.push({
+                tipo: anexo.tipo_anexo,
+                nome: anexo.nome_arquivo,
+                mime: anexo.tipo_mime,
+                conteudo: conteudo.trim(),
+                tamanho: anexo.tamanho_arquivo
+              });
+              
+              console.log(`✅ Conteúdo extraído: ${conteudo.length} caracteres`);
+            } else {
+              console.log(`⚠️ Nenhum conteúdo extraído de: ${anexo.nome_arquivo}`);
+              // Adicionar informação sobre arquivo sem conteúdo extraível
+              conteudos.push({
+                tipo: anexo.tipo_anexo,
+                nome: anexo.nome_arquivo,
+                mime: anexo.tipo_mime,
+                conteudo: `[ARQUIVO ANEXADO MAS CONTEÚDO NÃO EXTRAÍVEL - ${anexo.tipo_mime}]`,
+                tamanho: anexo.tamanho_arquivo
+              });
+            }
         
       } catch (error) {
         console.error(`❌ Erro ao processar ${anexo.nome_arquivo}:`, error.message);
@@ -868,18 +929,29 @@ const generateParecerComIA = async (dados, conteudosArquivos = []) => {
         ? new Date(dados.competencia_referencia).toLocaleDateString('pt-BR')
         : 'Não informado';
 
-    // Preparar conteúdo dos arquivos para análise
+    // Preparar conteúdo dos arquivos para análise (limitado para evitar limite de tokens)
     let conteudoArquivosTexto = '';
     if (conteudosArquivos.length > 0) {
       conteudoArquivosTexto = '\n\n## CONTEÚDO DOS ARQUIVOS ANEXADOS:\n';
       
-      conteudosArquivos.forEach((arquivo, index) => {
+      // Limitar a 3 arquivos para evitar limite de tokens (arquivos grandes)
+      conteudosArquivos.slice(0, 3).forEach((arquivo, index) => {
+        // Truncar conteúdo para evitar limite de tokens (máximo 1000 caracteres por arquivo)
+        const conteudoTruncado = arquivo.conteudo.length > 1000 
+          ? arquivo.conteudo.substring(0, 1000) + '... [CONTEÚDO TRUNCADO - ARQUIVO MUITO GRANDE]'
+          : arquivo.conteudo;
+        
         conteudoArquivosTexto += `\n### ${index + 1}. ${arquivo.nome} (${arquivo.tipo})\n`;
         conteudoArquivosTexto += `**Tipo:** ${arquivo.mime}\n`;
         conteudoArquivosTexto += `**Tamanho:** ${arquivo.tamanho} bytes\n`;
-        conteudoArquivosTexto += `**Conteúdo:**\n${arquivo.conteudo}\n`;
+        conteudoArquivosTexto += `**Conteúdo:**\n${conteudoTruncado}\n`;
         conteudoArquivosTexto += '---\n';
       });
+      
+      // Limitar total de arquivos se necessário
+      if (conteudosArquivos.length > 5) {
+        conteudoArquivosTexto += `\n**Nota:** ${conteudosArquivos.length - 5} arquivo(s) adicional(is) foram omitidos para evitar limite de tokens.\n`;
+      }
     }
 
     // Preparar prompt para a IA
@@ -1020,7 +1092,7 @@ Ocorreu um erro durante a geração do parecer técnico: ${error.message}
 **Dados disponíveis:**
 - Período: ${periodoInfo}
 - Arquivos anexados: ${conteudosArquivos.length}
-- Observações: ${Object.values(dados).filter(val => val && val.trim()).length} campos preenchidos
+- Observações: ${Object.values(dados).filter(val => val && typeof val === 'string' && val.trim()).length} campos preenchidos
 
 Por favor, tente novamente ou entre em contato com o suporte técnico.
 
