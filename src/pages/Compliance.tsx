@@ -1240,30 +1240,28 @@ export default function Compliance() {
           console.log('🔍 Debug - updatedItem.updatedBy:', updatedItem.updatedBy);
           console.log('🔍 Debug - updatedItem.lastUpdated:', updatedItem.lastUpdated);
 
-          // IMPORTANTE: Preservar o estado dos cards que já foram marcados como concluídos
-          // Carregar estado salvo do localStorage PRIMEIRO
+          // PRIMEIRO: Determinar status baseado nos dados reais do banco
+          const hasData = (updatedItem.data && updatedItem.data.trim()) ||
+                         (updatedItem.valor && updatedItem.valor.trim()) ||
+                         (updatedItem.observacoes && updatedItem.observacoes.trim());
+          
+          if (hasData) {
+            updatedItem.status = 'concluido';
+            updatedItem.isExpanded = false; // Cards com dados ficam fechados por padrão
+          } else {
+            updatedItem.status = 'pendente';
+            updatedItem.isExpanded = true; // Cards sem dados ficam abertos para preenchimento
+          }
+          
+          // SEGUNDO: Preservar estado de expansão do localStorage (apenas isExpanded)
           const savedState = loadCardsState();
           const savedItemState = savedState[updatedItem.id];
           
-          // Se há estado salvo, usar o estado salvo (status e isExpanded)
           if (savedItemState) {
-            updatedItem.status = savedItemState.status || updatedItem.status;
+            // Usar apenas o isExpanded do estado salvo, manter o status baseado nos dados
             updatedItem.isExpanded = savedItemState.isExpanded;
-            console.log(`🔍 Item ${updatedItem.id} - Usando estado salvo:`, savedItemState);
+            console.log(`🔍 Item ${updatedItem.id} - Status: ${updatedItem.status} (baseado em dados), isExpanded: ${updatedItem.isExpanded} (do localStorage)`);
           } else {
-            // Se não há estado salvo, usar a lógica baseada nos dados do banco
-            const hasData = (updatedItem.data && updatedItem.data.trim()) ||
-                           (updatedItem.valor && updatedItem.valor.trim()) ||
-                           (updatedItem.observacoes && updatedItem.observacoes.trim());
-            
-            if (hasData) {
-              updatedItem.status = 'concluido';
-              updatedItem.isExpanded = false;
-            } else {
-              updatedItem.status = 'pendente';
-              updatedItem.isExpanded = true;
-            }
-            
             // Verificar se o item atual já estava fechado
             const currentItem = complianceItems.find(current => current.id === updatedItem.id);
             if (currentItem && currentItem.isExpanded === false) {
@@ -1737,17 +1735,19 @@ export default function Compliance() {
       const promises = [];
 
       if (item.valor && item.valor.trim()) {
-        console.log('🔍 Salvando valor com user_id:', currentUser.id);
+        console.log('🔍 Salvando valor:', item.valor, 'para item:', id, 'com user_id:', currentUser.id);
         promises.push(saveFieldToDatabase(id, 'valor', item.valor, currentUser.id));
       }
       if (item.data && item.data.trim()) {
-        console.log('🔍 Salvando data com user_id:', currentUser.id);
+        console.log('🔍 Salvando data:', item.data, 'para item:', id, 'com user_id:', currentUser.id);
         promises.push(saveFieldToDatabase(id, 'data', item.data, currentUser.id));
       }
       if (item.observacoes && item.observacoes.trim()) {
-        console.log('🔍 Salvando observacoes com user_id:', currentUser.id);
+        console.log('🔍 Salvando observacoes:', item.observacoes, 'para item:', id, 'com user_id:', currentUser.id);
         promises.push(saveFieldToDatabase(id, 'observacoes', item.observacoes, currentUser.id));
       }
+      
+      console.log('🔍 Total de promises para salvar:', promises.length);
 
       // Aguardar todas as operações de salvamento
       await Promise.all(promises);
