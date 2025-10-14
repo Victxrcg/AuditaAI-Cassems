@@ -744,13 +744,13 @@ const loadCardsState = (): Partial<ComplianceItem>[] => {
 // Função para inicializar complianceItems com estado salvo
 const initializeComplianceItems = (): ComplianceItem[] => {
   const defaultItems: ComplianceItem[] = [
-    { id: '1', title: 'Competência Período', description: 'Período da competência fiscal', status: 'pendente', isExpanded: true },
-    { id: '2', title: 'Relatório Técnico', description: 'Relatório técnico entregue no início do trabalho, antes das compensações. Anexe: análise da situação fiscal atual, levantamento de pendências, cronograma de regularizações e parecer técnico sobre a viabilidade das compensações.', status: 'pendente', isExpanded: true },
-    { id: '3', title: 'Relatório Faturamento', description: 'Relatório mensal entregue a partir do momento que houve as compensações para comprovar essas compensações. Anexe: demonstrativo de faturamento mensal, notas fiscais, comprovantes de pagamento de impostos e documentos que validem as compensações realizadas.', status: 'pendente', isExpanded: true },
-    { id: '4', title: 'Comprovação de Compensações', description: 'Documentos que comprovam as compensações de impostos realizadas. Anexe: demonstrativos de compensação, declarações de débitos e créditos tributários (DCTF), comprovantes de compensação, extratos bancários das compensações e relatórios de conferência dos valores compensados.', status: 'pendente', isExpanded: true },
-    { id: '6', title: 'Comprovação de Email', description: 'Emails enviados no período da competência para comprovar a comunicação durante o processo. Anexe: print screens dos emails enviados, comprovantes de envio, respostas recebidas, threads de conversa com órgãos competentes e qualquer correspondência eletrônica relacionada ao período da competência.', status: 'pendente', isExpanded: true },
-    { id: '7', title: 'Notas Fiscais Enviadas', description: 'Notas fiscais emitidas e enviadas durante o período da competência. Anexe: notas fiscais de saída, notas fiscais de entrada, comprovantes de envio das notas fiscais, XMLs das notas fiscais, relatórios de emissão de notas fiscais e qualquer documentação fiscal relacionada ao período da competência.', status: 'pendente', isExpanded: true },
-    { id: '8', title: 'Parecer Final', description: 'Parecer gerado pela IA', status: 'pendente', isExpanded: true }
+    { id: '1', title: 'Competência Período', description: 'Período da competência fiscal', status: 'pendente', isExpanded: false },
+    { id: '2', title: 'Relatório Técnico', description: 'Relatório técnico entregue no início do trabalho, antes das compensações. Anexe: análise da situação fiscal atual, levantamento de pendências, cronograma de regularizações e parecer técnico sobre a viabilidade das compensações.', status: 'pendente', isExpanded: false },
+    { id: '3', title: 'Relatório Faturamento', description: 'Relatório mensal entregue a partir do momento que houve as compensações para comprovar essas compensações. Anexe: demonstrativo de faturamento mensal, notas fiscais, comprovantes de pagamento de impostos e documentos que validem as compensações realizadas.', status: 'pendente', isExpanded: false },
+    { id: '4', title: 'Comprovação de Compensações', description: 'Documentos que comprovam as compensações de impostos realizadas. Anexe: demonstrativos de compensação, declarações de débitos e créditos tributários (DCTF), comprovantes de compensação, extratos bancários das compensações e relatórios de conferência dos valores compensados.', status: 'pendente', isExpanded: false },
+    { id: '6', title: 'Comprovação de Email', description: 'Emails enviados no período da competência para comprovar a comunicação durante o processo. Anexe: print screens dos emails enviados, comprovantes de envio, respostas recebidas, threads de conversa com órgãos competentes e qualquer correspondência eletrônica relacionada ao período da competência.', status: 'pendente', isExpanded: false },
+    { id: '7', title: 'Notas Fiscais Enviadas', description: 'Notas fiscais emitidas e enviadas durante o período da competência. Anexe: notas fiscais de saída, notas fiscais de entrada, comprovantes de envio das notas fiscais, XMLs das notas fiscais, relatórios de emissão de notas fiscais e qualquer documentação fiscal relacionada ao período da competência.', status: 'pendente', isExpanded: false },
+    { id: '8', title: 'Parecer Final', description: 'Parecer gerado pela IA', status: 'pendente', isExpanded: false }
   ];
 
   const savedState = loadCardsState();
@@ -1120,10 +1120,17 @@ export default function Compliance() {
           console.log('🔍 Debug - updatedItem.lastUpdated:', updatedItem.lastUpdated);
 
           // Verificar se o item tem dados preenchidos para marcar como concluído
-          if ((updatedItem.data && updatedItem.data.trim()) ||
-              (updatedItem.valor && updatedItem.valor.trim()) ||
-              (updatedItem.observacoes && updatedItem.observacoes.trim())) {
+          const hasData = (updatedItem.data && updatedItem.data.trim()) ||
+                         (updatedItem.valor && updatedItem.valor.trim()) ||
+                         (updatedItem.observacoes && updatedItem.observacoes.trim());
+          
+          if (hasData) {
             updatedItem.status = 'concluido';
+            // Se o item está concluído, manter fechado (isExpanded = false)
+            updatedItem.isExpanded = false;
+          } else {
+            // Se o item não tem dados, manter expandido para facilitar preenchimento
+            updatedItem.isExpanded = true;
           }
 
           return updatedItem;
