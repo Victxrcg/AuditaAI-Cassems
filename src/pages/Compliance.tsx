@@ -1865,7 +1865,7 @@ export default function Compliance() {
                             const dataISO = new Date(competencia.competencia_referencia);
                             const dataFormatada = dataISO.toISOString().split('T')[0];
                             const formatted = formatCompetenciaTitle(dataFormatada);
-                            return `Competência Período ${formatted.replace('Competência Referencia ', '')}`;
+                            return `Competência Período ${formatted.replace('Competência Período ', '')}`;
                           }
                         })()
                       : `Competência Período ${competencia.competencia_formatada || 'N/A'}`

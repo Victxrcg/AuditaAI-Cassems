@@ -50,26 +50,42 @@ export const parseDateISO = (dateISO: string): string => {
 
 // Função para formatar data no título da competência
 export const formatCompetenciaTitle = (dateString: string): string => {
-  if (!dateString) return 'Competência Referencia';
+  if (!dateString) return 'Competência Período';
   
   try {
+    // Se contém "|" significa que é um período (data_inicio|data_fim)
+    if (dateString.includes('|')) {
+      const [dataInicio, dataFim] = dateString.split('|');
+      
+      if (dataInicio && dataFim) {
+        // Formatar data de início
+        const dataInicioFormatted = formatDateBR(dataInicio);
+        // Formatar data de fim
+        const dataFimFormatted = formatDateBR(dataFim);
+        
+        return `Competência Período (${dataInicioFormatted} - ${dataFimFormatted})`;
+      } else if (dataInicio) {
+        // Apenas data de início
+        const dataInicioFormatted = formatDateBR(dataInicio);
+        return `Competência Período (${dataInicioFormatted})`;
+      }
+    }
+    
     // Se a data já está no formato YYYY-MM-DD (do input type="date")
     if (dateString.includes('-')) {
-      const [year, month, day] = dateString.split('-');
-      return `Competência Referencia (${day}/${month}/${year})`;
+      const dataFormatted = formatDateBR(dateString);
+      return `Competência Período (${dataFormatted})`;
     }
     
     // Se a data está em outro formato, tentar converter
     const date = new Date(dateString);
     if (isNaN(date.getTime())) {
-      return `Competência Referencia (${dateString})`;
+      return `Competência Período (${dateString})`;
     }
     
-    const day = date.getDate().toString().padStart(2, '0');
-    const month = (date.getMonth() + 1).toString().padStart(2, '0');
-    const year = date.getFullYear();
-    return `Competência Referencia (${day}/${month}/${year})`;
+    const dataFormatted = formatDateBR(dateString);
+    return `Competência Período (${dataFormatted})`;
   } catch (error) {
-    return `Competência Referencia (${dateString})`;
+    return `Competência Período (${dateString})`;
   }
 };
