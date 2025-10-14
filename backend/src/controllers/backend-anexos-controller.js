@@ -16,10 +16,38 @@ exports.uploadAnexo = async (req, res) => {
     // Ler o arquivo como buffer para armazenar no banco
     const fileData = fs.readFileSync(req.file.path);
     
-    // Inserir anexo na tabela compliance_anexos
+    console.log('🔍 Debug - Arquivo recebido:', {
+      originalname: req.file.originalname,
+      size: req.file.size,
+      mimetype: req.file.mimetype,
+      path: req.file.path
+    });
+    
+    // Obter informações do usuário atual dos headers
+    const userOrg = req.headers['x-user-organization'] || 'cassems';
+    const userId = req.headers['x-user-id'] || '1';
+    const currentUser = { 
+      id: parseInt(userId), 
+      organizacao: userOrg 
+    };
+    
+    console.log('🔍 Debug - User info from headers:', currentUser);
+    
+    // Inserir anexo na tabela compliance_anexos usando a estrutura correta
     const result = await pool.query(`
-      INSERT INTO compliance_anexos (compliance_id, tipo_anexo, nome_arquivo, caminho_arquivo, file_data, tamanho_arquivo, tipo_mime)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO compliance_anexos (
+        compliance_id, 
+        tipo_anexo, 
+        nome_arquivo, 
+        caminho_arquivo, 
+        file_data, 
+        tamanho_arquivo, 
+        tipo_mime, 
+        created_by,
+        uploadado_por,
+        organizacao_upload
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `, [
       complianceId,
       tipoAnexo,
@@ -27,7 +55,10 @@ exports.uploadAnexo = async (req, res) => {
       req.file.path,
       fileData,
       req.file.size,
-      req.file.mimetype
+      req.file.mimetype,
+      currentUser.id,
+      currentUser.id,
+      currentUser.organizacao || 'cassems'
     ]);
 
     // Converter insertId para Number para evitar problemas de serialização
@@ -54,10 +85,23 @@ exports.uploadAnexo = async (req, res) => {
       }
     });
   } catch (error) {
-    console.error(' Erro ao fazer upload do anexo:', error);
+    console.error('❌ Erro ao fazer upload do anexo:', error);
+    console.error('❌ Stack trace:', error.stack);
+    
+    // Limpar arquivo temporário em caso de erro
+    if (req.file && req.file.path) {
+      try {
+        fs.unlinkSync(req.file.path);
+        console.log('🗑️ Arquivo temporário removido após erro');
+      } catch (cleanupError) {
+        console.error('❌ Erro ao remover arquivo temporário:', cleanupError);
+      }
+    }
+    
     res.status(500).json({
       error: 'Erro ao fazer upload do anexo',
-      details: error.message
+      details: error.message,
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
     });
   } finally {
     if (server) server.close();

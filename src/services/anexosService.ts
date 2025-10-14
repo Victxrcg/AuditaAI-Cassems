@@ -14,13 +14,21 @@ export const uploadAnexo = async (complianceId: string, tipoAnexo: string, file:
   const formData = new FormData();
   formData.append('anexo', file);
 
+  // Obter informações do usuário atual
+  const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
+
   const response = await fetch(`${API_BASE}/compliance/competencias/${complianceId}/anexos/${tipoAnexo}`, {
     method: 'POST',
+    headers: {
+      'x-user-organization': currentUser.organizacao || 'cassems',
+      'x-user-id': currentUser.id?.toString() || '1'
+    },
     body: formData,
   });
 
   if (!response.ok) {
-    throw new Error('Erro ao fazer upload do anexo');
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.error || 'Erro ao fazer upload do anexo');
   }
 
   const data = await response.json();
