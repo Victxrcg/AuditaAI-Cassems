@@ -70,6 +70,8 @@ const Cronograma = () => {
   const [usuarios, setUsuarios] = useState<any[]>([]);
   const [editingCronograma, setEditingCronograma] = useState<CronogramaItem | null>(null);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+  const [viewingCronograma, setViewingCronograma] = useState<CronogramaItem | null>(null);
+  const [isViewDialogOpen, setIsViewDialogOpen] = useState(false);
   const initialFormData = () => ({
     titulo: '',
     descricao: '',
@@ -311,6 +313,17 @@ const Cronograma = () => {
         {badgeInfo.text}
       </Badge>
     );
+  };
+
+  const getPriorityBadgeInfo = (prioridade: string) => {
+    const variants = {
+      baixa: { variant: 'secondary', text: 'BAIXA' },
+      media: { variant: 'default', text: 'MÉDIA' },
+      alta: { variant: 'destructive', text: 'ALTA' },
+      critica: { variant: 'destructive', text: 'CRÍTICA' }
+    } as const;
+
+    return variants[prioridade as keyof typeof variants] || { variant: 'secondary', text: 'BAIXA' };
   };
 
   const getFaseBadge = (fase: string) => {
@@ -898,10 +911,10 @@ const Cronograma = () => {
                                 <span 
                                   className="truncate cursor-pointer hover:text-blue-600 transition-colors flex-1"
                                   onClick={() => {
-                                    setEditingCronograma(cronograma);
-                                    setIsEditDialogOpen(true);
+                                    setViewingCronograma(cronograma);
+                                    setIsViewDialogOpen(true);
                                   }}
-                                  title={`Clique para editar: ${cronograma.titulo}`}
+                                  title={`Clique para visualizar: ${cronograma.titulo}`}
                                 >
                                    {cronograma.titulo}
                                 </span>
@@ -931,8 +944,8 @@ const Cronograma = () => {
                                   minWidth: '60px'
                                 }}
                                 onClick={() => {
-                                  setEditingCronograma(cronograma);
-                                  setIsEditDialogOpen(true);
+                                  setViewingCronograma(cronograma);
+                                  setIsViewDialogOpen(true);
                                 }}
                                 title={`${cronograma.titulo}
                                Status: ${getStatusBadgeInfo(cronograma.status).text}
@@ -1454,6 +1467,157 @@ const Cronograma = () => {
               </Button>
             </div>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal de Visualização */}
+      <Dialog open={isViewDialogOpen} onOpenChange={setIsViewDialogOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <div className="w-3 h-3 rounded-full bg-blue-500"></div>
+              {viewingCronograma?.titulo}
+            </DialogTitle>
+            <DialogDescription>
+              Detalhes da demanda selecionada
+            </DialogDescription>
+          </DialogHeader>
+          
+          {viewingCronograma && (
+            <div className="space-y-6">
+              {/* Status e Prioridade */}
+              <div className="flex items-center gap-4">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-medium text-gray-600">Status:</span>
+                  <Badge 
+                    variant={getStatusBadgeInfo(viewingCronograma.status).variant as any}
+                    className="text-xs"
+                  >
+                    {getStatusBadgeInfo(viewingCronograma.status).text}
+                  </Badge>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-medium text-gray-600">Prioridade:</span>
+                  <Badge 
+                    variant={getPriorityBadgeInfo(viewingCronograma.prioridade).variant as any}
+                    className="text-xs"
+                  >
+                    {getPriorityBadgeInfo(viewingCronograma.prioridade).text}
+                  </Badge>
+                </div>
+              </div>
+
+              {/* Descrição */}
+              {viewingCronograma.descricao && (
+                <div>
+                  <h3 className="text-sm font-medium text-gray-600 mb-2">Descrição</h3>
+                  <p className="text-gray-700 bg-gray-50 p-3 rounded-lg text-sm leading-relaxed">
+                    {viewingCronograma.descricao}
+                  </p>
+                </div>
+              )}
+
+              {/* Informações do Período */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <h3 className="text-sm font-medium text-gray-600 mb-2">Data de Início</h3>
+                  <div className="flex items-center gap-2">
+                    <Calendar className="h-4 w-4 text-gray-400" />
+                    <span className="text-gray-700">
+                      {viewingCronograma.data_inicio 
+                        ? new Date(viewingCronograma.data_inicio).toLocaleDateString('pt-BR')
+                        : 'Não definida'
+                      }
+                    </span>
+                  </div>
+                </div>
+                <div>
+                  <h3 className="text-sm font-medium text-gray-600 mb-2">Data de Fim</h3>
+                  <div className="flex items-center gap-2">
+                    <Calendar className="h-4 w-4 text-gray-400" />
+                    <span className="text-gray-700">
+                      {viewingCronograma.data_fim 
+                        ? new Date(viewingCronograma.data_fim).toLocaleDateString('pt-BR')
+                        : 'Não definida'
+                      }
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Responsável */}
+              {viewingCronograma.responsavel_nome && (
+                <div>
+                  <h3 className="text-sm font-medium text-gray-600 mb-2">Responsável</h3>
+                  <div className="flex items-center gap-2">
+                    <User className="h-4 w-4 text-gray-400" />
+                    <span className="text-gray-700">{viewingCronograma.responsavel_nome}</span>
+                  </div>
+                </div>
+              )}
+
+              {/* Organização */}
+              <div>
+                <h3 className="text-sm font-medium text-gray-600 mb-2">Organização</h3>
+                <div className="flex items-center gap-2">
+                  <Building className="h-4 w-4 text-gray-400" />
+                  <span className="text-gray-700 capitalize">
+                    {viewingCronograma.organizacao?.replace('_', ' ')}
+                  </span>
+                </div>
+              </div>
+
+              {/* Motivo do Atraso */}
+              {viewingCronograma.motivo_atraso && (
+                <div>
+                  <h3 className="text-sm font-medium text-gray-600 mb-2">Motivo do Atraso</h3>
+                  <div className="bg-red-50 border border-red-200 p-3 rounded-lg">
+                    <div className="flex items-center gap-2 mb-2">
+                      <AlertTriangle className="h-4 w-4 text-red-500" />
+                      <span className="text-sm font-medium text-red-700">Atraso Identificado</span>
+                    </div>
+                    <p className="text-red-700 text-sm leading-relaxed">
+                      {viewingCronograma.motivo_atraso}
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {/* Observações */}
+              {viewingCronograma.observacoes && (
+                <div>
+                  <h3 className="text-sm font-medium text-gray-600 mb-2">Observações</h3>
+                  <p className="text-gray-700 bg-gray-50 p-3 rounded-lg text-sm leading-relaxed">
+                    {viewingCronograma.observacoes}
+                  </p>
+                </div>
+              )}
+
+              {/* Ações */}
+              <div className="flex justify-end gap-3 pt-4 border-t">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setViewingCronograma(null);
+                    setIsViewDialogOpen(false);
+                  }}
+                >
+                  Fechar
+                </Button>
+                <Button
+                  onClick={() => {
+                    setViewingCronograma(null);
+                    setIsViewDialogOpen(false);
+                    setEditingCronograma(viewingCronograma);
+                    setIsEditDialogOpen(true);
+                  }}
+                >
+                  <Edit className="h-4 w-4 mr-2" />
+                  Editar
+                </Button>
+              </div>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
 
