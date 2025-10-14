@@ -6,7 +6,23 @@ const fs = require('fs');
 exports.uploadAnexo = async (req, res) => {
   let pool, server;
   try {
+    console.log('🔍 Debug - Upload request recebido:', {
+      params: req.params,
+      file: req.file ? {
+        fieldname: req.file.fieldname,
+        originalname: req.file.originalname,
+        encoding: req.file.encoding,
+        mimetype: req.file.mimetype,
+        size: req.file.size
+      } : null,
+      headers: {
+        'x-user-organization': req.headers['x-user-organization'],
+        'x-user-id': req.headers['x-user-id']
+      }
+    });
+
     if (!req.file) {
+      console.error('❌ Nenhum arquivo recebido na requisição');
       return res.status(400).json({ error: 'Nenhum arquivo enviado' });
     }
 

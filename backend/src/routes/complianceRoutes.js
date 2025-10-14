@@ -13,9 +13,17 @@ const upload = multer({
   },
   fileFilter: (req, file, cb) => {
     // Permitir qualquer tipo de arquivo - apenas verificar se é um arquivo válido
-    if (file && file.originalname && file.size > 0) {
+    console.log('🔍 Debug - Arquivo recebido no multer:', {
+      fieldname: file.fieldname,
+      originalname: file.originalname,
+      encoding: file.encoding,
+      mimetype: file.mimetype
+    });
+    
+    if (file && file.originalname) {
       cb(null, true);
     } else {
+      console.error('❌ Arquivo inválido recebido:', file);
       cb(new Error('Arquivo inválido. Verifique se o arquivo não está corrompido.'), false);
     }
   }
@@ -42,6 +50,16 @@ router.post('/competencias', complianceController.createCompetencia);
 // Upload de anexo
 router.post('/competencias/:complianceId/anexos/:tipoAnexo', 
   upload.single('anexo'), 
+  (err, req, res, next) => {
+    if (err) {
+      console.error('❌ Erro no multer:', err.message);
+      return res.status(400).json({ 
+        error: 'Erro no upload do arquivo', 
+        details: err.message 
+      });
+    }
+    next();
+  },
   anexosController.uploadAnexo
 );
 
