@@ -1376,8 +1376,8 @@ export default function Compliance() {
   // Função para criar nova competência
   // Função para iniciar criação de nova competência (modo rascunho)
   const createCompetencia = () => {
-    // Limpar estado dos cards
-    setComplianceItems(initializeComplianceItems());
+    // Reinicializar cards com status pendente
+    resetComplianceItemsToPending();
     
     // Limpar competência atual
     setSelectedCompetencia(null);
@@ -1392,6 +1392,23 @@ export default function Compliance() {
       description: "Preencha pelo menos um campo e salve para criar a competência.",
       variant: "default",
     });
+  };
+
+  // Função auxiliar para reinicializar cards com status pendente
+  const resetComplianceItemsToPending = () => {
+    // Limpar estado salvo do localStorage
+    localStorage.removeItem('compliance_cards_state');
+    
+    // Reinicializar cards com status pendente
+    setComplianceItems([
+      { id: '1', title: 'Competência Período', description: 'Informe o período fiscal referente à competência.', status: 'pendente', isExpanded: false },
+      { id: '2', title: 'Relatório Técnico', description: 'Análise fiscal inicial com pendências, cronograma e parecer sobre as compensações.', status: 'pendente', isExpanded: false },
+      { id: '3', title: 'Relatório Faturamento', description: 'Comprovação mensal das compensações: faturamento, notas e impostos pagos.', status: 'pendente', isExpanded: false },
+      { id: '4', title: 'Comprovação de Compensações', description: 'Documentos que comprovam compensações realizadas e seus valores.', status: 'pendente', isExpanded: false },
+      { id: '6', title: 'Comprovação de Email', description: 'Evidências de comunicação por e-mail durante o período fiscal.', status: 'pendente', isExpanded: false },
+      { id: '7', title: 'Notas Fiscais Enviadas', description: 'Notas fiscais e comprovantes emitidos no período da competência.', status: 'pendente', isExpanded: false },
+      { id: '8', title: 'Parecer Final', description: 'Parecer gerado pela IA.', status: 'pendente', isExpanded: false }
+    ]);
   };
 
   // Função para criar competência quando há dados para salvar
@@ -1780,6 +1797,9 @@ export default function Compliance() {
       setCurrentCompetenciaId(novaCompetencia.id.toString());
       setSelectedCompetencia(novaCompetencia);
       
+      // Reinicializar cards com status pendente
+      resetComplianceItemsToPending();
+      
       // Mudar para modo de visualização
       setCurrentView('view');
       
@@ -1834,6 +1854,9 @@ export default function Compliance() {
       // Definir a nova competência como atual
       setCurrentCompetenciaId(novaCompetencia.id.toString());
       setSelectedCompetencia(novaCompetencia);
+      
+      // Reinicializar cards com status pendente
+      resetComplianceItemsToPending();
       
       // Mudar para modo de visualização
       setCurrentView('view');
