@@ -1053,10 +1053,9 @@ export default function Compliance() {
             case '1': // Competência Período
               // Usar os novos campos separados
               if (competencia.competencia_inicio || competencia.competencia_fim) {
-                const dataInicio = competencia.competencia_inicio ? 
-                  new Date(competencia.competencia_inicio).toISOString().split('T')[0] : '';
-                const dataFim = competencia.competencia_fim ? 
-                  new Date(competencia.competencia_fim).toISOString().split('T')[0] : '';
+                // Converter as datas do backend (formato YYYY-MM-DD) diretamente, sem usar new Date()
+                const dataInicio = competencia.competencia_inicio || '';
+                const dataFim = competencia.competencia_fim || '';
                 
                 if (dataInicio && dataFim) {
                   // Período completo
@@ -1070,8 +1069,10 @@ export default function Compliance() {
               }
               // Fallback para competencia_referencia (compatibilidade)
               else if (competencia.competencia_referencia) {
-                const dataISO = new Date(competencia.competencia_referencia);
-                const dataFormatada = dataISO.toISOString().split('T')[0];
+                // Se competencia_referencia já está no formato YYYY-MM-DD, usar diretamente
+                const dataFormatada = competencia.competencia_referencia.includes('-') 
+                  ? competencia.competencia_referencia 
+                  : new Date(competencia.competencia_referencia).toISOString().split('T')[0];
                 updatedItem.data = dataFormatada;
                 setCompetenciaData(dataFormatada);
               }
@@ -1930,9 +1931,9 @@ export default function Compliance() {
                       // Priorizar os novos campos separados
                       if (competencia.competencia_inicio || competencia.competencia_fim) {
                         const dataInicio = competencia.competencia_inicio ? 
-                          new Date(competencia.competencia_inicio).toLocaleDateString('pt-BR') : '';
+                          formatDateBR(competencia.competencia_inicio) : '';
                         const dataFim = competencia.competencia_fim ? 
-                          new Date(competencia.competencia_fim).toLocaleDateString('pt-BR') : '';
+                          formatDateBR(competencia.competencia_fim) : '';
                         
                         if (dataInicio && dataFim) {
                           return `Competência Período (${dataInicio} - ${dataFim})`;

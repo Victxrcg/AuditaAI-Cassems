@@ -3,6 +3,18 @@ export const formatDateBR = (dateString: string): string => {
   if (!dateString) return '';
   
   try {
+    // Se já está no formato DD/MM/YYYY, retornar como está
+    if (dateString.includes('/')) {
+      return dateString;
+    }
+    
+    // Se está no formato YYYY-MM-DD, converter sem usar new Date() para evitar problemas de fuso horário
+    if (dateString.includes('-')) {
+      const [year, month, day] = dateString.split('-');
+      return `${day}/${month}/${year}`;
+    }
+    
+    // Para outros formatos, usar new Date() como fallback
     const date = new Date(dateString);
     return date.toLocaleDateString('pt-BR');
   } catch (error) {
