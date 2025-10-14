@@ -132,7 +132,7 @@ const darkenColor = (hex: string) => {
 };
 
 // Função para verificar se uma etapa pode ser acessada (fluxo sequencial)
-const canAccessStep = (itemId: string, complianceItems: ComplianceItem[]): boolean => {
+const canAccessStep = async (itemId: string, complianceItems: ComplianceItem[], competenciaId: string | null): Promise<boolean> => {
   const stepOrder = ['1', '2', '3', '4', '6', '7', '8']; // Ordem das etapas
   
   // A primeira etapa sempre pode ser acessada
@@ -147,19 +147,31 @@ const canAccessStep = (itemId: string, complianceItems: ComplianceItem[]): boole
   
   if (!previousStep) return true;
   
-  // Verificar se a etapa anterior tem dados preenchidos OU anexos
+  // Verificar se a etapa anterior tem dados preenchidos
   const hasData = Boolean(
     (previousStep.data && previousStep.data.trim()) ||
     (previousStep.valor && previousStep.valor.trim()) ||
     (previousStep.observacoes && previousStep.observacoes.trim())
   );
   
-  const hasAnexos = Boolean(
-    previousStep.anexos && previousStep.anexos.length > 0
-  );
+  // Verificar se há anexos no banco de dados para a etapa anterior
+  let hasAnexos = false;
+  if (competenciaId) {
+    try {
+      const tipoAnexo = getTipoAnexoFromItemId(previousStepId);
+      const anexosData = await listAnexos(competenciaId);
+      const filteredAnexos = anexosData.filter(anexo => anexo.tipo_anexo === tipoAnexo);
+      hasAnexos = filteredAnexos.length > 0;
+      console.log(`🔍 Verificando anexos para ${previousStepId}: ${filteredAnexos.length} anexos encontrados`);
+    } catch (error) {
+      console.error('Erro ao verificar anexos:', error);
+    }
+  }
   
   // A etapa anterior está completa se tem dados OU anexos
-  return hasData || hasAnexos;
+  const canAccess = hasData || hasAnexos;
+  console.log(`🔍 canAccessStep ${itemId}: hasData=${hasData}, hasAnexos=${hasAnexos}, canAccess=${canAccess}`);
+  return canAccess;
 };
 
 // Mover as funções para FORA do componente principal
@@ -285,26 +297,37 @@ const ComplianceItemCard = memo(({
 }) => {
   const [uploading, setUploading] = useState(false);
   const [anexos, setAnexos] = useState<Anexo[]>(item.anexos || []);
+  const [canAccess, setCanAccess] = useState(true);
 
   // Verificar se esta etapa pode ser acessada
-  const canAccess = canAccessStep(item.id, complianceItems);
-
-  // Carregar anexos quando o componente monta
   useEffect(() => {
-    const loadAnexos = async () => {
+    const checkAccess = async () => {
+      const access = await canAccessStep(item.id, complianceItems, currentCompetenciaId);
+      setCanAccess(access);
+    };
+    checkAccess();
+  }, [item.id, complianceItems, currentCompetenciaId]);
+
+  // Carregar anexos quando o componente monta e verificar acesso
+  useEffect(() => {
+    const loadAnexosAndCheckAccess = async () => {
       if (currentCompetenciaId) {
         try {
           const tipoAnexo = getTipoAnexoFromItemId(item.id);
           const anexosData = await listAnexos(currentCompetenciaId);
           const filteredAnexos = anexosData.filter(anexo => anexo.tipo_anexo === tipoAnexo);
           setAnexos(filteredAnexos);
+          
+          // Verificar acesso novamente após carregar anexos
+          const access = await canAccessStep(item.id, complianceItems, currentCompetenciaId);
+          setCanAccess(access);
         } catch (error) {
           console.error('Erro ao carregar anexos:', error);
         }
       }
     };
-    loadAnexos();
-  }, [currentCompetenciaId, item.id]);
+    loadAnexosAndCheckAccess();
+  }, [currentCompetenciaId, item.id, complianceItems]);
 
   const handleFileUpload = async (file: File) => {
     if (!currentCompetenciaId) {
@@ -326,6 +349,10 @@ const ComplianceItemCard = memo(({
       const anexosData = await listAnexos(currentCompetenciaId);
       const filteredAnexos = anexosData.filter(anexo => anexo.tipo_anexo === tipoAnexo);
       setAnexos(filteredAnexos);
+
+      // Verificar acesso novamente após upload (para liberar próximas etapas)
+      const access = await canAccessStep(item.id, complianceItems, currentCompetenciaId);
+      setCanAccess(access);
 
       onFileUpload(item.id, file);
       console.log('Arquivo carregado com sucesso:', file.name);

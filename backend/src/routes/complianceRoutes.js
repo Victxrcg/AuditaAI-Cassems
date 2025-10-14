@@ -76,7 +76,7 @@ router.get('/competencias/:complianceId/anexos/:tipoAnexo', anexosController.get
 router.delete('/anexos/:anexoId', anexosController.removeAnexo);
 
 // Gerar parecer com IA
-router.post('/competencias/:id/gerar-parecer', complianceController.gerarParecer);
+router.post('/competencias/:id/gerar-parecer', complianceController.generateParecer);
 
 // Obter histórico de alterações de uma competência
 router.get('/competencias/:id/historico', complianceController.getHistorico); // ← NOVA ROTA
