@@ -9,25 +9,14 @@ const router = express.Router();
 const upload = multer({
   dest: 'uploads/',
   limits: {
-    fileSize: 10 * 1024 * 1024 // 10MB
+    fileSize: 50 * 1024 * 1024 // 50MB - Aumentado para suportar mais tipos de arquivo
   },
   fileFilter: (req, file, cb) => {
-    // Permitir apenas arquivos de documentos
-    const allowedTypes = [
-      'application/pdf',
-      'application/msword',
-      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-      'application/vnd.ms-excel',
-      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-      'text/plain',
-      'image/jpeg',
-      'image/png'
-    ];
-    
-    if (allowedTypes.includes(file.mimetype)) {
+    // Permitir qualquer tipo de arquivo - apenas verificar se é um arquivo válido
+    if (file && file.originalname && file.size > 0) {
       cb(null, true);
     } else {
-      cb(new Error('Tipo de arquivo não permitido'), false);
+      cb(new Error('Arquivo inválido. Verifique se o arquivo não está corrompido.'), false);
     }
   }
 });

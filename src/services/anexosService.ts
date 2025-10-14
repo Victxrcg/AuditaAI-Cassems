@@ -108,20 +108,10 @@ export const formatFileSize = (bytes: number): string => {
   return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
 };
 
-// Validar tipo de arquivo
+// Validar tipo de arquivo - Permitir qualquer tipo de arquivo
 export const validateFileType = (file: File): boolean => {
-  const allowedTypes = [
-    'application/pdf',
-    'application/msword',
-    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-    'application/vnd.ms-excel',
-    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-    'text/plain',
-    'image/jpeg',
-    'image/png'
-  ];
-  
-  return allowedTypes.includes(file.type);
+  // Permitir qualquer tipo de arquivo, apenas verificar se é um arquivo válido
+  return file && file.name && file.size > 0;
 };
 
 // Obter ícone do arquivo baseado no tipo
@@ -142,13 +132,32 @@ export const getFileIcon = (filename: string | undefined): string => {
     case 'xls':
     case 'xlsx':
       return '';
+    case 'csv':
+      return ''; // Ícone para CSV
     case 'jpg':
     case 'jpeg':
     case 'png':
+    case 'gif':
+    case 'bmp':
+    case 'webp':
       return '';
     case 'txt':
+    case 'rtf':
       return '';
+    case 'zip':
+    case 'rar':
+    case '7z':
+      return ''; // Ícone para arquivos compactados
+    case 'mp4':
+    case 'avi':
+    case 'mov':
+    case 'wmv':
+      return ''; // Ícone para vídeos
+    case 'mp3':
+    case 'wav':
+    case 'flac':
+      return ''; // Ícone para áudios
     default:
-      return '';
+      return ''; // Ícone genérico para qualquer arquivo
   }
 };

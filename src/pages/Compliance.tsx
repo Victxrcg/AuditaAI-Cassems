@@ -308,7 +308,7 @@ const ComplianceItemCard = memo(({
     }
 
     if (!validateFileType(file)) {
-      alert('Tipo de arquivo não permitido. Use PDF, DOC, DOCX, XLS, XLSX, TXT, JPG ou PNG.');
+      alert('Arquivo inválido. Verifique se o arquivo não está corrompido.');
       return;
     }
 
@@ -740,7 +740,7 @@ const ComplianceItemCard = memo(({
               <Input
                 id={`anexo-${item.id}`}
                 type="file"
-                accept=".pdf,.doc,.docx,.xlsx,.xls,.txt,.jpg,.jpeg,.png"
+                accept="*/*"
                 onChange={(e) => {
                   const file = e.target.files?.[0];
                   if (file) handleFileUpload(file);
