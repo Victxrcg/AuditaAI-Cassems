@@ -76,6 +76,8 @@ interface Competencia {
   created_by_cor?: string;
   competencia_formatada?: string;
   competencia_referencia?: string;
+  competencia_inicio?: string; // Novo campo para data de início
+  competencia_fim?: string; // Novo campo para data de fim
   parecer_texto?: string;
   // Adicionar propriedades para última alteração
   ultima_alteracao_por?: string;
@@ -1456,6 +1458,13 @@ export default function Compliance() {
   // Função para atualizar competencia_periodo
   const updateCompetenciaReferencia = async (competenciaId: string, novaData: string) => {
     try {
+      // Se for um período (contém '|'), não salvar no campo competencia_referencia
+      // pois esse campo é DATE e não aceita períodos
+      if (novaData.includes('|')) {
+        console.log('🔍 Período detectado, não atualizando competencia_referencia (campo DATE não suporta períodos)');
+        return;
+      }
+
       // Obter usuário atual do localStorage
       const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
       if (!currentUser.id) {
@@ -2079,7 +2088,7 @@ export default function Compliance() {
       <div className="flex justify-between items-center mb-6">
         <div>
           <h2 className="text-2xl font-bold text-gray-900">
-            Competência {competenciaData}
+            Competência
           </h2>
           <p className="text-gray-600">
             Preencha os campos abaixo para gerar o parecer de compliance

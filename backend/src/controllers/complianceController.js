@@ -265,7 +265,13 @@ exports.updateField = async (req, res) => {
     await pool.query(updateQuery, updateParams);
 
     // Registrar alteração no histórico
-    await registrarAlteracao(pool, id, field, valorAnterior, value, userId, userOrg);
+    try {
+      await registrarAlteracao(pool, id, field, valorAnterior, value, userId, userOrg);
+      console.log('✅ Histórico registrado com sucesso');
+    } catch (histError) {
+      console.error('❌ Erro ao registrar histórico (continuando):', histError.message);
+      // Não falhar a operação principal por causa do histórico
+    }
 
     res.json({
       success: true,
@@ -395,7 +401,13 @@ exports.updateComplianceField = async (req, res) => {
     await pool.query(query, params);
     
     // Registrar no histórico
-    await registrarAlteracao(pool, id, field, valorAnterior, value, user_id, userOrg);
+    try {
+      await registrarAlteracao(pool, id, field, valorAnterior, value, user_id, userOrg);
+      console.log('✅ Histórico registrado com sucesso');
+    } catch (histError) {
+      console.error('❌ Erro ao registrar histórico (continuando):', histError.message);
+      // Não falhar a operação principal por causa do histórico
+    }
 
     res.json({
       success: true,
