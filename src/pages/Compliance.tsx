@@ -332,10 +332,44 @@ const ComplianceItemCard = memo(({
 
   const handleFileUpload = async (file: File) => {
     if (!currentCompetenciaId) {
-      alert('Nenhuma competência selecionada');
-      return;
+      alert('Nenhuma competência selecionada. Criando nova competência...');
+      
+      // Criar competência automaticamente ao fazer upload
+      const competenciaData = {
+        competencia_referencia: new Date().toISOString().split('T')[0]
+      };
+      
+      try {
+        const novaCompetencia = await createCompetenciaWithData(competenciaData);
+        
+        if (!novaCompetencia) {
+          alert('Erro ao criar nova competência.');
+          return;
+        }
+        
+        // Definir a nova competência como atual
+        setCurrentCompetenciaId(novaCompetencia.id.toString());
+        setSelectedCompetencia(novaCompetencia);
+        
+        // Mudar para modo de visualização
+        setCurrentView('view');
+        
+        console.log('✅ Nova competência criada via upload:', novaCompetencia.id);
+        
+        // Continuar com o upload
+        await processarUpload(file, novaCompetencia.id.toString());
+        
+      } catch (error) {
+        console.error('Erro ao criar competência:', error);
+        alert('Erro ao criar competência para upload.');
+        return;
+      }
+    } else {
+      await processarUpload(file, currentCompetenciaId);
     }
+  };
 
+  const processarUpload = async (file: File, competenciaId: string) => {
     if (!validateFileType(file)) {
       alert('Arquivo inválido. Verifique se o arquivo não está corrompido.');
       return;
@@ -344,15 +378,15 @@ const ComplianceItemCard = memo(({
     try {
       setUploading(true);
       const tipoAnexo = getTipoAnexoFromItemId(item.id);
-      const novoAnexo = await uploadAnexo(currentCompetenciaId, tipoAnexo, file);
+      const novoAnexo = await uploadAnexo(competenciaId, tipoAnexo, file);
 
       // Recarregar anexos do servidor para garantir sincronização
-      const anexosData = await listAnexos(currentCompetenciaId);
+      const anexosData = await listAnexos(competenciaId);
       const filteredAnexos = anexosData.filter(anexo => anexo.tipo_anexo === tipoAnexo);
       setAnexos(filteredAnexos);
 
       // Verificar acesso novamente após upload (para liberar próximas etapas)
-      const access = await canAccessStep(item.id, complianceItems, currentCompetenciaId);
+      const access = await canAccessStep(item.id, complianceItems, competenciaId);
       setCanAccess(access);
 
       onFileUpload(item.id, file);
@@ -1323,37 +1357,48 @@ export default function Compliance() {
   };
 
   // Função para criar nova competência
-  const createCompetencia = async () => {
+  // Função para iniciar criação de nova competência (modo rascunho)
+  const createCompetencia = () => {
+    // Limpar estado dos cards
+    setComplianceItems(initializeComplianceItems());
+    
+    // Limpar competência atual
+    setSelectedCompetencia(null);
+    setCurrentCompetenciaId(null);
+    
+    // Mudar para modo de criação
+    setCurrentView('create');
+    
+    // Mostrar notificação informativa
+    toast({
+      title: "Modo de Criação",
+      description: "Preencha pelo menos um campo e salve para criar a competência.",
+      variant: "default",
+    });
+  };
+
+  // Função para criar competência quando há dados para salvar
+  const createCompetenciaWithData = async (competenciaData) => {
     try {
       setLoading(true);
-      const competencia_referencia = new Date().toISOString().split('T')[0];
       
       // Obter ID do usuário logado do localStorage
       const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
       const created_by = currentUser.id;
       
-      console.log('🔍 currentUser para criação:', currentUser);
-      console.log('🔍 organizacao:', currentUser.organizacao);
-      console.log('🔍 created_by:', created_by);
-      console.log('🔍 typeof created_by:', typeof created_by);
-
       if (!created_by) {
         console.error('❌ Erro: created_by é undefined ou null');
         setError('Usuário não encontrado. Faça login novamente.');
-        return;
+        return null;
       }
 
       if (!currentUser.organizacao) {
         console.error('❌ Erro: organizacao é undefined ou null');
         setError('Organização do usuário não encontrada. Faça login novamente.');
-        return;
+        return null;
       }
 
-      console.log('🔍 Criando nova competência:', { 
-        competencia_referencia, 
-        created_by, 
-        organizacao_criacao: currentUser.organizacao 
-      });
+      console.log('🔍 Criando competência com dados:', competenciaData);
 
       const response = await fetch(`${API_BASE}/compliance/competencias`, {
         method: 'POST',
@@ -1362,42 +1407,26 @@ export default function Compliance() {
           'x-user-organization': currentUser.organizacao || 'cassems'
         },
         body: JSON.stringify({ 
-          competencia_referencia, 
+          ...competenciaData,
           created_by,
           organizacao_criacao: currentUser.organizacao || 'cassems'
         }),
       });
 
-      console.log('🔍 Status da resposta:', response.status);
-      console.log('🔍 Headers da resposta:', response.headers);
-      
       const data = await response.json();
-      console.log('🔍 Dados da resposta:', data);
 
       if (data.success) {
-        console.log('✅ Competência criada:', data.data);
-        setCurrentCompetenciaId(data.data.id.toString());
-        setCurrentView('create');
-        setComplianceItems(prev => prev.map(item => ({
-          ...item,
-          valor: '',
-          data: '',
-          observacoes: '',
-          anexos: [],
-          status: 'pendente',
-          lastUpdated: undefined,
-          updatedBy: undefined,
-          isExpanded: true
-        })));
-        // REMOVER esta linha: loadComplianceData(data.data.id.toString());
+        console.log('✅ Competência criada com sucesso:', data.data);
+        return data.data;
       } else {
         console.error('❌ Erro ao criar competência:', data.error);
-        console.error('❌ Detalhes do erro:', data.details);
         setError(data.error || 'Erro ao criar competência');
+        return null;
       }
     } catch (err) {
       console.error('❌ Erro na requisição:', err);
       setError('Erro ao criar competência');
+      return null;
     } finally {
       setLoading(false);
     }
@@ -1740,10 +1769,30 @@ export default function Compliance() {
     const item = complianceItems.find(item => item.id === id);
     if (!item) return;
 
-    // Verificar se há uma competência selecionada
+    // Se não há competência selecionada, criar uma nova
     if (!currentCompetenciaId) {
-      setError('Nenhuma competência selecionada. Clique em "Nova Competência" primeiro.');
-      return;
+      console.log('🔍 Nenhuma competência selecionada, criando nova...');
+      
+      // Criar competência com data atual como referência
+      const competenciaData = {
+        competencia_referencia: new Date().toISOString().split('T')[0]
+      };
+      
+      const novaCompetencia = await createCompetenciaWithData(competenciaData);
+      
+      if (!novaCompetencia) {
+        setError('Erro ao criar nova competência.');
+        return;
+      }
+      
+      // Definir a nova competência como atual
+      setCurrentCompetenciaId(novaCompetencia.id.toString());
+      setSelectedCompetencia(novaCompetencia);
+      
+      // Mudar para modo de visualização
+      setCurrentView('view');
+      
+      console.log('✅ Nova competência criada:', novaCompetencia.id);
     }
 
     // Obter usuário atual do localStorage
