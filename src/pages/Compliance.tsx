@@ -147,14 +147,19 @@ const canAccessStep = (itemId: string, complianceItems: ComplianceItem[]): boole
   
   if (!previousStep) return true;
   
-  // Verificar se a etapa anterior tem dados preenchidos
+  // Verificar se a etapa anterior tem dados preenchidos OU anexos
   const hasData = Boolean(
     (previousStep.data && previousStep.data.trim()) ||
     (previousStep.valor && previousStep.valor.trim()) ||
     (previousStep.observacoes && previousStep.observacoes.trim())
   );
   
-  return hasData;
+  const hasAnexos = Boolean(
+    previousStep.anexos && previousStep.anexos.length > 0
+  );
+  
+  // A etapa anterior está completa se tem dados OU anexos
+  return hasData || hasAnexos;
 };
 
 // Mover as funções para FORA do componente principal
