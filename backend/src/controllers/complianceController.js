@@ -30,6 +30,10 @@ const registrarAlteracao = async (pool, complianceId, campo, valorAnterior, valo
     let valorNovoTratado = valorNovo;
     
     if (campo === 'parecer_texto') {
+      // Se já foi salvo com conteúdo completo, não salvar novamente
+      if (valorNovo && valorNovo.length > 100) {
+        return;
+      }
       valorAnteriorTratado = valorAnterior ? '[Parecer anterior existente]' : '[Nenhum parecer anterior]';
       valorNovoTratado = '[Parecer técnico gerado com IA]';
     }

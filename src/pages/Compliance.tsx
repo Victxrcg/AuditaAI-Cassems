@@ -818,16 +818,21 @@ const saveCardsState = (items: ComplianceItem[]) => {
 };
 
 // Função para carregar estado dos cards do localStorage
-const loadCardsState = (): Partial<ComplianceItem>[] => {
+const loadCardsState = (): Record<string, any> => {
   try {
     const savedState = localStorage.getItem('compliance-cards-state');
     if (savedState) {
-      return JSON.parse(savedState);
+      const parsedState = JSON.parse(savedState);
+      const stateMap: Record<string, any> = {};
+      parsedState.forEach((item: any) => {
+        stateMap[item.id] = item;
+      });
+      return stateMap;
     }
   } catch (error) {
     console.error('Erro ao carregar estado dos cards:', error);
   }
-  return [];
+  return {};
 };
 
 // Função para inicializar complianceItems com estado salvo
@@ -1233,8 +1238,25 @@ export default function Compliance() {
             // Se o item está concluído, manter fechado (isExpanded = false)
             updatedItem.isExpanded = false;
           } else {
+            updatedItem.status = 'pendente';
             // Se o item não tem dados, manter expandido para facilitar preenchimento
             updatedItem.isExpanded = true;
+          }
+          
+          // IMPORTANTE: Preservar o estado de expansão dos cards que já estavam fechados
+          // Carregar estado salvo do localStorage
+          const savedState = loadCardsState();
+          const savedItemState = savedState[updatedItem.id];
+          
+          if (savedItemState) {
+            // Se há estado salvo, usar o estado salvo para isExpanded
+            updatedItem.isExpanded = savedItemState.isExpanded;
+          } else {
+            // Se não há estado salvo, usar a lógica padrão
+            const currentItem = complianceItems.find(current => current.id === updatedItem.id);
+            if (currentItem && currentItem.isExpanded === false) {
+              updatedItem.isExpanded = false;
+            }
           }
 
           return updatedItem;
