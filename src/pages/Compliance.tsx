@@ -5,6 +5,7 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
+import { Skeleton } from '@/components/ui/skeleton';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -331,40 +332,16 @@ const ComplianceItemCard = memo(({
   }, [currentCompetenciaId, item.id, complianceItems]);
 
   const handleFileUpload = async (file: File) => {
+    // Verificar se precisa criar competência primeiro
     if (!currentCompetenciaId) {
-      alert('Nenhuma competência selecionada. Criando nova competência...');
-      
-      // Criar competência automaticamente ao fazer upload
-      const competenciaData = {
-        competencia_referencia: new Date().toISOString().split('T')[0]
-      };
-      
-      try {
-        const novaCompetencia = await createCompetenciaWithData(competenciaData);
-        
-        if (!novaCompetencia) {
-          alert('Erro ao criar nova competência.');
-          return;
-        }
-        
-        // Definir a nova competência como atual
-        setCurrentCompetenciaId(novaCompetencia.id.toString());
-        setSelectedCompetencia(novaCompetencia);
-        
-        // Mudar para modo de visualização
-        setCurrentView('view');
-        
-        console.log('✅ Nova competência criada via upload:', novaCompetencia.id);
-        
-        // Continuar com o upload
-        await processarUpload(file, novaCompetencia.id.toString());
-        
-      } catch (error) {
-        console.error('Erro ao criar competência:', error);
-        alert('Erro ao criar competência para upload.');
-        return;
+      // Chamar função do pai para criar competência
+      await onFileUpload(item.id, file);
+      // Após criar, usar a competência atual
+      if (currentCompetenciaId) {
+        await processarUpload(file, currentCompetenciaId);
       }
     } else {
+      // Se já existe competência, fazer upload diretamente
       await processarUpload(file, currentCompetenciaId);
     }
   };
@@ -906,13 +883,14 @@ const loadCardsState = (): Record<string, any> => {
 // Função para inicializar complianceItems com estado salvo
 const initializeComplianceItems = (): ComplianceItem[] => {
   const defaultItems: ComplianceItem[] = [
-    { id: '1', title: 'Competência Período', description: 'Período da competência fiscal', status: 'pendente', isExpanded: false },
-    { id: '2', title: 'Relatório Técnico', description: 'Relatório técnico entregue no início do trabalho, antes das compensações. Anexe: análise da situação fiscal atual, levantamento de pendências, cronograma de regularizações e parecer técnico sobre a viabilidade das compensações.', status: 'pendente', isExpanded: false },
-    { id: '3', title: 'Relatório Faturamento', description: 'Relatório mensal entregue a partir do momento que houve as compensações para comprovar essas compensações. Anexe: demonstrativo de faturamento mensal, notas fiscais, comprovantes de pagamento de impostos e documentos que validem as compensações realizadas.', status: 'pendente', isExpanded: false },
-    { id: '4', title: 'Comprovação de Compensações', description: 'Documentos que comprovam as compensações de impostos realizadas. Anexe: demonstrativos de compensação, declarações de débitos e créditos tributários (DCTF), comprovantes de compensação, extratos bancários das compensações e relatórios de conferência dos valores compensados.', status: 'pendente', isExpanded: false },
-    { id: '6', title: 'Comprovação de Email', description: 'Emails enviados no período da competência para comprovar a comunicação durante o processo. Anexe: print screens dos emails enviados, comprovantes de envio, respostas recebidas, threads de conversa com órgãos competentes e qualquer correspondência eletrônica relacionada ao período da competência.', status: 'pendente', isExpanded: false },
-    { id: '7', title: 'Notas Fiscais Enviadas', description: 'Notas fiscais emitidas e enviadas durante o período da competência. Anexe: notas fiscais de saída, notas fiscais de entrada, comprovantes de envio das notas fiscais, XMLs das notas fiscais, relatórios de emissão de notas fiscais e qualquer documentação fiscal relacionada ao período da competência.', status: 'pendente', isExpanded: false },
-    { id: '8', title: 'Parecer Final', description: 'Parecer gerado pela IA', status: 'pendente', isExpanded: false }
+    { id: '1', title: 'Competência Período', description: 'Informe o período fiscal referente à competência.', status: 'pendente', isExpanded: false },
+    { id: '2', title: 'Relatório Técnico', description: 'Análise fiscal inicial com pendências, cronograma e parecer sobre as compensações.', status: 'pendente', isExpanded: false },
+    { id: '3', title: 'Relatório Faturamento', description: 'Comprovação mensal das compensações: faturamento, notas e impostos pagos.', status: 'pendente', isExpanded: false },
+    { id: '4', title: 'Comprovação de Compensações', description: 'Documentos que comprovam compensações realizadas e seus valores.', status: 'pendente', isExpanded: false },
+    { id: '6', title: 'Comprovação de Email', description: 'Evidências de comunicação por e-mail durante o período fiscal.', status: 'pendente', isExpanded: false },
+    { id: '7', title: 'Notas Fiscais Enviadas', description: 'Notas fiscais e comprovantes emitidos no período da competência.', status: 'pendente', isExpanded: false },
+    { id: '8', title: 'Parecer Final', description: 'Parecer gerado pela IA.', status: 'pendente', isExpanded: false }
+    
   ];
 
   const savedState = loadCardsState();
@@ -932,6 +910,41 @@ const initializeComplianceItems = (): ComplianceItem[] => {
     return item;
   });
 };
+
+// Componente de Skeleton Loading para Compliance Items
+const ComplianceItemSkeleton = () => (
+  <Card className="w-full">
+    <CardHeader>
+      <div className="flex items-center justify-between">
+        <div className="space-y-2">
+          <Skeleton className="h-6 w-48" />
+          <Skeleton className="h-4 w-96" />
+        </div>
+        <Skeleton className="h-8 w-20" />
+      </div>
+    </CardHeader>
+    <CardContent>
+      <div className="space-y-4">
+        <div className="space-y-2">
+          <Skeleton className="h-4 w-24" />
+          <Skeleton className="h-10 w-full" />
+        </div>
+        <div className="space-y-2">
+          <Skeleton className="h-4 w-32" />
+          <Skeleton className="h-10 w-full" />
+        </div>
+        <div className="space-y-2">
+          <Skeleton className="h-4 w-28" />
+          <Skeleton className="h-20 w-full" />
+        </div>
+        <div className="flex gap-2">
+          <Skeleton className="h-10 w-24" />
+          <Skeleton className="h-10 w-20" />
+        </div>
+      </div>
+    </CardContent>
+  </Card>
+);
 
 // Componente para exibir histórico de alterações
 const HistoricoAlteracoes = ({ historico, loading }: { historico: HistoricoAlteracao[], loading: boolean }) => {
@@ -1016,6 +1029,7 @@ export default function Compliance() {
   const [currentView, setCurrentView] = useState<'list' | 'create' | 'view'>('list');
   const [selectedCompetencia, setSelectedCompetencia] = useState<Competencia | null>(null);
   const [loading, setLoading] = useState(false);
+  const [loadingCompetencia, setLoadingCompetencia] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   // Estado para dados reais
@@ -1204,6 +1218,7 @@ export default function Compliance() {
   // Função para carregar dados de compliance de uma competência específica
   const loadComplianceData = async (competenciaId: string) => {
     try {
+      setLoadingCompetencia(true);
       console.log(' Carregando dados de compliance para competência:', competenciaId);
       
       // Limpar estado salvo anterior se for uma competência diferente
@@ -1353,6 +1368,8 @@ export default function Compliance() {
     } catch (err) {
       console.error(' Erro ao carregar dados de compliance:', err);
       setError('Erro ao carregar dados de compliance');
+    } finally {
+      setLoadingCompetencia(false);
     }
   };
 
@@ -1740,10 +1757,39 @@ export default function Compliance() {
     ));
   }, []);
 
-  const handleFileUpload = useCallback((id: string, file: File) => {
+  const handleFileUpload = useCallback(async (id: string, file: File) => {
     console.log(' Arquivo selecionado para item:', id, file.name);
+    
+    // Se não há competência selecionada, criar uma nova
+    if (!currentCompetenciaId) {
+      console.log('🔍 Nenhuma competência selecionada, criando nova via upload...');
+      
+      // Criar competência com data atual como referência
+      const competenciaData = {
+        competencia_referencia: new Date().toISOString().split('T')[0]
+      };
+      
+      const novaCompetencia = await createCompetenciaWithData(competenciaData);
+      
+      if (!novaCompetencia) {
+        console.error('Erro ao criar nova competência para upload.');
+        return null;
+      }
+      
+      // Definir a nova competência como atual
+      setCurrentCompetenciaId(novaCompetencia.id.toString());
+      setSelectedCompetencia(novaCompetencia);
+      
+      // Mudar para modo de visualização
+      setCurrentView('view');
+      
+      console.log('✅ Nova competência criada via upload:', novaCompetencia.id);
+      return novaCompetencia;
+    }
+    
     // O upload real é feito no componente ComplianceItemCard
-  }, []);
+    return null;
+  }, [currentCompetenciaId, createCompetenciaWithData]);
 
   const handleRemoveFile = useCallback((id: string, anexoId: number) => {
     console.log(' Removendo anexo:', id, anexoId);
@@ -2146,7 +2192,22 @@ export default function Compliance() {
 
       {/* Lista de competências em formato vertical */}
       <div className="space-y-3">
-        {Array.isArray(competencias) && competencias.length > 0 ? (
+        {loading ? (
+          <div className="space-y-3">
+            {[1, 2, 3].map((i) => (
+              <div key={i} className="flex items-center justify-between p-4 border border-gray-200 rounded-lg">
+                <div className="flex-1 space-y-2">
+                  <Skeleton className="h-6 w-64" />
+                  <Skeleton className="h-4 w-32" />
+                </div>
+                <div className="flex gap-2">
+                  <Skeleton className="h-10 w-20" />
+                  <Skeleton className="h-10 w-16" />
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : Array.isArray(competencias) && competencias.length > 0 ? (
           competencias.map((competencia) => (
             <div
               key={competencia.id}
@@ -2331,21 +2392,41 @@ export default function Compliance() {
           <Button 
             onClick={() => handleDeleteClick(selectedCompetencia?.id || '')}
             variant="destructive"
-            disabled={loading}
+            disabled={loading || loadingCompetencia}
           >
             <Trash2 className="h-4 w-4 mr-2" />
             Excluir
           </Button>
 
-          <Button onClick={() => setCurrentView('list')} variant="outline">
+          <Button onClick={() => setCurrentView('list')} variant="outline" disabled={loadingCompetencia}>
             <ArrowLeft className="h-4 w-4 mr-2" />
             Voltar
           </Button>
         </div>
       </div>
 
-      <div className="space-y-6">
-        {complianceItems.map((item) => (
+      {loadingCompetencia ? (
+        <div className="space-y-6">
+          <div className="flex items-center justify-center py-8">
+            <div className="text-center space-y-4">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+              <div className="space-y-2">
+                <p className="text-lg font-medium text-gray-900">Carregando Competência</p>
+                <p className="text-sm text-gray-600">Aguarde enquanto carregamos os dados...</p>
+              </div>
+            </div>
+          </div>
+          
+          {/* Skeleton Loading para os cards */}
+          <div className="space-y-6">
+            <ComplianceItemSkeleton />
+            <ComplianceItemSkeleton />
+            <ComplianceItemSkeleton />
+          </div>
+        </div>
+      ) : (
+        <div className="space-y-6">
+          {complianceItems.map((item) => (
           <ComplianceItemCard
             key={item.id}
             item={item}
@@ -2362,10 +2443,13 @@ export default function Compliance() {
             complianceItems={complianceItems}
           />
         ))}
-      </div>
+        </div>
+      )}
 
       {/* Adicionar seção de histórico */}
-      <HistoricoAlteracoes historico={historico} loading={loadingHistorico} />
+      {!loadingCompetencia && (
+        <HistoricoAlteracoes historico={historico} loading={loadingHistorico} />
+      )}
     </div>
   );
 
