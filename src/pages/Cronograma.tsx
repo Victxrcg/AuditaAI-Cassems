@@ -300,10 +300,11 @@ const Cronograma = () => {
 
   const getPrioridadeBadge = (prioridade: string) => {
     const variants = {
-      baixa: { variant: 'secondary', text: 'BAIXA' },
-      media: { variant: 'default', text: 'MÉDIA' },
-      alta: { variant: 'destructive', text: 'ALTA' },
-      critica: { variant: 'destructive', text: 'CRÍTICA' }
+      baixa: { variant: 'priority-baixa', text: 'BAIXA' },
+      media: { variant: 'priority-media', text: 'MÉDIA' },
+      alta: { variant: 'priority-alta', text: 'ALTA' },
+      urgente: { variant: 'priority-urgente', text: 'URGENTE' },
+      critica: { variant: 'priority-urgente', text: 'CRÍTICA' } // Manter compatibilidade
     } as const;
 
     const badgeInfo = variants[prioridade as keyof typeof variants] || variants.baixa;
@@ -317,13 +318,14 @@ const Cronograma = () => {
 
   const getPriorityBadgeInfo = (prioridade: string) => {
     const variants = {
-      baixa: { variant: 'secondary', text: 'BAIXA' },
-      media: { variant: 'default', text: 'MÉDIA' },
-      alta: { variant: 'destructive', text: 'ALTA' },
-      critica: { variant: 'destructive', text: 'CRÍTICA' }
+      baixa: { variant: 'priority-baixa', text: 'BAIXA' },
+      media: { variant: 'priority-media', text: 'MÉDIA' },
+      alta: { variant: 'priority-alta', text: 'ALTA' },
+      urgente: { variant: 'priority-urgente', text: 'URGENTE' },
+      critica: { variant: 'priority-urgente', text: 'CRÍTICA' } // Manter compatibilidade
     } as const;
 
-    return variants[prioridade as keyof typeof variants] || { variant: 'secondary', text: 'BAIXA' };
+    return variants[prioridade as keyof typeof variants] || { variant: 'priority-baixa', text: 'BAIXA' };
   };
 
   const getFaseBadge = (fase: string) => {

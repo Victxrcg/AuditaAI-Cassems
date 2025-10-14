@@ -38,6 +38,16 @@
     --warning: 38 92% 50%;
     --warning-foreground: 0 0% 100%;
 
+    /* Priority colors */
+    --priority-baixa: 142 76% 36%;
+    --priority-baixa-foreground: 0 0% 100%;
+    --priority-media: 45 93% 47%;
+    --priority-media-foreground: 0 0% 100%;
+    --priority-alta: 25 95% 53%;
+    --priority-alta-foreground: 0 0% 100%;
+    --priority-urgente: 0 84% 60%;
+    --priority-urgente-foreground: 0 0% 100%;
+
     --border: 214 32% 91%;
     --input: 214 32% 91%;
     --ring: 217 91% 60%;
@@ -185,6 +195,27 @@
   .sidebar-item:hover {
     background: hsl(var(--sidebar-accent));
     transition: var(--transition-fast);
+  }
+
+  /* Priority badge styles */
+  .priority-baixa {
+    background: hsl(var(--priority-baixa));
+    color: hsl(var(--priority-baixa-foreground));
+  }
+
+  .priority-media {
+    background: hsl(var(--priority-media));
+    color: hsl(var(--priority-media-foreground));
+  }
+
+  .priority-alta {
+    background: hsl(var(--priority-alta));
+    color: hsl(var(--priority-alta-foreground));
+  }
+
+  .priority-urgente {
+    background: hsl(var(--priority-urgente));
+    color: hsl(var(--priority-urgente-foreground));
   }
 
   .metric-card {

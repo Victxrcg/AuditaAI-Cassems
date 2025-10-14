@@ -6,10 +6,9 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { 
-  LayoutDashboard, 
+  Calendar, 
   Users, 
   FileText, 
-  Settings, 
   LogOut, 
   ChevronLeft, 
   ChevronRight,
@@ -76,13 +75,13 @@ const Sidebar = ({ isOpen, onOpenChange }: SidebarProps) => {
   const menuItems = [
     { 
       name: "Cronograma", 
-      icon: LayoutDashboard, 
+      icon: Calendar, 
       path: "/cronograma",
       badge: null
     },
     { 
       name: "Compliance", 
-      icon: ClipboardList, 
+      icon: Shield, 
       path: "/compliance",
       badge: null
     },
@@ -94,7 +93,7 @@ const Sidebar = ({ isOpen, onOpenChange }: SidebarProps) => {
     },
     {
       name: "Usuários",
-      icon: Settings,
+      icon: Users,
       path: "/usuarios",
       badge: null
     }
