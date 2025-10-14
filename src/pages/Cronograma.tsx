@@ -9,6 +9,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
+import ErrorBoundary from '@/components/ErrorBoundary';
 import { 
   Calendar, 
   Plus, 
@@ -587,15 +588,12 @@ const Cronograma = () => {
     return (
       <div className="space-y-6">
         {/* Cabeçalho do Painel */}
-        <div className="bg-white border-b border-gray-200 pb-6">
+        <div className="bg-white border-b border-gray-200 pb-6 rounded-lg">
           <div className="flex items-center justify-between mb-4">
             <div>
               <h1 className="text-2xl font-bold text-gray-900">
-                Painel de Implantação — Rede Frota x Portes
+                Painel de Implantação
               </h1>
-              <p className="text-sm text-gray-600 mt-1">
-                Linha do tempo com títulos expansíveis • Admin (edição)
-              </p>
             </div>
           </div>
 
@@ -619,19 +617,6 @@ const Cronograma = () => {
             </div>
 
             <div className="flex items-center gap-2">
-              <Select value={filtroStatus} onValueChange={setFiltroStatus}>
-                <SelectTrigger className="w-40">
-                  <SelectValue placeholder="Todos status" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="todos">Todos status</SelectItem>
-                  <SelectItem value="pendente">Pendente</SelectItem>
-                  <SelectItem value="em_andamento">Em Andamento</SelectItem>
-                  <SelectItem value="concluido">Concluído</SelectItem>
-                  <SelectItem value="atrasado">Atrasado</SelectItem>
-                </SelectContent>
-              </Select>
-              
               <Button 
                 size="sm" 
                 className="bg-black text-white hover:bg-gray-800"
@@ -1084,7 +1069,8 @@ const Cronograma = () => {
   };
 
   return (
-    <div className="p-6 space-y-6">
+    <ErrorBoundary>
+      <div className="p-6 space-y-6">
       {/* Header */}
       <div className="flex justify-between items-center">
         <div>
@@ -1201,7 +1187,7 @@ const Cronograma = () => {
           <div className="flex gap-4">
             <div className="flex-1">
               <Label htmlFor="status-filter">Status</Label>
-              <Select key={`status-${filtroStatus}`} value={filtroStatus} onValueChange={setFiltroStatus}>
+              <Select key={`status-${viewMode}-${filtroStatus}`} value={filtroStatus} onValueChange={setFiltroStatus}>
                 <SelectTrigger>
                   <SelectValue placeholder="Todos os status" />
                 </SelectTrigger>
@@ -1216,7 +1202,7 @@ const Cronograma = () => {
             </div>
             <div className="flex-1">
               <Label htmlFor="prioridade-filter">Prioridade</Label>
-              <Select key={`prioridade-${filtroPrioridade}`} value={filtroPrioridade} onValueChange={setFiltroPrioridade}>
+              <Select key={`prioridade-${viewMode}-${filtroPrioridade}`} value={filtroPrioridade} onValueChange={setFiltroPrioridade}>
                 <SelectTrigger>
                   <SelectValue placeholder="Todas as prioridades" />
                 </SelectTrigger>
@@ -1232,7 +1218,7 @@ const Cronograma = () => {
             {currentUser?.organizacao === 'portes' && (
               <div className="flex-1">
                 <Label htmlFor="organizacao-filter">Organização</Label>
-                <Select key={`org-${filtroOrganizacao}`} value={filtroOrganizacao} onValueChange={setFiltroOrganizacao}>
+                <Select key={`org-${viewMode}-${filtroOrganizacao}`} value={filtroOrganizacao} onValueChange={setFiltroOrganizacao}>
                   <SelectTrigger>
                     <SelectValue placeholder="Todas as organizações" />
                   </SelectTrigger>
@@ -1601,7 +1587,8 @@ const Cronograma = () => {
           </div>
         </DialogContent>
       </Dialog>
-    </div>
+      </div>
+    </ErrorBoundary>
   );
 };
 
