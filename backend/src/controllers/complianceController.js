@@ -48,7 +48,9 @@ exports.listCompetencias = async (req, res) => {
         cf.organizacao_criacao as created_by_organizacao,
         u.cor_identificacao as created_by_cor,
         u2.nome as ultima_alteracao_por_nome,
-        DATE_FORMAT(cf.competencia_referencia, '%m/%Y') as competencia_formatada
+        DATE_FORMAT(cf.competencia_referencia, '%m/%Y') as competencia_formatada,
+        DATE_FORMAT(cf.competencia_inicio, '%d/%m/%Y') as competencia_inicio_formatada,
+        DATE_FORMAT(cf.competencia_fim, '%d/%m/%Y') as competencia_fim_formatada
       FROM compliance_fiscal cf
       LEFT JOIN usuarios_cassems u ON cf.created_by = u.id
       LEFT JOIN usuarios_cassems u2 ON cf.ultima_alteracao_por = u2.id
@@ -126,7 +128,9 @@ exports.getCompetencia = async (req, res) => {
         u.organizacao as created_by_organizacao,
         u.cor_identificacao as created_by_cor,
         u2.nome as ultima_alteracao_por_nome,
-        DATE_FORMAT(cf.competencia_referencia, '%m/%Y') as competencia_formatada
+        DATE_FORMAT(cf.competencia_referencia, '%m/%Y') as competencia_formatada,
+        DATE_FORMAT(cf.competencia_inicio, '%d/%m/%Y') as competencia_inicio_formatada,
+        DATE_FORMAT(cf.competencia_fim, '%d/%m/%Y') as competencia_fim_formatada
       FROM compliance_fiscal cf
       LEFT JOIN usuarios_cassems u ON cf.created_by = u.id
       LEFT JOIN usuarios_cassems u2 ON cf.ultima_alteracao_por = u2.id
@@ -290,25 +294,29 @@ exports.updateComplianceField = async (req, res) => {
     console.log('🔍 Debug - value:', value);
     console.log('🔍 Debug - id:', id);
     console.log('🔍 Debug - user_id:', user_id);
+    console.log('🔍 Debug - value type:', typeof value);
+    console.log('🔍 Debug - value length:', value ? value.length : 'null/undefined');
     console.log('🔍 ====================================');
     
     ({ pool, server } = await getDbPoolWithTunnel());
     
-    // Validação específica para competencia_referencia
-    if (field === 'competencia_referencia') {
+    // Validação específica para campos de data
+    if (field === 'competencia_inicio' || field === 'competencia_fim' || field === 'competencia_referencia') {
       const date = new Date(value);
       const year = date.getFullYear();
       
       if (year < 1900 || year > 2099) {
         return res.status(400).json({
           success: false,
-          error: 'Ano deve estar entre 1900 e 2099'
+          error: `Ano da ${field === 'competencia_inicio' ? 'data de início' : field === 'competencia_fim' ? 'data de fim' : 'data'} deve estar entre 1900 e 2099`
         });
       }
     }
 
     // Mapear campos do frontend para campos do banco PRIMEIRO
     const fieldMapping = {
+      'competencia_inicio': 'competencia_inicio',
+      'competencia_fim': 'competencia_fim',
       'competencia_referencia': 'competencia_referencia',
       'competencia_referencia_texto': 'competencia_referencia_texto',
       'relatorio_inicial': 'relatorio_inicial_texto',

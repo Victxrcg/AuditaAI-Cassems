@@ -1049,17 +1049,29 @@ export default function Compliance() {
           // Mapear campos específicos baseado no ID do item
           switch (itemId) {
             case '1': // Competência Período
-              if (competencia.competencia_referencia) {
-                // Se contém '|', é um período, senão é uma data única
-                if (competencia.competencia_referencia.includes('|')) {
-                  updatedItem.data = competencia.competencia_referencia;
-                  setCompetenciaData(competencia.competencia_referencia);
-                } else {
-                  const dataISO = new Date(competencia.competencia_referencia);
-                  const dataFormatada = dataISO.toISOString().split('T')[0];
-                  updatedItem.data = dataFormatada;
-                  setCompetenciaData(dataFormatada);
+              // Usar os novos campos separados
+              if (competencia.competencia_inicio || competencia.competencia_fim) {
+                const dataInicio = competencia.competencia_inicio ? 
+                  new Date(competencia.competencia_inicio).toISOString().split('T')[0] : '';
+                const dataFim = competencia.competencia_fim ? 
+                  new Date(competencia.competencia_fim).toISOString().split('T')[0] : '';
+                
+                if (dataInicio && dataFim) {
+                  // Período completo
+                  updatedItem.data = `${dataInicio}|${dataFim}`;
+                  setCompetenciaData(`${dataInicio}|${dataFim}`);
+                } else if (dataInicio) {
+                  // Apenas data de início
+                  updatedItem.data = dataInicio;
+                  setCompetenciaData(dataInicio);
                 }
+              }
+              // Fallback para competencia_referencia (compatibilidade)
+              else if (competencia.competencia_referencia) {
+                const dataISO = new Date(competencia.competencia_referencia);
+                const dataFormatada = dataISO.toISOString().split('T')[0];
+                updatedItem.data = dataFormatada;
+                setCompetenciaData(dataFormatada);
               }
               if (competencia.competencia_referencia_texto) {
                 updatedItem.observacoes = competencia.competencia_referencia_texto;
@@ -1320,8 +1332,45 @@ export default function Compliance() {
     }
   };
 
+  // Função auxiliar para salvar campo no banco (sem recursão)
+  const saveFieldToDatabaseDirect = async (dbField: string, value: string, userId: number) => {
+    if (!currentCompetenciaId) {
+      console.error('🔍 Nenhuma competência selecionada');
+      return;
+    }
+
+    try {
+      console.log('🔍 Salvando campo diretamente:', {
+        competenciaId: currentCompetenciaId,
+        field: dbField,
+        value,
+        user_id: userId
+      });
+
+      const response = await fetch(`${API_BASE}/compliance/compliance/${currentCompetenciaId}/field`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ field: dbField, value, user_id: userId }),
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        console.log('✅ Campo salvo com sucesso:', dbField, value);
+      } else {
+        console.error('❌ Erro ao salvar campo:', data.error);
+        setError(data.error);
+      }
+    } catch (err) {
+      console.error('❌ Erro na requisição:', err);
+      setError('Erro ao salvar campo');
+    }
+  };
+
   // Salvar campo específico no banco
-  const saveFieldToDatabase = async (itemId: string, field: 'valor' | 'data' | 'observacoes', value: string, userId: number) => {
+  const saveFieldToDatabase = async (itemId: string, field: 'valor' | 'data' | 'observacoes' | 'competencia_inicio' | 'competencia_fim', value: string, userId: number) => {
     if (!currentCompetenciaId) {
       console.error('🔍 Nenhuma competência selecionada');
       return;
@@ -1333,7 +1382,21 @@ export default function Compliance() {
 
       if (itemId === '1') { // Competência Período
         if (field === 'data') {
-          dbField = 'competencia_referencia';
+          // Para competência período, vamos salvar em campos separados
+          // O valor vem no formato "data_inicio|data_fim" ou apenas "data_inicio"
+          const [dataInicio, dataFim] = value.split('|');
+          
+          // Salvar data de início
+          if (dataInicio) {
+            await saveFieldToDatabaseDirect('competencia_inicio', dataInicio, userId);
+          }
+          
+          // Salvar data de fim (se existir)
+          if (dataFim) {
+            await saveFieldToDatabaseDirect('competencia_fim', dataFim, userId);
+          }
+          
+          return; // Retornar aqui pois já salvamos os campos separados
         } else if (field === 'observacoes') {
           dbField = 'competencia_referencia_texto';
         } else {
@@ -1363,7 +1426,9 @@ export default function Compliance() {
         competenciaId: currentCompetenciaId,
         field: dbField,
         value,
-        user_id: userId
+        user_id: userId,
+        itemId: itemId,
+        originalField: field
       });
 
       const response = await fetch(`${API_BASE}/compliance/compliance/${currentCompetenciaId}/field`, {
@@ -1852,24 +1917,31 @@ export default function Compliance() {
               <div className="flex-1">
                 <div className="flex items-center gap-3">
                   <h3 className="text-lg font-semibold text-gray-900">
-                    {competencia.competencia_referencia
-                      ? (() => {
-                          // Se contém '|', é um período
-                          if (competencia.competencia_referencia.includes('|')) {
-                            const [dataInicio, dataFim] = competencia.competencia_referencia.split('|');
-                            const dataInicioFormatada = new Date(dataInicio).toLocaleDateString('pt-BR');
-                            const dataFimFormatada = new Date(dataFim).toLocaleDateString('pt-BR');
-                            return `Competência Período ${dataInicioFormatada} a ${dataFimFormatada}`;
-                          } else {
-                            // Data única
-                            const dataISO = new Date(competencia.competencia_referencia);
-                            const dataFormatada = dataISO.toISOString().split('T')[0];
-                            const formatted = formatCompetenciaTitle(dataFormatada);
-                            return `Competência Período ${formatted.replace('Competência Período ', '')}`;
-                          }
-                        })()
-                      : `Competência Período ${competencia.competencia_formatada || 'N/A'}`
-                    }
+                    {(() => {
+                      // Priorizar os novos campos separados
+                      if (competencia.competencia_inicio || competencia.competencia_fim) {
+                        const dataInicio = competencia.competencia_inicio ? 
+                          new Date(competencia.competencia_inicio).toLocaleDateString('pt-BR') : '';
+                        const dataFim = competencia.competencia_fim ? 
+                          new Date(competencia.competencia_fim).toLocaleDateString('pt-BR') : '';
+                        
+                        if (dataInicio && dataFim) {
+                          return `Competência Período (${dataInicio} - ${dataFim})`;
+                        } else if (dataInicio) {
+                          return `Competência Período (${dataInicio})`;
+                        }
+                      }
+                      
+                      // Fallback para competencia_referencia (compatibilidade)
+                      if (competencia.competencia_referencia) {
+                        const dataISO = new Date(competencia.competencia_referencia);
+                        const dataFormatada = dataISO.toISOString().split('T')[0];
+                        const formatted = formatCompetenciaTitle(dataFormatada);
+                        return formatted;
+                      }
+                      
+                      return `Competência Período ${competencia.competencia_formatada || 'N/A'}`;
+                    })()}
                   </h3>
 
                   {/* Badge de organização */}
