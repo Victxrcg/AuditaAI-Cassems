@@ -889,7 +889,7 @@ const initializeComplianceItems = (): ComplianceItem[] => {
     { id: '4', title: 'Comprovação de Compensações', description: 'Documentos que comprovam compensações realizadas e seus valores.', status: 'pendente', isExpanded: false },
     { id: '6', title: 'Comprovação de Email', description: 'Evidências de comunicação por e-mail durante o período fiscal.', status: 'pendente', isExpanded: false },
     { id: '7', title: 'Notas Fiscais Enviadas', description: 'Notas fiscais e comprovantes emitidos no período da competência.', status: 'pendente', isExpanded: false },
-    { id: '8', title: 'Parecer Final', description: 'Parecer gerado pela IA.', status: 'pendente', isExpanded: false }
+    { id: '8', title: 'Parecer Final', description: 'Parecer gerado pela IA.', status: 'pendente', isExpanded: true }
     
   ];
 
@@ -1328,7 +1328,8 @@ export default function Compliance() {
           
           if (hasData) {
             updatedItem.status = 'concluido';
-            updatedItem.isExpanded = false; // Cards com dados ficam fechados por padrão
+            // Card Parecer Final sempre fica aberto, outros cards com dados ficam fechados
+            updatedItem.isExpanded = updatedItem.id === '8' ? true : false;
           } else {
             updatedItem.status = 'pendente';
             updatedItem.isExpanded = true; // Cards sem dados ficam abertos para preenchimento
@@ -1339,14 +1340,16 @@ export default function Compliance() {
           const savedItemState = savedState[updatedItem.id];
           
           if (savedItemState) {
-            // Usar apenas o isExpanded do estado salvo, manter o status baseado nos dados
-            updatedItem.isExpanded = savedItemState.isExpanded;
+            // Card Parecer Final sempre fica aberto, outros usam estado salvo
+            updatedItem.isExpanded = updatedItem.id === '8' ? true : savedItemState.isExpanded;
             console.log(`🔍 Item ${updatedItem.id} - Status: ${updatedItem.status} (baseado em dados), isExpanded: ${updatedItem.isExpanded} (do localStorage)`);
           } else {
-            // Verificar se o item atual já estava fechado
-            const currentItem = complianceItems.find(current => current.id === updatedItem.id);
-            if (currentItem && currentItem.isExpanded === false) {
-              updatedItem.isExpanded = false;
+            // Verificar se o item atual já estava fechado (exceto Parecer Final)
+            if (updatedItem.id !== '8') {
+              const currentItem = complianceItems.find(current => current.id === updatedItem.id);
+              if (currentItem && currentItem.isExpanded === false) {
+                updatedItem.isExpanded = false;
+              }
             }
           }
 
@@ -1407,7 +1410,7 @@ export default function Compliance() {
       { id: '4', title: 'Comprovação de Compensações', description: 'Documentos que comprovam compensações realizadas e seus valores.', status: 'pendente', isExpanded: false },
       { id: '6', title: 'Comprovação de Email', description: 'Evidências de comunicação por e-mail durante o período fiscal.', status: 'pendente', isExpanded: false },
       { id: '7', title: 'Notas Fiscais Enviadas', description: 'Notas fiscais e comprovantes emitidos no período da competência.', status: 'pendente', isExpanded: false },
-      { id: '8', title: 'Parecer Final', description: 'Parecer gerado pela IA.', status: 'pendente', isExpanded: false }
+      { id: '8', title: 'Parecer Final', description: 'Parecer gerado pela IA.', status: 'pendente', isExpanded: true }
     ]);
   };
 
@@ -1818,6 +1821,11 @@ export default function Compliance() {
 
   // Função para alternar expansão do card
   const handleToggleExpanded = useCallback((id: string) => {
+    // Card Parecer Final não pode ser fechado
+    if (id === '8') {
+      return;
+    }
+    
     setComplianceItems(prev => {
       const newItems = prev.map(item =>
         item.id === id
