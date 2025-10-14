@@ -404,7 +404,7 @@ const Cronograma = () => {
   const [cronogramaToDelete, setCronogramaToDelete] = useState<CronogramaItem | null>(null);
 
   // Estado para alternar entre modos de visualização
-  const [viewMode, setViewMode] = useState<'list' | 'timeline' | 'dashboard'>('timeline');
+  const [viewMode, setViewMode] = useState<'list' | 'timeline'>('timeline');
   
   
   // Estado para controlar fases expandidas
@@ -569,217 +569,6 @@ const Cronograma = () => {
     }
   };
 
-  // Função para renderizar a visualização em dashboard
-  const renderDashboardView = () => {
-    // Filtrar cronogramas com busca
-    const cronogramasFiltradosComBusca = cronogramas.filter(cronograma => {
-      const statusMatch = filtroStatus === 'todos' || cronograma.status === filtroStatus;
-      const prioridadeMatch = filtroPrioridade === 'todos' || cronograma.prioridade === filtroPrioridade;
-      const organizacaoMatch = filtroOrganizacao === 'todos' || cronograma.organizacao === filtroOrganizacao;
-      const buscaMatch = !busca || cronograma.titulo.toLowerCase().includes(busca.toLowerCase()) ||
-                        (cronograma.responsavel_nome && cronograma.responsavel_nome.toLowerCase().includes(busca.toLowerCase()));
-      return statusMatch && prioridadeMatch && organizacaoMatch && buscaMatch;
-    });
-
-    return (
-      <div className="space-y-6">
-        {/* Cabeçalho do Dashboard */}
-        <div className="bg-white border-b border-gray-200 pb-6">
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <h1 className="text-2xl font-bold text-gray-900">
-                Status Atual do Projeto
-              </h1>
-              <p className="text-sm text-gray-600 mt-1">
-                Visão geral do progresso das atividades
-              </p>
-            </div>
-          </div>
-
-          {/* Barra de busca e controles */}
-          <div className="flex items-center justify-between gap-4">
-            <div className="flex-1 max-w-md">
-              <div className="relative">
-                <input
-                  type="text"
-                  placeholder="Buscar atividade..."
-                  value={busca}
-                  onChange={(e) => setBusca(e.target.value)}
-                  className="w-full px-4 py-2 pl-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                />
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <svg className="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                  </svg>
-                </div>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-2">
-              <Select value={filtroStatus} onValueChange={setFiltroStatus}>
-                <SelectTrigger className="w-40">
-                  <SelectValue placeholder="Todos status" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="todos">Todos status</SelectItem>
-                  <SelectItem value="pendente">Pendente</SelectItem>
-                  <SelectItem value="em_andamento">Em Andamento</SelectItem>
-                  <SelectItem value="concluido">Concluído</SelectItem>
-                  <SelectItem value="atrasado">Atrasado</SelectItem>
-                </SelectContent>
-              </Select>
-              
-              <Button 
-                size="sm" 
-                className="bg-black text-white hover:bg-gray-800"
-                onClick={() => {
-                  setEditingCronograma(null);
-                  setFormData(initialFormData());
-                  setIsEditDialogOpen(true);
-                }}
-              >
-                <Plus className="h-4 w-4 mr-2" />
-                Nova atividade
-              </Button>
-            </div>
-          </div>
-        </div>
-
-        {/* Grid de atividades */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {cronogramasFiltradosComBusca.map((cronograma) => {
-            const progresso = calcularProgresso(cronograma);
-            const statusInfo = getStatusLabel(cronograma.status);
-            
-            return (
-              <div 
-                key={cronograma.id} 
-                className="bg-white border border-gray-200 rounded-lg p-6 hover:shadow-md transition-shadow cursor-pointer"
-                onClick={() => {
-                  setEditingCronograma(cronograma);
-                  setIsEditDialogOpen(true);
-                }}
-              >
-                {/* Barra de progresso */}
-                <div className="mb-4">
-                  <div className="w-full bg-gray-300 rounded-full h-2.5">
-                    <div 
-                      className={`h-2.5 rounded-full ${
-                        cronograma.status === 'concluido' ? 'bg-blue-600' : 
-                        cronograma.status === 'em_andamento' ? 'bg-blue-600' : 
-                        cronograma.status === 'atrasado' ? 'bg-blue-600' : 'bg-gray-400'
-                      }`}
-                      style={{ width: `${progresso}%` }}
-                    ></div>
-                  </div>
-                  <div className="flex justify-between items-center mt-2">
-                    <span className="text-sm font-medium text-gray-700">{progresso}%</span>
-                    <span className={`text-sm font-medium ${statusInfo.color}`}>
-                      {statusInfo.text}
-                    </span>
-                  </div>
-                </div>
-
-                {/* Título da atividade */}
-                <h3 className="text-lg font-medium text-gray-900 mb-2 line-clamp-2">
-                  {cronograma.titulo}
-                </h3>
-
-                {/* Informações adicionais */}
-                <div className="space-y-2 text-sm text-gray-600">
-                  {cronograma.responsavel_nome && (
-                    <div className="flex items-center gap-2">
-                      <User className="h-4 w-4" />
-                      <span>{cronograma.responsavel_nome}</span>
-                    </div>
-                  )}
-                  
-                  {cronograma.data_fim && (
-                    <div className="flex items-center gap-2">
-                      <Calendar className="h-4 w-4" />
-                      <span>Prazo: {new Date(cronograma.data_fim).toLocaleDateString('pt-BR')}</span>
-                    </div>
-                  )}
-                  
-                  <div className="flex items-center gap-2">
-                    <Building className="h-4 w-4" />
-                    <span>{cronograma.organizacao.toUpperCase()}</span>
-                  </div>
-                </div>
-
-                {/* Badge de prioridade */}
-                {cronograma.prioridade !== 'media' && (
-                  <div className="mt-4">
-                    {getPrioridadeBadge(cronograma.prioridade)}
-                  </div>
-                )}
-
-                {/* Motivo do atraso se aplicável */}
-                {cronograma.motivo_atraso && (
-                  <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg">
-                    <div className="flex items-start gap-2">
-                      <AlertTriangle className="h-4 w-4 text-red-500 mt-0.5 flex-shrink-0" />
-                      <div>
-                        <p className="text-xs font-medium text-red-800">Motivo do atraso:</p>
-                        <p className="text-xs text-red-700 mt-1">{cronograma.motivo_atraso}</p>
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
-
-        {/* Mensagem quando não há resultados */}
-        {cronogramasFiltradosComBusca.length === 0 && (
-          <div className="text-center py-12">
-            <Target className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-            <h3 className="text-lg font-semibold text-gray-600 mb-2">Nenhuma atividade encontrada</h3>
-            <p className="text-gray-500">
-              {busca || filtroStatus !== 'todos' || filtroPrioridade !== 'todos' 
-                ? 'Tente ajustar os filtros ou termo de busca.'
-                : 'Não há atividades cadastradas no momento.'
-              }
-            </p>
-          </div>
-        )}
-
-        {/* Resumo estatístico */}
-        {cronogramasFiltradosComBusca.length > 0 && (
-          <div className="bg-gray-50 rounded-lg p-6">
-            <h4 className="text-lg font-semibold text-gray-900 mb-4">Resumo do Progresso</h4>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <div className="text-center">
-                <div className="text-2xl font-bold text-green-600">
-                  {cronogramasFiltradosComBusca.filter(c => c.status === 'concluido').length}
-                </div>
-                <div className="text-sm text-gray-600">Finalizadas</div>
-              </div>
-              <div className="text-center">
-                <div className="text-2xl font-bold text-orange-600">
-                  {cronogramasFiltradosComBusca.filter(c => c.status === 'em_andamento').length}
-                </div>
-                <div className="text-sm text-gray-600">Em Andamento</div>
-              </div>
-              <div className="text-center">
-                <div className="text-2xl font-bold text-red-600">
-                  {cronogramasFiltradosComBusca.filter(c => c.status === 'atrasado').length}
-                </div>
-                <div className="text-sm text-gray-600">Em Risco</div>
-              </div>
-              <div className="text-center">
-                <div className="text-2xl font-bold text-gray-600">
-                  {cronogramasFiltradosComBusca.filter(c => c.status === 'pendente').length}
-                </div>
-                <div className="text-sm text-gray-600">Pendentes</div>
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
-    );
-  };
 
   // Função para renderizar a nova visualização em lista
   const renderListView = () => {
@@ -1320,15 +1109,6 @@ const Cronograma = () => {
           {/* Botões de alternância de visualização */}
           <div className="flex bg-gray-100 rounded-lg p-1 mr-2">
             <Button
-              variant={viewMode === 'dashboard' ? 'default' : 'ghost'}
-              size="sm"
-              onClick={() => setViewMode('dashboard')}
-              className={viewMode === 'dashboard' ? 'bg-white shadow-sm' : 'hover:bg-gray-200'}
-            >
-              <BarChart3 className="h-4 w-4 mr-2" />
-              Dashboard
-            </Button>
-            <Button
               variant={viewMode === 'list' ? 'default' : 'ghost'}
               size="sm"
               onClick={() => setViewMode('list')}
@@ -1485,8 +1265,6 @@ const Cronograma = () => {
         <div className="flex justify-center py-8">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
         </div>
-      ) : viewMode === 'dashboard' ? (
-        renderDashboardView()
       ) : viewMode === 'list' ? (
         renderListView()
       ) : (

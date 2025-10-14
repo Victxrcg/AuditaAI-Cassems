@@ -399,7 +399,7 @@ const ComplianceItemCard = memo(({
   // Se o card não está expandido, mostrar apenas o resumo
   if (!item.isExpanded) {
     return (
-      <Card className={`mb-6 ${!canAccess ? 'opacity-50 bg-gray-50' : ''}`}>
+      <Card className={`mb-6 bg-white ${!canAccess ? 'opacity-50' : ''}`}>
         <CardHeader>
           <div className="flex justify-between items-start">
             <div>
@@ -445,7 +445,7 @@ const ComplianceItemCard = memo(({
   // Se for o Parecer Final, renderizar interface especial de IA
   if (item.id === '8') {
     return (
-      <Card className="mb-6">
+      <Card className="mb-6 bg-white">
         <CardHeader>
           <div className="flex justify-between items-start">
             <div>
@@ -588,7 +588,7 @@ const ComplianceItemCard = memo(({
 
   // Renderização normal para outros itens
   return (
-    <Card className={`mb-6 ${!canAccess ? 'opacity-50 bg-gray-50' : ''}`}>
+    <Card className={`mb-6 bg-white ${!canAccess ? 'opacity-50' : ''}`}>
       <CardHeader>
         <div className="flex justify-between items-start">
           <div>
@@ -913,7 +913,7 @@ const initializeComplianceItems = (): ComplianceItem[] => {
 
 // Componente de Skeleton Loading para Compliance Items
 const ComplianceItemSkeleton = () => (
-  <Card className="w-full">
+  <Card className="w-full bg-white">
     <CardHeader>
       <div className="flex items-center justify-between">
         <div className="space-y-2">
@@ -2218,7 +2218,7 @@ export default function Compliance() {
         {loading ? (
           <div className="space-y-3">
             {[1, 2, 3].map((i) => (
-              <div key={i} className="flex items-center justify-between p-4 border border-gray-200 rounded-lg">
+              <div key={i} className="flex items-center justify-between p-4 border border-gray-200 rounded-lg bg-white">
                 <div className="flex-1 space-y-2">
                   <Skeleton className="h-6 w-64" />
                   <Skeleton className="h-4 w-32" />
@@ -2234,7 +2234,7 @@ export default function Compliance() {
           competencias.map((competencia) => (
             <div
               key={competencia.id}
-              className="flex items-center justify-between p-4 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+              className="flex items-center justify-between p-4 border border-gray-200 rounded-lg bg-white hover:bg-gray-50 transition-colors"
             >
               <div className="flex-1">
                 <div className="flex items-center gap-3">
