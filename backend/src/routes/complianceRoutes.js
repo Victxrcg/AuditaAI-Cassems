@@ -76,9 +76,26 @@ router.get('/competencias/:complianceId/anexos/:tipoAnexo', anexosController.get
 router.delete('/anexos/:anexoId', anexosController.removeAnexo);
 
 // Gerar parecer com IA
-router.post('/competencias/:id/gerar-parecer', complianceController.generateParecer);
+router.post('/competencias/:id/gerar-parecer', (req, res, next) => {
+  console.log('🔍 Rota generateParecer chamada:', req.params.id);
+  if (typeof complianceController.generateParecer === 'function') {
+    complianceController.generateParecer(req, res, next);
+  } else {
+    console.error('❌ generateParecer não é uma função:', typeof complianceController.generateParecer);
+    res.status(500).json({ error: 'Função generateParecer não encontrada' });
+  }
+});
 
 // Obter histórico de alterações de uma competência
 router.get('/competencias/:id/historico', complianceController.getHistorico); // ← NOVA ROTA
+
+// Debug: listar todas as rotas registradas
+console.log('🔍 Rotas compliance registradas:');
+router.stack.forEach((middleware) => {
+  if (middleware.route) {
+    const methods = Object.keys(middleware.route.methods).join(', ').toUpperCase();
+    console.log(`  ${methods} ${middleware.route.path}`);
+  }
+});
 
 module.exports = router;
