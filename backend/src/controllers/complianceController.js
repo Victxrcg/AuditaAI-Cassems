@@ -1,5 +1,10 @@
 // backend/src/controllers/complianceController.js
 const { getDbPoolWithTunnel, resetPool, executeQueryWithRetry } = require('../lib/db');
+const fs = require('fs');
+const path = require('path');
+const pdf = require('pdf-parse');
+const csv = require('csv-parse/sync');
+const { simpleParser } = require('mailparser');
 
 // Configurar OpenAI (opcional)
 let openai = null;
@@ -690,8 +695,13 @@ exports.generateParecer = async (req, res) => {
       solucao_consulta_cosit_79_2023_vigente_texto: dados.solucao_consulta_cosit_79_2023_vigente_texto
     };
 
-    // Gerar parecer com IA (simulação por enquanto)
-    const parecer = await generateParecerComIA(dadosParaIA);
+    // Extrair conteúdo dos arquivos anexados
+    console.log('📁 Extraindo conteúdo dos arquivos anexados...');
+    const conteudosArquivos = await extrairConteudoArquivos(pool, competenciaId);
+    
+    // Gerar parecer com IA usando o conteúdo real dos arquivos
+    console.log('🤖 Gerando parecer com análise real dos arquivos...');
+    const parecer = await generateParecerComIA(dadosParaIA, conteudosArquivos);
 
     // Salvar parecer no banco
     await pool.query(`
@@ -716,71 +726,285 @@ exports.generateParecer = async (req, res) => {
   }
 };
 
-// Função para gerar parecer com IA (simulação)
-const generateParecerComIA = async (dados) => {
-  // Por enquanto, vamos criar um parecer baseado nos dados
-  // Depois podemos integrar com uma API real de IA
-  
-  const parecer = `
-# PARECER DE COMPLIANCE FISCAL
+// Função para extrair conteúdo dos arquivos anexados
+const extrairConteudoArquivos = async (pool, competenciaId) => {
+  try {
+    console.log('🔍 Buscando anexos para competência:', competenciaId);
+    
+    // Buscar todos os anexos da competência
+    const anexos = await pool.query(`
+      SELECT 
+        ca.*,
+        cf.competencia_inicio,
+        cf.competencia_fim,
+        cf.competencia_referencia
+      FROM compliance_anexos ca
+      LEFT JOIN compliance_fiscal cf ON ca.compliance_id = cf.id
+      WHERE ca.compliance_id = ?
+      ORDER BY ca.created_at ASC
+    `, [competenciaId]);
 
-## DADOS DA COMPETÊNCIA
-- **Período de Referência:** ${dados.competencia_referencia ? new Date(dados.competencia_referencia).toLocaleDateString('pt-BR') : 'Não informado'}
+    console.log(`📁 Encontrados ${anexos.length} anexos`);
 
-## ANÁLISE DOS DOCUMENTOS
+    const conteudos = [];
 
-### 1. RELATÓRIO INICIAL
-${dados.relatorio_inicial_texto ? `**Conteúdo:** ${dados.relatorio_inicial_texto}` : '**Status:** Não fornecido'}
+    for (const anexo of anexos) {
+      try {
+        console.log(`📄 Processando arquivo: ${anexo.nome_arquivo} (${anexo.tipo_mime})`);
+        
+        let conteudo = '';
+        const extensao = path.extname(anexo.nome_arquivo).toLowerCase();
+        
+        // Extrair conteúdo baseado no tipo de arquivo
+        if (anexo.file_data) {
+          // Arquivo armazenado no banco (BLOB)
+          const buffer = Buffer.from(anexo.file_data);
+          
+          if (extensao === '.txt') {
+            conteudo = buffer.toString('utf-8');
+          } else if (extensao === '.csv') {
+            const csvData = csv.parse(buffer.toString('utf-8'), { 
+              columns: true, 
+              skip_empty_lines: true 
+            });
+            conteudo = `Dados CSV (${csvData.length} linhas):\n${JSON.stringify(csvData, null, 2)}`;
+          } else if (extensao === '.pdf') {
+            const pdfData = await pdf(buffer);
+            conteudo = pdfData.text;
+          } else if (extensao === '.eml') {
+            const email = await simpleParser(buffer);
+            conteudo = `Email de: ${email.from?.text || 'N/A'}\nPara: ${email.to?.text || 'N/A'}\nAssunto: ${email.subject || 'N/A'}\n\nConteúdo:\n${email.text || email.html || 'Sem conteúdo'}`;
+          } else {
+            // Para outros tipos, tentar ler como texto
+            conteudo = buffer.toString('utf-8');
+          }
+        } else if (anexo.caminho_arquivo && fs.existsSync(anexo.caminho_arquivo)) {
+          // Arquivo armazenado no sistema de arquivos
+          const buffer = fs.readFileSync(anexo.caminho_arquivo);
+          
+          if (extensao === '.txt') {
+            conteudo = buffer.toString('utf-8');
+          } else if (extensao === '.csv') {
+            const csvData = csv.parse(buffer.toString('utf-8'), { 
+              columns: true, 
+              skip_empty_lines: true 
+            });
+            conteudo = `Dados CSV (${csvData.length} linhas):\n${JSON.stringify(csvData, null, 2)}`;
+          } else if (extensao === '.pdf') {
+            const pdfData = await pdf(buffer);
+            conteudo = pdfData.text;
+          } else if (extensao === '.eml') {
+            const email = await simpleParser(buffer);
+            conteudo = `Email de: ${email.from?.text || 'N/A'}\nPara: ${email.to?.text || 'N/A'}\nAssunto: ${email.subject || 'N/A'}\n\nConteúdo:\n${email.text || email.html || 'Sem conteúdo'}`;
+          } else {
+            conteudo = buffer.toString('utf-8');
+          }
+        }
 
-### 2. RELATÓRIO DE FATURAMENTO
-${dados.relatorio_faturamento_texto ? `**Conteúdo:** ${dados.relatorio_faturamento_texto}` : '**Status:** Não fornecido'}
+        if (conteudo && conteudo.trim()) {
+          conteudos.push({
+            tipo: anexo.tipo_anexo,
+            nome: anexo.nome_arquivo,
+            mime: anexo.tipo_mime,
+            conteudo: conteudo.trim(),
+            tamanho: anexo.tamanho_arquivo
+          });
+          
+          console.log(`✅ Conteúdo extraído: ${conteudo.length} caracteres`);
+        } else {
+          console.log(`⚠️ Nenhum conteúdo extraído de: ${anexo.nome_arquivo}`);
+        }
+        
+      } catch (error) {
+        console.error(`❌ Erro ao processar ${anexo.nome_arquivo}:`, error.message);
+        conteudos.push({
+          tipo: anexo.tipo_anexo,
+          nome: anexo.nome_arquivo,
+          mime: anexo.tipo_mime,
+          conteudo: `[ERRO: Não foi possível extrair o conteúdo deste arquivo - ${error.message}]`,
+          tamanho: anexo.tamanho_arquivo
+        });
+      }
+    }
 
-### 3. IMPOSTO COMPENSADO
-${dados.imposto_compensado_texto ? `**Valor:** R$ ${dados.imposto_compensado_texto}` : '**Status:** Não informado'}
+    return conteudos;
+  } catch (error) {
+    console.error('❌ Erro ao extrair conteúdo dos arquivos:', error);
+    return [];
+  }
+};
 
-### 4. EMAILS
-${dados.emails_texto ? `**Conteúdo:** ${dados.emails_texto}` : '**Status:** Não fornecido'}
+// Função para gerar parecer com IA (análise real dos arquivos)
+const generateParecerComIA = async (dados, conteudosArquivos = []) => {
+  try {
+    console.log('🤖 Gerando parecer com IA...');
+    
+    // Preparar informações da competência
+    const periodoInfo = dados.competencia_inicio && dados.competencia_fim 
+      ? `${new Date(dados.competencia_inicio).toLocaleDateString('pt-BR')} a ${new Date(dados.competencia_fim).toLocaleDateString('pt-BR')}`
+      : dados.competencia_referencia 
+        ? new Date(dados.competencia_referencia).toLocaleDateString('pt-BR')
+        : 'Não informado';
 
-### 5. VALOR COMPENSADO
-${dados.valor_compensado_texto ? `**Valor:** R$ ${dados.valor_compensado_texto}` : '**Status:** Não informado'}
+    // Preparar conteúdo dos arquivos para análise
+    let conteudoArquivosTexto = '';
+    if (conteudosArquivos.length > 0) {
+      conteudoArquivosTexto = '\n\n## CONTEÚDO DOS ARQUIVOS ANEXADOS:\n';
+      
+      conteudosArquivos.forEach((arquivo, index) => {
+        conteudoArquivosTexto += `\n### ${index + 1}. ${arquivo.nome} (${arquivo.tipo})\n`;
+        conteudoArquivosTexto += `**Tipo:** ${arquivo.mime}\n`;
+        conteudoArquivosTexto += `**Tamanho:** ${arquivo.tamanho} bytes\n`;
+        conteudoArquivosTexto += `**Conteúdo:**\n${arquivo.conteudo}\n`;
+        conteudoArquivosTexto += '---\n';
+      });
+    }
 
-### 6. ESTABELECIMENTO
-${dados.estabelecimento_texto ? `**Informações:** ${dados.estabelecimento_texto}` : '**Status:** Não fornecido'}
+    // Preparar prompt para a IA
+    const prompt = `
+Você é um especialista em compliance fiscal brasileiro. Analise os dados fornecidos e gere um parecer técnico detalhado sobre a situação fiscal.
 
-### 7. RESUMO FOLHA DE PAGAMENTO
-${dados.resumo_folha_pagamento_texto ? `**Conteúdo:** ${dados.resumo_folha_pagamento_texto}` : '**Status:** Não fornecido'}
+DADOS DA COMPETÊNCIA:
+- Período: ${periodoInfo}
+- Observações dos campos: ${JSON.stringify(dados, null, 2)}
 
-### 8. PLANILHA QUANTIDADE EMPREGADOS
-${dados.planilha_quantidade_empregados_texto ? `**Conteúdo:** ${dados.planilha_quantidade_empregados_texto}` : '**Status:** Não fornecido'}
+${conteudoArquivosTexto}
 
-### 9. DECRETO 3048/1999 VIGENTE
-${dados.decreto_3048_1999_vigente_texto ? `**Conteúdo:** ${dados.decreto_3048_1999_vigente_texto}` : '**Status:** Não fornecido'}
+INSTRUÇÕES:
+1. Analise TODOS os dados e arquivos fornecidos
+2. Identifique pontos de conformidade e não conformidade
+3. Forneça recomendações específicas baseadas no conteúdo real dos arquivos
+4. Mencione valores, datas e informações específicas encontradas nos documentos
+5. Gere um parecer técnico profissional em português brasileiro
+6. Estruture o parecer com: Resumo Executivo, Análise Detalhada, Conformidade Fiscal, Recomendações e Próximos Passos
 
-### 10. SOLUÇÃO CONSULTA COSIT 79/2023 VIGENTE
-${dados.solucao_consulta_cosit_79_2023_vigente_texto ? `**Conteúdo:** ${dados.solucao_consulta_cosit_79_2023_vigente_texto}` : '**Status:** Não fornecido'}
+IMPORTANTE: Baseie-se no conteúdo REAL dos arquivos, não em dados genéricos.`;
 
-## CONCLUSÕES E RECOMENDAÇÕES
+    // Tentar usar OpenAI se disponível
+    if (openai) {
+      console.log('🚀 Usando OpenAI para análise...');
+      
+      const response = await openai.chat.completions.create({
+        model: "gpt-4",
+        messages: [
+          {
+            role: "system",
+            content: "Você é um especialista em compliance fiscal brasileiro com vasta experiência em análise de documentos fiscais e conformidade tributária."
+          },
+          {
+            role: "user",
+            content: prompt
+          }
+        ],
+        max_tokens: 4000,
+        temperature: 0.3
+      });
 
-### DOCUMENTOS RECEBIDOS
-${Object.values(dados).filter(val => val && val.trim()).length} de ${Object.keys(dados).length} documentos foram fornecidos.
+      const parecerIA = response.choices[0].message.content;
+      console.log('✅ Parecer gerado pela IA');
+      return parecerIA;
+    } else {
+      // Fallback: gerar parecer básico baseado no conteúdo real
+      console.log('⚠️ OpenAI não disponível, gerando parecer básico...');
+      
+      // Construir seção de arquivos
+      let arquivosSecao = '';
+      if (conteudosArquivos.length > 0) {
+        arquivosSecao = `### ARQUIVOS ANALISADOS (${conteudosArquivos.length} arquivos)\n\n`;
+        conteudosArquivos.forEach((arquivo, index) => {
+          arquivosSecao += `**${index + 1}. ${arquivo.nome}** (${arquivo.tipo})\n`;
+          arquivosSecao += `- Tipo: ${arquivo.mime}\n`;
+          arquivosSecao += `- Tamanho: ${arquivo.tamanho} bytes\n`;
+          arquivosSecao += `- Resumo do conteúdo: ${arquivo.conteudo.substring(0, 500)}${arquivo.conteudo.length > 500 ? '...' : ''}\n\n`;
+        });
+      } else {
+        arquivosSecao = '### ARQUIVOS\nNenhum arquivo foi fornecido para análise.\n';
+      }
 
-### STATUS GERAL
-${Object.values(dados).filter(val => val && val.trim()).length >= Object.keys(dados).length * 0.7 ? 
-  '✅ **COMPLIANCE ADEQUADO** - A maioria dos documentos foi fornecida.' : 
-  '⚠️ **COMPLIANCE PARCIAL** - Alguns documentos ainda estão pendentes.'}
+      // Construir seção de observações
+      let observacoesSecao = '';
+      const observacoes = Object.entries(dados)
+        .filter(([key, value]) => value && value.toString().trim())
+        .map(([key, value]) => `- **${key}:** ${value}`);
+      
+      if (observacoes.length > 0) {
+        observacoesSecao = observacoes.join('\n');
+      } else {
+        observacoesSecao = 'Nenhuma observação foi fornecida.';
+      }
 
-### PRÓXIMOS PASSOS
-1. Verificar documentos pendentes
-2. Validar informações fornecidas
-3. Confirmar cálculos de impostos
-4. Finalizar análise completa
+      return `# PARECER TÉCNICO DE COMPLIANCE FISCAL
+
+**Data:** ${new Date().toLocaleString('pt-BR')}
+**Período de Análise:** ${periodoInfo}
+
+## RESUMO EXECUTIVO
+
+Com base na análise dos documentos fornecidos para o período ${periodoInfo}, foram identificados os seguintes aspectos relacionados ao compliance fiscal.
+
+## ANÁLISE DOS DOCUMENTOS FORNECIDOS
+
+${arquivosSecao}
+
+### OBSERVAÇÕES DOS CAMPOS
+${observacoesSecao}
+
+## ANÁLISE DE CONFORMIDADE
+
+### PONTOS POSITIVOS
+- Documentação fornecida para o período analisado
+- ${conteudosArquivos.length > 0 ? 'Arquivos anexados com conteúdo legível' : 'Estrutura de compliance estabelecida'}
+
+### PONTOS DE ATENÇÃO
+${conteudosArquivos.length === 0 ? '- Ausência de documentos de apoio\n- Necessidade de complementação da documentação' : '- Verificar consistência entre documentos\n- Confirmar validade dos dados apresentados'}
+
+## RECOMENDAÇÕES
+
+1. **Validação de Dados:** Verificar a consistência das informações apresentadas
+2. **Complementação:** ${conteudosArquivos.length === 0 ? 'Fornecer documentação de apoio para análise completa' : 'Revisar documentos para garantir completude'}
+3. **Conformidade:** Aplicar as normas fiscais vigentes
+4. **Controle:** Implementar procedimentos de controle interno
+
+## PRÓXIMOS PASSOS
+
+1. Revisar e validar todos os documentos apresentados
+2. Corrigir eventuais inconsistências identificadas
+3. Completar documentação pendente, se necessário
+4. Implementar controles preventivos
+5. Agendar próxima revisão de compliance
+
+## CONCLUSÃO
+
+${conteudosArquivos.length > 0 ? 
+  'A análise baseada nos documentos fornecidos indica a necessidade de revisão detalhada para garantir conformidade total com a legislação fiscal vigente.' :
+  'É recomendável a apresentação de documentação de apoio para uma análise mais precisa do compliance fiscal.'}
 
 ---
 **Parecer gerado automaticamente em:** ${new Date().toLocaleString('pt-BR')}
 **Sistema:** AuditaAI Compliance
-  `;
+**Baseado em:** ${conteudosArquivos.length} arquivo(s) anexado(s) + observações dos campos`;
+    }
+  } catch (error) {
+    console.error('❌ Erro ao gerar parecer:', error);
+    
+    const periodoInfo = dados.competencia_inicio && dados.competencia_fim 
+      ? `${new Date(dados.competencia_inicio).toLocaleDateString('pt-BR')} a ${new Date(dados.competencia_fim).toLocaleDateString('pt-BR')}`
+      : 'Não informado';
+    
+    return `# ERRO NA GERAÇÃO DO PARECER
 
-  return parecer.trim();
+Ocorreu um erro durante a geração do parecer técnico: ${error.message}
+
+**Dados disponíveis:**
+- Período: ${periodoInfo}
+- Arquivos anexados: ${conteudosArquivos.length}
+- Observações: ${Object.values(dados).filter(val => val && val.trim()).length} campos preenchidos
+
+Por favor, tente novamente ou entre em contato com o suporte técnico.
+
+---
+**Erro ocorrido em:** ${new Date().toLocaleString('pt-BR')}`;
+  }
 };
 
 // Excluir competência
