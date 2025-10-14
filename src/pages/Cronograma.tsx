@@ -289,13 +289,13 @@ const Cronograma = () => {
 
   const getStatusBadgeInfo = (status: string) => {
     const variants = {
-      pendente: { variant: 'secondary', text: 'PENDENTE' },
-      em_andamento: { variant: 'default', text: 'EM ANDAMENTO' },
-      concluido: { variant: 'default', text: 'CONCLUÍDO' },
-      atrasado: { variant: 'destructive', text: 'ATRASADO' }
+      pendente: { variant: 'status-pendente', text: 'PENDENTE' },
+      em_andamento: { variant: 'status-em-andamento', text: 'EM ANDAMENTO' },
+      concluido: { variant: 'status-concluido', text: 'CONCLUÍDO' },
+      atrasado: { variant: 'status-atrasado', text: 'ATRASADO' }
     } as const;
 
-    return variants[status as keyof typeof variants] || { variant: 'secondary', text: 'PENDENTE' };
+    return variants[status as keyof typeof variants] || { variant: 'status-pendente', text: 'PENDENTE' };
   };
 
   const getPrioridadeBadge = (prioridade: string) => {
@@ -811,12 +811,12 @@ const Cronograma = () => {
       setFasesExpandidas(novasFases);
     };
 
-    // Cores por status
+    // Cores por status (harmonizadas com os badges)
     const coresStatus: Record<string, string> = {
-      'pendente': 'bg-gray-400',
-      'em_andamento': 'bg-blue-400',
-      'concluido': 'bg-green-400',
-      'atrasado': 'bg-red-400'
+      'pendente': 'bg-gray-500',
+      'em_andamento': 'bg-blue-500',
+      'concluido': 'bg-green-500',
+      'atrasado': 'bg-red-500'
     };
 
     // Função para calcular posição da barra

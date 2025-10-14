@@ -23,6 +23,14 @@ const badgeVariants = cva(
           "border-transparent bg-orange-500 text-white hover:bg-orange-600",
         "priority-urgente":
           "border-transparent bg-red-500 text-white hover:bg-red-600",
+        "status-pendente":
+          "border-transparent bg-gray-500 text-white hover:bg-gray-600",
+        "status-em-andamento":
+          "border-transparent bg-blue-500 text-white hover:bg-blue-600",
+        "status-concluido":
+          "border-transparent bg-green-500 text-white hover:bg-green-600",
+        "status-atrasado":
+          "border-transparent bg-red-500 text-white hover:bg-red-600",
       },
     },
     defaultVariants: {
