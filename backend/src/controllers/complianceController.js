@@ -25,11 +25,20 @@ try {
 // Função auxiliar para registrar alterações no histórico
 const registrarAlteracao = async (pool, complianceId, campo, valorAnterior, valorNovo, userId, organizacao) => {
   try {
+    // Para parecer_texto, não salvar o conteúdo completo, apenas indicar que foi gerado
+    let valorAnteriorTratado = valorAnterior;
+    let valorNovoTratado = valorNovo;
+    
+    if (campo === 'parecer_texto') {
+      valorAnteriorTratado = valorAnterior ? '[Parecer anterior existente]' : '[Nenhum parecer anterior]';
+      valorNovoTratado = '[Parecer técnico gerado com IA]';
+    }
+    
     await pool.query(`
       INSERT INTO compliance_historico 
       (compliance_id, campo_alterado, valor_anterior, valor_novo, alterado_por, organizacao_alteracao)
       VALUES (?, ?, ?, ?, ?, ?)
-    `, [complianceId, campo, valorAnterior, valorNovo, userId, organizacao]);
+    `, [complianceId, campo, valorAnteriorTratado, valorNovoTratado, userId, organizacao]);
   } catch (error) {
     console.error('❌ Erro ao registrar alteração no histórico:', error);
   }

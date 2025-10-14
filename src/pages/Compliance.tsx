@@ -907,14 +907,29 @@ const HistoricoAlteracoes = ({ historico, loading }: { historico: HistoricoAlter
               <div className="text-sm">
                 <span className="font-medium">Campo:</span> {alteracao.campo_alterado}
               </div>
-              {alteracao.valor_anterior && (
-                <div className="text-sm text-gray-600">
-                  <span className="font-medium">Valor anterior:</span> {alteracao.valor_anterior}
+              
+              {/* Exibir informações específicas para parecer_texto */}
+              {alteracao.campo_alterado === 'parecer_texto' ? (
+                <div className="text-sm text-blue-600 bg-blue-50 p-2 rounded border-l-4 border-blue-400">
+                  <span className="font-medium">Ação:</span> {alteracao.valor_novo}
+                  {alteracao.valor_anterior && alteracao.valor_anterior !== '[Nenhum parecer anterior]' && (
+                    <div className="mt-1 text-xs text-gray-600">
+                      Substituiu parecer anterior
+                    </div>
+                  )}
                 </div>
+              ) : (
+                <>
+                  {alteracao.valor_anterior && (
+                    <div className="text-sm text-gray-600">
+                      <span className="font-medium">Valor anterior:</span> {alteracao.valor_anterior}
+                    </div>
+                  )}
+                  <div className="text-sm text-gray-600">
+                    <span className="font-medium">Novo valor:</span> {alteracao.valor_novo}
+                  </div>
+                </>
               )}
-              <div className="text-sm text-gray-600">
-                <span className="font-medium">Novo valor:</span> {alteracao.valor_novo}
-              </div>
             </div>
           </div>
         ))}
