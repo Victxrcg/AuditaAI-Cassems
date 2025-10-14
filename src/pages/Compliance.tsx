@@ -131,6 +131,32 @@ const darkenColor = (hex: string) => {
   return `rgb(${darken(r)}, ${darken(g)}, ${darken(b)})`;
 };
 
+// Função para verificar se uma etapa pode ser acessada (fluxo sequencial)
+const canAccessStep = (itemId: string, complianceItems: ComplianceItem[]): boolean => {
+  const stepOrder = ['1', '2', '3', '4', '6', '7', '8']; // Ordem das etapas
+  
+  // A primeira etapa sempre pode ser acessada
+  if (itemId === '1') return true;
+  
+  const currentIndex = stepOrder.indexOf(itemId);
+  if (currentIndex === -1) return true; // Se não está na lista, permite acesso
+  
+  // Verificar se a etapa anterior foi concluída
+  const previousStepId = stepOrder[currentIndex - 1];
+  const previousStep = complianceItems.find(item => item.id === previousStepId);
+  
+  if (!previousStep) return true;
+  
+  // Verificar se a etapa anterior tem dados preenchidos
+  const hasData = Boolean(
+    (previousStep.data && previousStep.data.trim()) ||
+    (previousStep.valor && previousStep.valor.trim()) ||
+    (previousStep.observacoes && previousStep.observacoes.trim())
+  );
+  
+  return hasData;
+};
+
 // Mover as funções para FORA do componente principal
 const getOrganizationBadge = (organizacao: string | undefined, cor?: string) => {
   if (!organizacao) return null;
@@ -236,7 +262,8 @@ const ComplianceItemCard = memo(({
   loading,
   currentCompetenciaId,
   onToggleExpanded,
-  downloadParecerPDF // ← ADICIONAR ESTA PROP
+  downloadParecerPDF,
+  complianceItems // ← ADICIONAR ESTA PROP para verificar fluxo sequencial
 }: {
   item: ComplianceItem;
   onFieldChange: (id: string, field: 'valor' | 'data' | 'observacoes', value: string) => void;
@@ -248,10 +275,14 @@ const ComplianceItemCard = memo(({
   loading: boolean;
   currentCompetenciaId: string | null;
   onToggleExpanded: (id: string) => void;
-  downloadParecerPDF: (parecerText: string) => void; // ← ADICIONAR ESTA PROP
+  downloadParecerPDF: (parecerText: string) => void;
+  complianceItems: ComplianceItem[]; // ← ADICIONAR ESTA PROP
 }) => {
   const [uploading, setUploading] = useState(false);
   const [anexos, setAnexos] = useState<Anexo[]>(item.anexos || []);
+
+  // Verificar se esta etapa pode ser acessada
+  const canAccess = canAccessStep(item.id, complianceItems);
 
   // Carregar anexos quando o componente monta
   useEffect(() => {
@@ -324,18 +355,25 @@ const ComplianceItemCard = memo(({
   // Se o card não está expandido, mostrar apenas o resumo
   if (!item.isExpanded) {
     return (
-      <Card className="mb-6">
+      <Card className={`mb-6 ${!canAccess ? 'opacity-50 bg-gray-50' : ''}`}>
         <CardHeader>
           <div className="flex justify-between items-start">
             <div>
-              <CardTitle className="text-lg">
+              <CardTitle className={`text-lg ${!canAccess ? 'text-gray-400' : ''}`}>
                 {item.id === '1' && item.data
                   ? formatCompetenciaTitle(item.data)
                   : item.title
                 }
               </CardTitle>
-              <CardDescription>{item.description}</CardDescription>
-              {item.lastUpdated && (
+              <CardDescription className={!canAccess ? 'text-gray-400' : ''}>
+                {item.description}
+              </CardDescription>
+              {!canAccess && (
+                <div className="text-xs text-orange-600 mt-1 font-medium">
+                  🔒 Complete a etapa anterior para desbloquear
+                </div>
+              )}
+              {item.lastUpdated && canAccess && (
                 <div className="text-xs text-gray-500 mt-1">
                   Última atualização: {formatDateTimeBR(item.lastUpdated)} por {item.updatedBy}
                 </div>
@@ -347,9 +385,11 @@ const ComplianceItemCard = memo(({
                 onClick={() => onToggleExpanded(item.id)}
                 size="sm"
                 variant="outline"
+                disabled={!canAccess}
+                className={!canAccess ? 'cursor-not-allowed' : ''}
               >
                 <Pencil className="h-4 w-4 mr-1" />
-                Editar
+                {canAccess ? 'Editar' : 'Bloqueado'}
               </Button>
             </div>
           </div>
@@ -504,17 +544,24 @@ const ComplianceItemCard = memo(({
 
   // Renderização normal para outros itens
   return (
-    <Card className="mb-6">
+    <Card className={`mb-6 ${!canAccess ? 'opacity-50 bg-gray-50' : ''}`}>
       <CardHeader>
         <div className="flex justify-between items-start">
           <div>
-            <CardTitle className="text-lg">
+            <CardTitle className={`text-lg ${!canAccess ? 'text-gray-400' : ''}`}>
               {item.id === '1' && item.data
                 ? formatCompetenciaTitle(item.data)
                 : item.title
               }
             </CardTitle>
-            <CardDescription>{item.description}</CardDescription>
+            <CardDescription className={!canAccess ? 'text-gray-400' : ''}>
+              {item.description}
+            </CardDescription>
+            {!canAccess && (
+              <div className="text-xs text-orange-600 mt-1 font-medium">
+                🔒 Complete a etapa anterior para desbloquear
+              </div>
+            )}
           </div>
           <div className="flex items-center gap-2">
             {/* Badge de organização */}
@@ -524,12 +571,12 @@ const ComplianceItemCard = memo(({
               onClick={() => onSave(item.id)}
               size="sm"
               className="bg-blue-600 hover:bg-blue-700"
-              disabled={loading}
+              disabled={loading || !canAccess}
             >
               {loading ? 'Salvando...' : (
                 <>
                   <Save className="h-4 w-4 mr-1" />
-                  Salvar
+                  {canAccess ? 'Salvar' : 'Bloqueado'}
                 </>
               )}
             </Button>
@@ -544,25 +591,33 @@ const ComplianceItemCard = memo(({
         </div>
       </CardHeader>
 
-      <CardContent className="space-y-4">
-        <div className={`grid grid-cols-1 gap-4 ${item.id === '4' ? 'md:grid-cols-2' : 'md:grid-cols-1'}`}>
-          {/* Campo Valor - apenas para Comprovação de Compensações (id: 4) */}
-          {item.id === '4' && (
-            <div>
-              <Label htmlFor={`valor-${item.id}`}>
-                <DollarSign className="h-4 w-4 inline mr-1" />
-                Valor
-              </Label>
-              <input
-                id={`valor-${item.id}`}
-                type="text"
-                value={item.valor || ''}
-                onChange={(e) => onFieldChange(item.id, 'valor', e.target.value)}
-                placeholder="Digite o valor"
-                className="mt-1 flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-              />
-            </div>
-          )}
+      <CardContent className={`space-y-4 ${!canAccess ? 'pointer-events-none' : ''}`}>
+        {!canAccess ? (
+          <div className="text-center py-8 text-gray-500">
+            <div className="text-4xl mb-2">🔒</div>
+            <p className="text-lg font-medium">Etapa Bloqueada</p>
+            <p className="text-sm">Complete a etapa anterior para desbloquear esta seção.</p>
+          </div>
+        ) : (
+          <>
+            <div className={`grid grid-cols-1 gap-4 ${item.id === '4' ? 'md:grid-cols-2' : 'md:grid-cols-1'}`}>
+              {/* Campo Valor - apenas para Comprovação de Compensações (id: 4) */}
+              {item.id === '4' && (
+                <div>
+                  <Label htmlFor={`valor-${item.id}`}>
+                    <DollarSign className="h-4 w-4 inline mr-1" />
+                    Valor
+                  </Label>
+                  <input
+                    id={`valor-${item.id}`}
+                    type="text"
+                    value={item.valor || ''}
+                    onChange={(e) => onFieldChange(item.id, 'valor', e.target.value)}
+                    placeholder="Digite o valor"
+                    className="mt-1 flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                  />
+                </div>
+              )}
 
           {/* Campo Período - apenas para Competência Período (id: 1) */}
           {item.id === '1' && (
@@ -705,8 +760,10 @@ const ComplianceItemCard = memo(({
           </div>
         </div>
 
-        {/* Adicionar indicador de quem editou por último */}
-        {getEditIndicator(item)}
+            {/* Adicionar indicador de quem editou por último */}
+            {getEditIndicator(item)}
+          </>
+        )}
       </CardContent>
     </Card>
   );
@@ -2085,6 +2142,7 @@ export default function Compliance() {
             currentCompetenciaId={currentCompetenciaId}
             onToggleExpanded={handleToggleExpanded}
             downloadParecerPDF={downloadParecerPDF}
+            complianceItems={complianceItems}
           />
         ))}
       </div>
@@ -2136,6 +2194,7 @@ export default function Compliance() {
             currentCompetenciaId={currentCompetenciaId}
             onToggleExpanded={handleToggleExpanded}
             downloadParecerPDF={downloadParecerPDF}
+            complianceItems={complianceItems}
           />
         ))}
       </div>
