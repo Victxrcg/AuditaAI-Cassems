@@ -298,6 +298,7 @@ const ComplianceItemCard = memo(({
   const [uploading, setUploading] = useState(false);
   const [anexos, setAnexos] = useState<Anexo[]>(item.anexos || []);
   const [canAccess, setCanAccess] = useState(true);
+  const [isDragOver, setIsDragOver] = useState(false); // Estado para controlar drag over
 
   // Verificar se esta etapa pode ser acessada
   useEffect(() => {
@@ -764,7 +765,38 @@ const ComplianceItemCard = memo(({
             )}
 
             {/* Upload de novo arquivo */}
-            <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center">
+            <div 
+              className={`border-2 border-dashed rounded-lg p-6 text-center transition-colors cursor-pointer ${
+                isDragOver 
+                  ? 'border-blue-400 bg-blue-50' 
+                  : 'border-gray-300 hover:border-gray-400'
+              }`}
+              onDragOver={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                setIsDragOver(true);
+              }}
+              onDragLeave={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                setIsDragOver(false);
+              }}
+              onDrop={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                setIsDragOver(false);
+                
+                const files = e.dataTransfer.files;
+                if (files.length > 0) {
+                  const file = files[0];
+                  handleFileUpload(file);
+                }
+              }}
+              onClick={() => {
+                const input = document.getElementById(`anexo-${item.id}`) as HTMLInputElement;
+                if (input) input.click();
+              }}
+            >
               <Upload className="h-8 w-8 mx-auto text-gray-400 mb-2" />
               <p className="text-sm text-gray-600 mb-2">
                 {uploading ? 'Fazendo upload...' : 'Clique para fazer upload ou arraste o arquivo aqui'}
