@@ -548,9 +548,9 @@ const ComplianceItemCard = memo(({
       </CardHeader>
 
       <CardContent className="space-y-4">
-        <div className={`grid grid-cols-1 gap-4 ${(item.id === '4' || item.id === '5') ? 'md:grid-cols-2' : 'md:grid-cols-1'}`}>
-          {/* Campo Valor - apenas para Imposto Compensado (id: 4) e Valor Compensado (id: 5) */}
-          {(item.id === '4' || item.id === '5') && (
+        <div className={`grid grid-cols-1 gap-4 ${item.id === '4' ? 'md:grid-cols-2' : 'md:grid-cols-1'}`}>
+          {/* Campo Valor - apenas para Comprovação de Compensações (id: 4) */}
+          {item.id === '4' && (
             <div>
               <Label htmlFor={`valor-${item.id}`}>
                 <DollarSign className="h-4 w-4 inline mr-1" />
@@ -567,24 +567,57 @@ const ComplianceItemCard = memo(({
             </div>
           )}
 
-          {/* Campo Data - apenas para Competência Referencia (id: 1) */}
+          {/* Campo Período - apenas para Competência Período (id: 1) */}
           {item.id === '1' && (
             <div>
               <Label htmlFor={`data-${item.id}`}>
                 <Calendar className="h-4 w-4 inline mr-1" />
-                Data da Competência
+                Período da Competência
               </Label>
-              <input
-                id={`data-${item.id}`}
-                type="date"
-                value={item.data || ''}
-                onChange={(e) => onFieldChange(item.id, 'data', e.target.value)}
-                min="1900-01-01"
-                max="2099-12-31"
-                className="mt-1 flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-              />
+              <div className="flex gap-2 mt-1">
+                <div className="flex-1">
+                  <Label htmlFor={`data-inicio-${item.id}`} className="text-xs text-gray-500">
+                    Data Início
+                  </Label>
+                  <input
+                    id={`data-inicio-${item.id}`}
+                    type="date"
+                    value={item.data ? item.data.split('|')[0] || '' : ''}
+                    onChange={(e) => {
+                      const dataInicio = e.target.value;
+                      const dataFim = item.data ? item.data.split('|')[1] || '' : '';
+                      const novoValor = dataInicio ? (dataFim ? `${dataInicio}|${dataFim}` : dataInicio) : dataFim;
+                      onFieldChange(item.id, 'data', novoValor);
+                    }}
+                    min="1900-01-01"
+                    max="2099-12-31"
+                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                    placeholder="Data início"
+                  />
+                </div>
+                <div className="flex-1">
+                  <Label htmlFor={`data-fim-${item.id}`} className="text-xs text-gray-500">
+                    Data Fim
+                  </Label>
+                  <input
+                    id={`data-fim-${item.id}`}
+                    type="date"
+                    value={item.data ? item.data.split('|')[1] || '' : ''}
+                    onChange={(e) => {
+                      const dataFim = e.target.value;
+                      const dataInicio = item.data ? item.data.split('|')[0] || '' : '';
+                      const novoValor = dataInicio ? (dataFim ? `${dataInicio}|${dataFim}` : dataInicio) : dataFim;
+                      onFieldChange(item.id, 'data', novoValor);
+                    }}
+                    min="1900-01-01"
+                    max="2099-12-31"
+                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                    placeholder="Data fim"
+                  />
+                </div>
+              </div>
               <p className="text-xs text-gray-500 mt-1">
-                Selecione uma data válida (ano entre 1900 e 2099)
+                Selecione o período da competência fiscal (ano entre 1900 e 2099)
               </p>
             </div>
           )}
@@ -714,13 +747,12 @@ const loadCardsState = (): Partial<ComplianceItem>[] => {
 // Função para inicializar complianceItems com estado salvo
 const initializeComplianceItems = (): ComplianceItem[] => {
   const defaultItems: ComplianceItem[] = [
-    { id: '1', title: 'Competência Referencia', description: 'Data da competência fiscal', status: 'pendente', isExpanded: true },
-    { id: '2', title: 'Relatório Inicial', description: 'Relatório inicial da empresa', status: 'pendente', isExpanded: true },
-    { id: '3', title: 'Relatório Faturamento', description: 'Relatório de faturamento mensal', status: 'pendente', isExpanded: true },
-    { id: '4', title: 'Imposto Compensado', description: 'Valor do imposto compensado', status: 'pendente', isExpanded: true },
-    { id: '5', title: 'Valor Compensado', description: 'Valor total compensado', status: 'pendente', isExpanded: true },
-    { id: '6', title: 'Emails', description: 'Endereços de e-mail para comunicação', status: 'pendente', isExpanded: true },
-    { id: '7', title: 'Estabelecimento', description: 'Informações do estabelecimento', status: 'pendente', isExpanded: true },
+    { id: '1', title: 'Competência Período', description: 'Período da competência fiscal', status: 'pendente', isExpanded: true },
+    { id: '2', title: 'Relatório Técnico', description: 'Relatório técnico entregue no início do trabalho, antes das compensações. Anexe: análise da situação fiscal atual, levantamento de pendências, cronograma de regularizações e parecer técnico sobre a viabilidade das compensações.', status: 'pendente', isExpanded: true },
+    { id: '3', title: 'Relatório Faturamento', description: 'Relatório mensal entregue a partir do momento que houve as compensações para comprovar essas compensações. Anexe: demonstrativo de faturamento mensal, notas fiscais, comprovantes de pagamento de impostos e documentos que validem as compensações realizadas.', status: 'pendente', isExpanded: true },
+    { id: '4', title: 'Comprovação de Compensações', description: 'Documentos que comprovam as compensações de impostos realizadas. Anexe: demonstrativos de compensação, declarações de débitos e créditos tributários (DCTF), comprovantes de compensação, extratos bancários das compensações e relatórios de conferência dos valores compensados.', status: 'pendente', isExpanded: true },
+    { id: '6', title: 'Comprovação de Email', description: 'Emails enviados no período da competência para comprovar a comunicação durante o processo. Anexe: print screens dos emails enviados, comprovantes de envio, respostas recebidas, threads de conversa com órgãos competentes e qualquer correspondência eletrônica relacionada ao período da competência.', status: 'pendente', isExpanded: true },
+    { id: '7', title: 'Notas Fiscais Enviadas', description: 'Notas fiscais emitidas e enviadas durante o período da competência. Anexe: notas fiscais de saída, notas fiscais de entrada, comprovantes de envio das notas fiscais, XMLs das notas fiscais, relatórios de emissão de notas fiscais e qualquer documentação fiscal relacionada ao período da competência.', status: 'pendente', isExpanded: true },
     { id: '8', title: 'Parecer Final', description: 'Parecer gerado pela IA', status: 'pendente', isExpanded: true }
   ];
 
@@ -847,11 +879,11 @@ export default function Compliance() {
 
   // Mapear IDs dos itens para campos do banco
   const itemFieldMapping: Record<string, Record<string, string>> = {
-    '1': { // Competência Referencia
+    '1': { // Competência Período
       'data': 'competencia_referencia',
       'observacoes': 'competencia_referencia_texto'
     },
-    '2': { // Relatório Inicial
+    '2': { // Relatório Técnico
       'data': 'relatorio_inicial_data',
       'observacoes': 'relatorio_inicial_texto'
     },
@@ -859,21 +891,16 @@ export default function Compliance() {
       'data': 'relatorio_faturamento_data',
       'observacoes': 'relatorio_faturamento_texto'
     },
-    '4': { // Imposto Compensado
+    '4': { // Comprovação de Compensações
       'valor': 'imposto_compensado_texto',
       'data': 'imposto_compensado_data',
       'observacoes': 'imposto_compensado_observacoes'
     },
-    '5': { // Valor Compensado
-      'valor': 'valor_compensado_texto',
-      'data': 'valor_compensado_data',
-      'observacoes': 'valor_compensado_observacoes'
-    },
-    '6': { // Emails
+    '6': { // Comprovação de Email
       'data': 'emails_data',
       'observacoes': 'emails_texto'
     },
-    '7': { // Estabelecimento
+    '7': { // Notas Fiscais Enviadas
       'data': 'estabelecimento_data',
       'observacoes': 'estabelecimento_texto'
     },
@@ -1021,18 +1048,24 @@ export default function Compliance() {
 
           // Mapear campos específicos baseado no ID do item
           switch (itemId) {
-            case '1': // Competência Referencia
+            case '1': // Competência Período
               if (competencia.competencia_referencia) {
-                const dataISO = new Date(competencia.competencia_referencia);
-                const dataFormatada = dataISO.toISOString().split('T')[0];
-                updatedItem.data = dataFormatada;
-                setCompetenciaData(dataFormatada);
+                // Se contém '|', é um período, senão é uma data única
+                if (competencia.competencia_referencia.includes('|')) {
+                  updatedItem.data = competencia.competencia_referencia;
+                  setCompetenciaData(competencia.competencia_referencia);
+                } else {
+                  const dataISO = new Date(competencia.competencia_referencia);
+                  const dataFormatada = dataISO.toISOString().split('T')[0];
+                  updatedItem.data = dataFormatada;
+                  setCompetenciaData(dataFormatada);
+                }
               }
               if (competencia.competencia_referencia_texto) {
                 updatedItem.observacoes = competencia.competencia_referencia_texto;
               }
               break;
-            case '2': // Relatório Inicial
+            case '2': // Relatório Técnico
               if (competencia.relatorio_inicial_texto) {
                 updatedItem.observacoes = competencia.relatorio_inicial_texto;
               }
@@ -1042,22 +1075,17 @@ export default function Compliance() {
                 updatedItem.observacoes = competencia.relatorio_faturamento_texto;
               }
               break;
-            case '4': // Imposto Compensado
+            case '4': // Comprovação de Compensações
               if (competencia.imposto_compensado_texto) {
                 updatedItem.valor = competencia.imposto_compensado_texto;
               }
               break;
-            case '5': // Valor Compensado
-              if (competencia.valor_compensado_texto) {
-                updatedItem.valor = competencia.valor_compensado_texto;
-              }
-              break;
-            case '6': // Emails
+            case '6': // Comprovação de Email
               if (competencia.emails_texto) {
                 updatedItem.observacoes = competencia.emails_texto;
               }
               break;
-            case '7': // Estabelecimento
+            case '7': // Notas Fiscais Enviadas
               if (competencia.estabelecimento_texto) {
                 updatedItem.observacoes = competencia.estabelecimento_texto;
               }
@@ -1303,7 +1331,7 @@ export default function Compliance() {
       // Mapear campos específicos para cada item
       let dbField: string;
 
-      if (itemId === '1') { // Competência Referencia
+      if (itemId === '1') { // Competência Período
         if (field === 'data') {
           dbField = 'competencia_referencia';
         } else if (field === 'observacoes') {
@@ -1360,7 +1388,7 @@ export default function Compliance() {
     }
   };
 
-  // Função para atualizar competencia_referencia
+  // Função para atualizar competencia_periodo
   const updateCompetenciaReferencia = async (competenciaId: string, novaData: string) => {
     try {
       // Obter usuário atual do localStorage
@@ -1502,10 +1530,12 @@ export default function Compliance() {
       // Aguardar todas as operações de salvamento
       await Promise.all(promises);
 
-      // Se for o item "Competência Referencia" e tiver data, atualizar a competencia_referencia
+      // Se for o item "Competência Período" e tiver data, atualizar a competencia_referencia
       if (id === '1' && item.data && item.data.trim()) {
-        await updateCompetenciaReferencia(currentCompetenciaId, item.data);
-        setCompetenciaData(item.data);
+        // Se for um período (contém '|'), salvar como está, senão converter para data única
+        const dataParaSalvar = item.data.includes('|') ? item.data : item.data;
+        await updateCompetenciaReferencia(currentCompetenciaId, dataParaSalvar);
+        setCompetenciaData(dataParaSalvar);
       }
 
       // RECARREGAR dados do banco para pegar as informações atualizadas
@@ -1824,12 +1854,21 @@ export default function Compliance() {
                   <h3 className="text-lg font-semibold text-gray-900">
                     {competencia.competencia_referencia
                       ? (() => {
-                          const dataISO = new Date(competencia.competencia_referencia);
-                          const dataFormatada = dataISO.toISOString().split('T')[0];
-                          const formatted = formatCompetenciaTitle(dataFormatada);
-                          return `Competência ${formatted.replace('Competência Referencia ', '')}`;
+                          // Se contém '|', é um período
+                          if (competencia.competencia_referencia.includes('|')) {
+                            const [dataInicio, dataFim] = competencia.competencia_referencia.split('|');
+                            const dataInicioFormatada = new Date(dataInicio).toLocaleDateString('pt-BR');
+                            const dataFimFormatada = new Date(dataFim).toLocaleDateString('pt-BR');
+                            return `Competência Período ${dataInicioFormatada} a ${dataFimFormatada}`;
+                          } else {
+                            // Data única
+                            const dataISO = new Date(competencia.competencia_referencia);
+                            const dataFormatada = dataISO.toISOString().split('T')[0];
+                            const formatted = formatCompetenciaTitle(dataFormatada);
+                            return `Competência Período ${formatted.replace('Competência Referencia ', '')}`;
+                          }
                         })()
-                      : `Competência ${competencia.competencia_formatada || 'N/A'}`
+                      : `Competência Período ${competencia.competencia_formatada || 'N/A'}`
                     }
                   </h3>
 
