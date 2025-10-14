@@ -802,16 +802,18 @@ const ComplianceItemCard = memo(({
 });
 
 // Função para salvar estado dos cards no localStorage
-const saveCardsState = (items: ComplianceItem[]) => {
+const saveCardsState = (items: ComplianceItem[], competenciaId?: string) => {
   try {
     const stateToSave = items.map(item => ({
       id: item.id,
       isExpanded: item.isExpanded,
       status: item.status,
       lastUpdated: item.lastUpdated,
-      updatedBy: item.updatedBy
+      updatedBy: item.updatedBy,
+      competenciaId: competenciaId
     }));
     localStorage.setItem('compliance-cards-state', JSON.stringify(stateToSave));
+    console.log('💾 Estado dos cards salvo:', stateToSave);
   } catch (error) {
     console.error('Erro ao salvar estado dos cards:', error);
   }
@@ -1137,6 +1139,16 @@ export default function Compliance() {
   const loadComplianceData = async (competenciaId: string) => {
     try {
       console.log(' Carregando dados de compliance para competência:', competenciaId);
+      
+      // Limpar estado salvo anterior se for uma competência diferente
+      const currentSavedState = loadCardsState();
+      const hasDifferentCompetencia = Object.keys(currentSavedState).length > 0 && 
+        !Object.values(currentSavedState).some(item => item.competenciaId === competenciaId);
+      
+      if (hasDifferentCompetencia) {
+        console.log('🔍 Limpando estado salvo para nova competência');
+        localStorage.removeItem('compliance-cards-state');
+      }
 
       const response = await fetch(`${API_BASE}/compliance/competencias/${competenciaId}`);
       const data = await response.json();
@@ -1228,31 +1240,31 @@ export default function Compliance() {
           console.log('🔍 Debug - updatedItem.updatedBy:', updatedItem.updatedBy);
           console.log('🔍 Debug - updatedItem.lastUpdated:', updatedItem.lastUpdated);
 
-          // Verificar se o item tem dados preenchidos para marcar como concluído
-          const hasData = (updatedItem.data && updatedItem.data.trim()) ||
-                         (updatedItem.valor && updatedItem.valor.trim()) ||
-                         (updatedItem.observacoes && updatedItem.observacoes.trim());
-          
-          if (hasData) {
-            updatedItem.status = 'concluido';
-            // Se o item está concluído, manter fechado (isExpanded = false)
-            updatedItem.isExpanded = false;
-          } else {
-            updatedItem.status = 'pendente';
-            // Se o item não tem dados, manter expandido para facilitar preenchimento
-            updatedItem.isExpanded = true;
-          }
-          
-          // IMPORTANTE: Preservar o estado de expansão dos cards que já estavam fechados
-          // Carregar estado salvo do localStorage
+          // IMPORTANTE: Preservar o estado dos cards que já foram marcados como concluídos
+          // Carregar estado salvo do localStorage PRIMEIRO
           const savedState = loadCardsState();
           const savedItemState = savedState[updatedItem.id];
           
+          // Se há estado salvo, usar o estado salvo (status e isExpanded)
           if (savedItemState) {
-            // Se há estado salvo, usar o estado salvo para isExpanded
+            updatedItem.status = savedItemState.status || updatedItem.status;
             updatedItem.isExpanded = savedItemState.isExpanded;
+            console.log(`🔍 Item ${updatedItem.id} - Usando estado salvo:`, savedItemState);
           } else {
-            // Se não há estado salvo, usar a lógica padrão
+            // Se não há estado salvo, usar a lógica baseada nos dados do banco
+            const hasData = (updatedItem.data && updatedItem.data.trim()) ||
+                           (updatedItem.valor && updatedItem.valor.trim()) ||
+                           (updatedItem.observacoes && updatedItem.observacoes.trim());
+            
+            if (hasData) {
+              updatedItem.status = 'concluido';
+              updatedItem.isExpanded = false;
+            } else {
+              updatedItem.status = 'pendente';
+              updatedItem.isExpanded = true;
+            }
+            
+            // Verificar se o item atual já estava fechado
             const currentItem = complianceItems.find(current => current.id === updatedItem.id);
             if (currentItem && currentItem.isExpanded === false) {
               updatedItem.isExpanded = false;
@@ -1264,6 +1276,9 @@ export default function Compliance() {
 
         setComplianceItems(updatedItems);
         console.log(' Compliance items atualizados com dados do banco:', updatedItems);
+        
+        // Salvar estado atual dos cards no localStorage
+        saveCardsState(updatedItems, competenciaId);
 
         // Carregar histórico de alterações
         await loadHistorico(competenciaId);
@@ -1685,7 +1700,7 @@ export default function Compliance() {
           : item
       );
       // Salvar estado no localStorage
-      saveCardsState(newItems);
+      saveCardsState(newItems, currentCompetenciaId || undefined);
       return newItems;
     });
   }, []);
@@ -1766,7 +1781,7 @@ export default function Compliance() {
               }
             : i
         );
-        saveCardsState(newItems);
+        saveCardsState(newItems, currentCompetenciaId || undefined);
         return newItems;
       });
 
