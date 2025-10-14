@@ -8,6 +8,13 @@ export const formatDateBR = (dateString: string): string => {
       return dateString;
     }
     
+    // Se está no formato ISO completo (YYYY-MM-DDTHH:MM:SS.000Z), extrair apenas a data
+    if (dateString.includes('T')) {
+      const datePart = dateString.split('T')[0]; // Pega apenas YYYY-MM-DD
+      const [year, month, day] = datePart.split('-');
+      return `${day}/${month}/${year}`;
+    }
+    
     // Se está no formato YYYY-MM-DD, converter sem usar new Date() para evitar problemas de fuso horário
     if (dateString.includes('-')) {
       const [year, month, day] = dateString.split('-');

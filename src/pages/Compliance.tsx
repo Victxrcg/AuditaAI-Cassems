@@ -330,12 +330,7 @@ const ComplianceItemCard = memo(({
             <div>
               <CardTitle className="text-lg">
                 {item.id === '1' && item.data
-                  ? (() => {
-                      console.log('🔍 Debug - item.data:', item.data);
-                      const formatted = formatCompetenciaTitle(item.data);
-                      console.log('🔍 Debug - formatCompetenciaTitle result:', formatted);
-                      return formatted;
-                    })()
+                  ? formatCompetenciaTitle(item.data)
                   : item.title
                 }
               </CardTitle>
@@ -1053,9 +1048,13 @@ export default function Compliance() {
             case '1': // Competência Período
               // Usar os novos campos separados
               if (competencia.competencia_inicio || competencia.competencia_fim) {
-                // Converter as datas do backend (formato YYYY-MM-DD) diretamente, sem usar new Date()
-                const dataInicio = competencia.competencia_inicio || '';
-                const dataFim = competencia.competencia_fim || '';
+                // Extrair apenas a parte da data (YYYY-MM-DD) do formato ISO completo
+                const dataInicio = competencia.competencia_inicio 
+                  ? competencia.competencia_inicio.split('T')[0] 
+                  : '';
+                const dataFim = competencia.competencia_fim 
+                  ? competencia.competencia_fim.split('T')[0] 
+                  : '';
                 
                 if (dataInicio && dataFim) {
                   // Período completo
@@ -1944,8 +1943,10 @@ export default function Compliance() {
                       
                       // Fallback para competencia_referencia (compatibilidade)
                       if (competencia.competencia_referencia) {
-                        const dataISO = new Date(competencia.competencia_referencia);
-                        const dataFormatada = dataISO.toISOString().split('T')[0];
+                        // Extrair apenas a parte da data do formato ISO completo
+                        const dataFormatada = competencia.competencia_referencia.includes('T') 
+                          ? competencia.competencia_referencia.split('T')[0]
+                          : competencia.competencia_referencia;
                         const formatted = formatCompetenciaTitle(dataFormatada);
                         return formatted;
                       }
