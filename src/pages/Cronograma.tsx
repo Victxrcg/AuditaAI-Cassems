@@ -85,6 +85,9 @@ const Cronograma = () => {
   });
 
   const [formData, setFormData] = useState(initialFormData());
+  const [filtroStatus, setFiltroStatus] = useState<string>('todos');
+  const [filtroPrioridade, setFiltroPrioridade] = useState<string>('todos');
+  const [filtroOrganizacao, setFiltroOrganizacao] = useState<string>('todos');
   const { toast } = useToast();
 
   // Carregar usuário atual
@@ -239,9 +242,16 @@ const Cronograma = () => {
     }
   }, [formData.status]);
 
+  // Obter organizações únicas para filtro (apenas para Portes)
+  const organizacoesUnicas = [...new Set(cronogramas.map(c => c.organizacao))];
 
-  // Usar todos os cronogramas (sem filtros)
-  const cronogramasFiltrados = cronogramas;
+  // Filtrar cronogramas ("Todos" deve incluir concluídos)
+  const cronogramasFiltrados = cronogramas.filter(cronograma => {
+    const statusMatch = filtroStatus === 'todos' || cronograma.status === filtroStatus;
+    const prioridadeMatch = filtroPrioridade === 'todos' || cronograma.prioridade === filtroPrioridade;
+    const organizacaoMatch = filtroOrganizacao === 'todos' || cronograma.organizacao === filtroOrganizacao;
+    return statusMatch && prioridadeMatch && organizacaoMatch;
+  });
 
   // Separar cronogramas em ativos e concluídos para exibição
   const cronogramasAtivos = cronogramas.filter(c => c.status !== 'concluido');
@@ -472,9 +482,12 @@ const Cronograma = () => {
   // Função para expandir/recolher todos
   const expandirTodos = () => {
     const cronogramasFiltrados = cronogramas.filter(cronograma => {
+      const statusMatch = filtroStatus === 'todos' || cronograma.status === filtroStatus;
+      const prioridadeMatch = filtroPrioridade === 'todos' || cronograma.prioridade === filtroPrioridade;
+      const organizacaoMatch = filtroOrganizacao === 'todos' || cronograma.organizacao === filtroOrganizacao;
       const buscaMatch = !busca || cronograma.titulo.toLowerCase().includes(busca.toLowerCase()) ||
                         (cronograma.responsavel_nome && cronograma.responsavel_nome.toLowerCase().includes(busca.toLowerCase()));
-      return buscaMatch;
+      return statusMatch && prioridadeMatch && organizacaoMatch && buscaMatch;
     });
     
     const grupos = agruparPorMes(cronogramasFiltrados);
@@ -562,9 +575,12 @@ const Cronograma = () => {
   const renderListView = () => {
     // Filtrar cronogramas com busca
     const cronogramasFiltradosComBusca = cronogramas.filter(cronograma => {
+      const statusMatch = filtroStatus === 'todos' || cronograma.status === filtroStatus;
+      const prioridadeMatch = filtroPrioridade === 'todos' || cronograma.prioridade === filtroPrioridade;
+      const organizacaoMatch = filtroOrganizacao === 'todos' || cronograma.organizacao === filtroOrganizacao;
       const buscaMatch = !busca || cronograma.titulo.toLowerCase().includes(busca.toLowerCase()) ||
                         (cronograma.responsavel_nome && cronograma.responsavel_nome.toLowerCase().includes(busca.toLowerCase()));
-      return buscaMatch;
+      return statusMatch && prioridadeMatch && organizacaoMatch && buscaMatch;
     });
 
     const grupos = agruparPorMes(cronogramasFiltradosComBusca);
@@ -777,8 +793,8 @@ const Cronograma = () => {
             <Target className="h-12 w-12 text-gray-400 mx-auto mb-4" />
             <h3 className="text-lg font-semibold text-gray-600 mb-2">Nenhuma atividade encontrada</h3>
             <p className="text-gray-500">
-              {busca 
-                ? 'Tente ajustar o termo de busca.'
+              {busca || filtroStatus !== 'todos' || filtroPrioridade !== 'todos' 
+                ? 'Tente ajustar os filtros ou termo de busca.'
                 : 'Não há atividades cadastradas no momento.'
               }
             </p>
@@ -882,7 +898,10 @@ const Cronograma = () => {
                   Timeline de Demandas
                 </CardTitle>
                 <CardDescription>
-                  Visualização temporal das demandas por organização
+                  {filtroStatus === 'apenas_concluidas' 
+                    ? `Visualização temporal das tarefas concluídas (${cronogramasConcluidos.length} tarefas)`
+                    : 'Visualização temporal das demandas por organização'
+                  }
                 </CardDescription>
               </div>
               
@@ -1156,6 +1175,76 @@ const Cronograma = () => {
         </div>
       )}
 
+      {/* Filtros */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Filter className="h-5 w-5" />
+            Filtros
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="flex gap-4">
+            <div className="flex-1">
+              <Label htmlFor="status-filter">Status</Label>
+              <Select key={`status-${viewMode}-${filtroStatus}`} value={filtroStatus} onValueChange={setFiltroStatus}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Todos os status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="todos">Todos</SelectItem>
+                  <SelectItem value="pendente">Pendente</SelectItem>
+                  <SelectItem value="em_andamento">Em Andamento</SelectItem>
+                  <SelectItem value="concluido">Concluído</SelectItem>
+                  <SelectItem value="atrasado">Atrasado</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex-1">
+              <Label htmlFor="prioridade-filter">Prioridade</Label>
+              <Select key={`prioridade-${viewMode}-${filtroPrioridade}`} value={filtroPrioridade} onValueChange={setFiltroPrioridade}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Todas as prioridades" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="todos">Todas</SelectItem>
+                  <SelectItem value="baixa">Baixa</SelectItem>
+                  <SelectItem value="media">Média</SelectItem>
+                  <SelectItem value="alta">Alta</SelectItem>
+                  <SelectItem value="critica">Crítica</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            {currentUser?.organizacao === 'portes' && (
+              <div className="flex-1">
+                <Label htmlFor="organizacao-filter">Organização</Label>
+                <Select key={`org-${viewMode}-${filtroOrganizacao}`} value={filtroOrganizacao} onValueChange={setFiltroOrganizacao}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Todas as organizações" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="todos">Todas</SelectItem>
+                    {organizacoesUnicas.map(org => (
+                      <SelectItem key={org} value={org}>
+                        {org.charAt(0).toUpperCase() + org.slice(1).replace('_', ' ')}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+          </div>
+          
+          {/* Contador de tarefas concluídas */}
+          {filtroStatus === 'apenas_concluidas' && (
+            <div className="mt-4 flex items-center gap-4">
+              <div className="text-sm text-gray-600">
+                ({cronogramasConcluidos.length} tarefa{cronogramasConcluidos.length !== 1 ? 's' : ''} concluída{cronogramasConcluidos.length !== 1 ? 's' : ''})
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Conteúdo baseado no modo de visualização */}
       {loading ? (
