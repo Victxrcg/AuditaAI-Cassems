@@ -17,13 +17,20 @@ const upload = multer({
       fieldname: file.fieldname,
       originalname: file.originalname,
       encoding: file.encoding,
-      mimetype: file.mimetype
+      mimetype: file.mimetype,
+      size: file.size
     });
     
-    if (file && file.originalname) {
+    // Aceitar qualquer arquivo que tenha nome
+    if (file && file.originalname && file.originalname.trim()) {
+      console.log('✅ Arquivo aceito pelo multer');
       cb(null, true);
     } else {
-      console.error('❌ Arquivo inválido recebido:', file);
+      console.error('❌ Arquivo rejeitado pelo multer:', {
+        hasFile: !!file,
+        hasOriginalName: !!(file && file.originalname),
+        originalName: file ? file.originalname : 'undefined'
+      });
       cb(new Error('Arquivo inválido. Verifique se o arquivo não está corrompido.'), false);
     }
   }
@@ -78,7 +85,13 @@ router.delete('/anexos/:anexoId', anexosController.removeAnexo);
 // Gerar parecer com IA
 router.post('/competencias/:id/gerar-parecer', (req, res, next) => {
   console.log('🔍 Rota generateParecer chamada:', req.params.id);
+  console.log('🔍 URL completa:', req.originalUrl);
+  console.log('🔍 Método:', req.method);
+  console.log('🔍 Headers:', req.headers);
+  console.log('🔍 Body:', req.body);
+  
   if (typeof complianceController.generateParecer === 'function') {
+    console.log('✅ Chamando complianceController.generateParecer');
     complianceController.generateParecer(req, res, next);
   } else {
     console.error('❌ generateParecer não é uma função:', typeof complianceController.generateParecer);

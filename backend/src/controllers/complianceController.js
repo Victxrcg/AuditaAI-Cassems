@@ -591,6 +591,15 @@ exports.updateCompetenciaReferencia = async (req, res) => {
       });
     }
 
+    // Verificar se é um período (contém |) - se for, não salvar no campo competencia_referencia
+    if (competencia_referencia.includes('|')) {
+      console.log('⚠️ Debug - Período detectado, não salvando em competencia_referencia:', competencia_referencia);
+      return res.json({
+        success: true,
+        message: 'Período detectado - deve ser salvo nos campos competencia_inicio e competencia_fim'
+      });
+    }
+
     console.log('🔍 Debug - Atualizando competência_referencia:', { id, competencia_referencia });
 
     ({ pool, server } = await getDbPoolWithTunnel());
@@ -664,7 +673,7 @@ exports.generateParecer = async (req, res) => {
       });
     }
 
-    const { competenciaId } = req.params;
+    const { id: competenciaId } = req.params;
     const { userId, organizacao } = req.body;
 
     ({ pool, server } = await getDbPoolWithTunnel());
