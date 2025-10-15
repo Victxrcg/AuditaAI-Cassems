@@ -69,7 +69,7 @@ export const parseDateISO = (dateISO: string): string => {
 
 // Função para formatar data no título da competência
 export const formatCompetenciaTitle = (dateString: string): string => {
-  if (!dateString) return 'Competência Período';
+  if (!dateString) return 'Período';
   
   try {
     // Se contém "|" significa que é um período (data_inicio|data_fim)
@@ -82,29 +82,29 @@ export const formatCompetenciaTitle = (dateString: string): string => {
         // Formatar data de fim
         const dataFimFormatted = formatDateBR(dataFim);
         
-        return `Competência Período (${dataInicioFormatted} - ${dataFimFormatted})`;
+        return `Período (${dataInicioFormatted}) - (${dataFimFormatted})`;
       } else if (dataInicio) {
         // Apenas data de início
         const dataInicioFormatted = formatDateBR(dataInicio);
-        return `Competência Período (${dataInicioFormatted})`;
+        return `Período (${dataInicioFormatted})`;
       }
     }
     
     // Se a data já está no formato YYYY-MM-DD (do input type="date")
     if (dateString.includes('-')) {
       const dataFormatted = formatDateBR(dateString);
-      return `Competência Período (${dataFormatted})`;
+      return `Período (${dataFormatted})`;
     }
     
     // Se a data está em outro formato, tentar converter
     const date = new Date(dateString);
     if (isNaN(date.getTime())) {
-      return `Competência Período (${dateString})`;
+      return `Período (${dateString})`;
     }
     
     const dataFormatted = formatDateBR(dateString);
-    return `Competência Período (${dataFormatted})`;
+    return `Período (${dataFormatted})`;
   } catch (error) {
-    return `Competência Período (${dateString})`;
+    return `Período (${dateString})`;
   }
 };

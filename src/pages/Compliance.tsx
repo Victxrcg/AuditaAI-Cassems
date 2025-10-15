@@ -671,7 +671,7 @@ const ComplianceItemCard = memo(({
           <>
             <div className={`grid grid-cols-1 gap-4 md:grid-cols-1`}>
 
-          {/* Campo Período - apenas para Competência Período (id: 1) */}
+          {/* Campo Período - apenas para Período (id: 1) */}
           {item.id === '1' && (
             <div>
               <Label htmlFor={`data-${item.id}`}>
@@ -1075,7 +1075,7 @@ export default function Compliance() {
 
   // Mapear IDs dos itens para campos do banco
   const itemFieldMapping: Record<string, Record<string, string>> = {
-    '1': { // Competência Período
+    '1': { // Período
       'data': 'competencia_referencia',
       'observacoes': 'competencia_referencia_texto'
     },
@@ -1254,7 +1254,7 @@ export default function Compliance() {
 
           // Mapear campos específicos baseado no ID do item
           switch (itemId) {
-            case '1': // Competência Período
+            case '1': // Período
               // Usar os novos campos separados
               if (competencia.competencia_inicio || competencia.competencia_fim) {
                 // Extrair apenas a parte da data (YYYY-MM-DD) do formato ISO completo
@@ -1632,7 +1632,7 @@ export default function Compliance() {
       // Mapear campos específicos para cada item
       let dbField: string;
 
-      if (itemId === '1') { // Competência Período
+      if (itemId === '1') { // Período
         if (field === 'data') {
           // Para competência período, vamos salvar em campos separados
           // O valor vem no formato "data_inicio|data_fim" ou apenas "data_inicio"
@@ -1910,7 +1910,7 @@ export default function Compliance() {
       // Aguardar todas as operações de salvamento
       await Promise.all(promises);
 
-      // Se for o item "Competência Período" e tiver data, atualizar a competencia_referencia
+      // Se for o item "Período" e tiver data, atualizar a competencia_referencia
       if (id === '1' && item.data && item.data.trim()) {
         // Se for um período (contém '|'), salvar como está, senão converter para data única
         const dataParaSalvar = item.data.includes('|') ? item.data : item.data;
@@ -2255,9 +2255,9 @@ export default function Compliance() {
                           formatDateBR(competencia.competencia_fim) : '';
                         
                         if (dataInicio && dataFim) {
-                          return `Competência Período (${dataInicio} - ${dataFim})`;
+                          return `Período (${dataInicio}) - (${dataFim})`;
                         } else if (dataInicio) {
-                          return `Competência Período (${dataInicio})`;
+                          return `Período (${dataInicio})`;
                         }
                       }
                       
@@ -2271,7 +2271,7 @@ export default function Compliance() {
                         return formatted;
                       }
                       
-                      return `Competência Período ${competencia.competencia_formatada || 'N/A'}`;
+                      return `Período ${competencia.competencia_formatada || 'N/A'}`;
                     })()}
                   </h3>
 
