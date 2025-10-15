@@ -194,9 +194,9 @@ const Login = () => {
                   )}
                 </Button>
 
-                <div className="text-center text-sm text-muted-foreground">
+                <div className="text-center text-base text-gray-600">
                   Não tem conta? {" "}
-                  <Link to="/registrar" className="text-primary hover:underline">Cadastre-se</Link>
+                  <Link to="/registrar" className="text-primary hover:underline font-semibold text-lg">Cadastre-se</Link>
                 </div>
               </form>
             </CardContent>
