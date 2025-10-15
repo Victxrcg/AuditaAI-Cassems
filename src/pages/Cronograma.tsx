@@ -27,8 +27,7 @@ import {
   Building,
   AlertTriangle,
   List,
-  User,
-  Eye
+  User
 } from 'lucide-react';
 
 interface CronogramaItem {
@@ -670,7 +669,15 @@ const Cronograma = () => {
                       const dataFim = cronograma.data_fim ? new Date(cronograma.data_fim) : null;
                       
                       return (
-                        <div key={cronograma.id} className="p-6 hover:bg-gray-50 transition-colors">
+                        <div 
+                          key={cronograma.id} 
+                          className="p-6 hover:bg-gray-50 transition-colors cursor-pointer"
+                          onClick={() => {
+                            setViewingCronograma(cronograma);
+                            setIsViewDialogOpen(true);
+                          }}
+                          title="Clique para visualizar detalhes"
+                        >
                           <div className="flex items-start gap-4">
                             {/* Indicador visual */}
                             <div className="flex-shrink-0 mt-1">
@@ -681,7 +688,14 @@ const Cronograma = () => {
                             <div className="flex-1 min-w-0">
                               <div className="flex items-start justify-between gap-4">
                                 <div className="flex-1 min-w-0">
-                                  <h4 className="text-lg font-medium text-gray-900 mb-2">
+                                  <h4 
+                                    className="text-lg font-medium text-gray-900 mb-2 cursor-pointer hover:text-blue-600 transition-colors"
+                                    onClick={() => {
+                                      setViewingCronograma(cronograma);
+                                      setIsViewDialogOpen(true);
+                                    }}
+                                    title="Clique para visualizar detalhes"
+                                  >
                                     {cronograma.titulo}
                                   </h4>
                                   
@@ -742,17 +756,8 @@ const Cronograma = () => {
                                   <Button
                                     variant="outline"
                                     size="sm"
-                                    onClick={() => {
-                                      setViewingCronograma(cronograma);
-                                      setIsViewDialogOpen(true);
-                                    }}
-                                  >
-                                    <Eye className="h-4 w-4" />
-                                  </Button>
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => {
+                                    onClick={(e) => {
+                                      e.stopPropagation();
                                       setEditingCronograma(cronograma);
                                       setIsEditDialogOpen(true);
                                     }}
@@ -762,7 +767,10 @@ const Cronograma = () => {
                                   <Button
                                     variant="outline"
                                     size="sm"
-                                    onClick={() => openDeleteDialog(cronograma)}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      openDeleteDialog(cronograma);
+                                    }}
                                   >
                                     <Trash2 className="h-4 w-4" />
                                   </Button>

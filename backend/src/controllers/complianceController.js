@@ -284,7 +284,7 @@ exports.updateField = async (req, res) => {
 
     // Registrar alteração no histórico
     try {
-      await registrarAlteracao(pool, id, field, valorAnterior, value, userId, userOrg);
+    await registrarAlteracao(pool, id, field, valorAnterior, value, userId, userOrg);
       console.log('✅ Histórico registrado com sucesso');
     } catch (histError) {
       console.error('❌ Erro ao registrar histórico (continuando):', histError.message);
@@ -420,7 +420,7 @@ exports.updateComplianceField = async (req, res) => {
     
     // Registrar no histórico
     try {
-      await registrarAlteracao(pool, id, field, valorAnterior, value, user_id, userOrg);
+    await registrarAlteracao(pool, id, field, valorAnterior, value, user_id, userOrg);
       console.log('✅ Histórico registrado com sucesso');
     } catch (histError) {
       console.error('❌ Erro ao registrar histórico (continuando):', histError.message);
