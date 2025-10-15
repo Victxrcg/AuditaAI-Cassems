@@ -122,6 +122,21 @@ export const validateFileType = (file: File): boolean => {
   return file && file.name && file.size > 0;
 };
 
+// Validar tamanho do arquivo
+export const validateFileSize = (file: File): { valid: boolean; message?: string } => {
+  const maxSize = 1024 * 1024 * 1024; // 1GB
+  const fileSize = file.size;
+  
+  if (fileSize > maxSize) {
+    return {
+      valid: false,
+      message: `Arquivo muito grande. Tamanho máximo permitido: ${formatFileSize(maxSize)}. Tamanho do arquivo: ${formatFileSize(fileSize)}`
+    };
+  }
+  
+  return { valid: true };
+};
+
 // Obter ícone do arquivo baseado no tipo
 export const getFileIcon = (filename: string | undefined): string => {
   // Verificar se filename existe e não é undefined
@@ -152,6 +167,9 @@ export const getFileIcon = (filename: string | undefined): string => {
     case 'txt':
     case 'rtf':
       return '';
+    case 'msg':
+    case 'eml':
+      return ''; // Ícone para emails (Outlook MSG e EML)
     case 'zip':
     case 'rar':
     case '7z':

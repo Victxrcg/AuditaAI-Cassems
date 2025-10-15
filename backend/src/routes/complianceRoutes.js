@@ -5,11 +5,21 @@ const anexosController = require('../controllers/backend-anexos-controller');
 
 const router = express.Router();
 
+// Middleware específico para CORS em rotas de anexos
+router.use('/competencias/:complianceId/anexos*', (req, res, next) => {
+  console.log('🔍 CORS middleware para anexos - Origin:', req.headers.origin);
+  res.header('Access-Control-Allow-Origin', req.headers.origin || '*');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-user-organization, x-user-id, Accept, Origin, X-Requested-With');
+  res.header('Access-Control-Allow-Credentials', 'true');
+  next();
+});
+
 // Configurar multer para upload de arquivos
 const upload = multer({
   dest: 'uploads/',
   limits: {
-    fileSize: 100 * 1024 * 1024 // 100MB - Limite aumentado para arquivos grandes
+    fileSize: 1024 * 1024 * 1024 // 1GB - Limite aumentado para arquivos muito grandes
   },
   fileFilter: (req, file, cb) => {
     // Permitir qualquer tipo de arquivo - apenas verificar se é um arquivo válido
@@ -18,18 +28,21 @@ const upload = multer({
       originalname: file.originalname,
       encoding: file.encoding,
       mimetype: file.mimetype,
-      size: file.size
+      size: file.size,
+      extension: file.originalname ? file.originalname.split('.').pop() : 'unknown'
     });
     
-    // Aceitar qualquer arquivo que tenha nome
-    if (file && file.originalname && file.originalname.trim()) {
-      console.log('✅ Arquivo aceito pelo multer');
+    // Aceitar qualquer arquivo que tenha nome e tamanho > 0
+    if (file && file.originalname && file.originalname.trim() && file.size > 0) {
+      console.log('✅ Arquivo aceito pelo multer - tipo:', file.originalname.split('.').pop());
       cb(null, true);
     } else {
       console.error('❌ Arquivo rejeitado pelo multer:', {
         hasFile: !!file,
         hasOriginalName: !!(file && file.originalname),
-        originalName: file ? file.originalname : 'undefined'
+        hasSize: !!(file && file.size > 0),
+        originalName: file ? file.originalname : 'undefined',
+        size: file ? file.size : 'undefined'
       });
       cb(new Error('Arquivo inválido. Verifique se o arquivo não está corrompido.'), false);
     }
@@ -53,6 +66,16 @@ router.put('/competencias/:id/referencia', complianceController.updateCompetenci
 
 // Criar nova competência
 router.post('/competencias', complianceController.createCompetencia);
+
+// Rota OPTIONS para anexos (preflight CORS)
+router.options('/competencias/:complianceId/anexos/:tipoAnexo', (req, res) => {
+  console.log('🔍 OPTIONS request para anexos - Origin:', req.headers.origin);
+  res.header('Access-Control-Allow-Origin', req.headers.origin || '*');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-user-organization, x-user-id, Accept, Origin, X-Requested-With');
+  res.header('Access-Control-Allow-Credentials', 'true');
+  res.sendStatus(200);
+});
 
 // Upload de anexo
 router.post('/competencias/:complianceId/anexos/:tipoAnexo', 

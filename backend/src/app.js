@@ -41,8 +41,8 @@ app.options('*', (req, res) => {
   res.sendStatus(200);
 });
 
-app.use(express.json({ limit: '50mb' }));
-app.use(express.urlencoded({ extended: true, limit: '50mb' }));
+app.use(express.json({ limit: '1gb' }));
+app.use(express.urlencoded({ extended: true, limit: '1gb' }));
 
 // Rotas
 app.use('/api/compliance', complianceRoutes);

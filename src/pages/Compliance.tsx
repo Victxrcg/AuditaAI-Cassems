@@ -42,6 +42,7 @@ import {
   getTipoAnexoFromItemId,
   formatFileSize,
   validateFileType,
+  validateFileSize,
   getFileIcon,
   type Anexo
 } from '@/services/anexosService';
@@ -332,38 +333,37 @@ const ComplianceItemCard = memo(({
   }, [currentCompetenciaId, item.id, complianceItems]);
 
   const handleFileUpload = async (file: File) => {
-    console.log('🔍 ComplianceItemCard handleFileUpload called with file:', file.name);
-    console.log('🔍 currentCompetenciaId:', currentCompetenciaId);
-    
     // Verificar se precisa criar competência primeiro
     if (!currentCompetenciaId) {
-      console.log('🔍 No currentCompetenciaId, calling onFileUpload...');
       // Chamar função do pai para criar competência
       const novaCompetencia = await onFileUpload(item.id, file);
-      console.log('🔍 Nova competência retornada:', novaCompetencia);
       
       // Se a competência foi criada, fazer upload
       if (novaCompetencia && novaCompetencia.id) {
-        console.log('🔍 Competência created, processing upload...');
         await processarUpload(file, novaCompetencia.id.toString());
-      } else {
-        console.log('❌ Erro: Competência não foi criada corretamente');
       }
     } else {
-      console.log('🔍 Competência exists, processing upload directly...');
       // Se já existe competência, fazer upload diretamente
       await processarUpload(file, currentCompetenciaId);
     }
   };
 
-  const processarUpload = async (file: File, competenciaId: string) => {
-    console.log('🔍 processarUpload called with:', file.name, 'competenciaId:', competenciaId);
-    
-    if (!validateFileType(file)) {
-      console.log('❌ File validation failed');
-      alert('Arquivo inválido. Verifique se o arquivo não está corrompido.');
-      return;
-    }
+    const processarUpload = async (file: File, competenciaId: string) => {
+      console.log('🔍 processarUpload called with:', file.name, 'competenciaId:', competenciaId);
+      
+      if (!validateFileType(file)) {
+        console.log('❌ File validation failed');
+        alert('Arquivo inválido. Verifique se o arquivo não está corrompido.');
+        return;
+      }
+
+      // Validar tamanho do arquivo
+      const sizeValidation = validateFileSize(file);
+      if (!sizeValidation.valid) {
+        console.log('❌ File size validation failed:', sizeValidation.message);
+        alert(sizeValidation.message || 'Arquivo muito grande.');
+        return;
+      }
 
     try {
       console.log('🔍 Starting upload process...');
@@ -817,15 +817,8 @@ const ComplianceItemCard = memo(({
                 type="file"
                 accept="*/*"
                 onChange={(e) => {
-                  console.log('🔍 Input file onChange triggered');
                   const file = e.target.files?.[0];
-                  console.log('🔍 File selected:', file?.name, file?.size);
-                  if (file) {
-                    console.log('🔍 Calling handleFileUpload with file:', file.name);
-                    handleFileUpload(file);
-                  } else {
-                    console.log('❌ No file selected');
-                  }
+                  if (file) handleFileUpload(file);
                 }}
                 className="hidden"
                 disabled={uploading}

@@ -2,7 +2,7 @@
 const { getDbPoolWithTunnel, resetPool, executeQueryWithRetry } = require('../lib/db');
 const fs = require('fs');
 const path = require('path');
-const pdf = require('pdf-parse');
+const pdfParse = require('pdf-parse');
 const csv = require('csv-parse/sync');
 const { simpleParser } = require('mailparser');
 
@@ -824,7 +824,7 @@ const extrairConteudoArquivos = async (pool, competenciaId) => {
                 conteudo = `Dados CSV (${csvData.length} linhas):\n${JSON.stringify(csvData, null, 2)}`;
               }
             } else if (extensao === '.pdf') {
-            const pdfData = await pdf(buffer);
+            const pdfData = await pdfParse(buffer);
             conteudo = pdfData.text;
           } else if (extensao === '.eml') {
             const email = await simpleParser(buffer);
@@ -862,7 +862,7 @@ const extrairConteudoArquivos = async (pool, competenciaId) => {
                 conteudo = `Dados CSV (${csvData.length} linhas):\n${JSON.stringify(csvData, null, 2)}`;
               }
             } else if (extensao === '.pdf') {
-            const pdfData = await pdf(buffer);
+            const pdfData = await pdfParse(buffer);
             conteudo = pdfData.text;
           } else if (extensao === '.eml') {
             const email = await simpleParser(buffer);
@@ -934,56 +934,43 @@ const generateParecerComIA = async (dados, conteudosArquivos = []) => {
     if (conteudosArquivos.length > 0) {
       conteudoArquivosTexto = '\n\n## CONTEÚDO DOS ARQUIVOS ANEXADOS:\n';
       
-      // Limitar a 3 arquivos para evitar limite de tokens (arquivos grandes)
-      conteudosArquivos.slice(0, 3).forEach((arquivo, index) => {
-        // Truncar conteúdo para evitar limite de tokens (máximo 1000 caracteres por arquivo)
-        const conteudoTruncado = arquivo.conteudo.length > 1000 
-          ? arquivo.conteudo.substring(0, 1000) + '... [CONTEÚDO TRUNCADO - ARQUIVO MUITO GRANDE]'
+      // Limitar drasticamente para evitar limite de tokens (máximo 2 arquivos, 200 caracteres cada)
+      conteudosArquivos.slice(0, 2).forEach((arquivo, index) => {
+        // Truncar conteúdo drasticamente (máximo 200 caracteres por arquivo)
+        const conteudoTruncado = arquivo.conteudo.length > 200 
+          ? arquivo.conteudo.substring(0, 200) + '... [TRUNCADO]'
           : arquivo.conteudo;
         
-        conteudoArquivosTexto += `\n### ${index + 1}. ${arquivo.nome} (${arquivo.tipo})\n`;
-        conteudoArquivosTexto += `**Tipo:** ${arquivo.mime}\n`;
-        conteudoArquivosTexto += `**Tamanho:** ${arquivo.tamanho} bytes\n`;
-        conteudoArquivosTexto += `**Conteúdo:**\n${conteudoTruncado}\n`;
+        conteudoArquivosTexto += `\n### ${index + 1}. ${arquivo.nome}\n`;
+        conteudoArquivosTexto += `**Resumo:** ${conteudoTruncado}\n`;
         conteudoArquivosTexto += '---\n';
       });
       
       // Limitar total de arquivos se necessário
-      if (conteudosArquivos.length > 5) {
-        conteudoArquivosTexto += `\n**Nota:** ${conteudosArquivos.length - 5} arquivo(s) adicional(is) foram omitidos para evitar limite de tokens.\n`;
+      if (conteudosArquivos.length > 2) {
+        conteudoArquivosTexto += `\n**Nota:** ${conteudosArquivos.length - 2} arquivo(s) adicional(is) foram omitidos para evitar limite de tokens.\n`;
       }
     }
 
-    // Preparar prompt para a IA
-    const prompt = `
-Você é um especialista em compliance fiscal brasileiro. Analise os dados fornecidos e gere um parecer técnico detalhado sobre a situação fiscal.
+    // Preparar prompt simplificado para a IA (reduzir tokens)
+    const prompt = `Analise os dados fiscais e gere um parecer técnico.
 
-DADOS DA COMPETÊNCIA:
-- Período: ${periodoInfo}
-- Observações dos campos: ${JSON.stringify(dados, null, 2)}
-
+PERÍODO: ${periodoInfo}
+DADOS: ${JSON.stringify(dados, null, 2)}
 ${conteudoArquivosTexto}
 
-INSTRUÇÕES:
-1. Analise TODOS os dados e arquivos fornecidos
-2. Identifique pontos de conformidade e não conformidade
-3. Forneça recomendações específicas baseadas no conteúdo real dos arquivos
-4. Mencione valores, datas e informações específicas encontradas nos documentos
-5. Gere um parecer técnico profissional em português brasileiro
-6. Estruture o parecer com: Resumo Executivo, Análise Detalhada, Conformidade Fiscal, Recomendações e Próximos Passos
-
-IMPORTANTE: Baseie-se no conteúdo REAL dos arquivos, não em dados genéricos.`;
+Gere um parecer técnico em português com: Resumo Executivo, Análise de Conformidade, Recomendações. Baseie-se no conteúdo real dos arquivos.`;
 
     // Tentar usar OpenAI se disponível
     if (openai) {
       console.log('🚀 Usando OpenAI para análise...');
       
       const response = await openai.chat.completions.create({
-        model: "gpt-4",
+        model: "gpt-4-turbo-preview", // Modelo com maior contexto (128k tokens)
         messages: [
           {
             role: "system",
-            content: "Você é um especialista em compliance fiscal brasileiro com vasta experiência em análise de documentos fiscais e conformidade tributária."
+            content: "Você é um especialista em compliance fiscal brasileiro."
           },
           {
             role: "user",
@@ -1018,7 +1005,7 @@ IMPORTANTE: Baseie-se no conteúdo REAL dos arquivos, não em dados genéricos.`
       // Construir seção de observações
       let observacoesSecao = '';
       const observacoes = Object.entries(dados)
-        .filter(([key, value]) => value && value.toString().trim())
+        .filter(([key, value]) => value && typeof value === 'string' && value.trim())
         .map(([key, value]) => `- **${key}:** ${value}`);
       
       if (observacoes.length > 0) {
