@@ -46,19 +46,9 @@ const Login = () => {
           navigate('/dashboard');
           toast({ title: 'Login realizado com sucesso!' });
         } else if (data.error === 'Usuário inativo' || (data.error && data.error.toLowerCase().includes('inativo'))) {
-          // Usuário precisa confirmar e-mail
-          const codeRes = await fetch(`${API_BASE}/auth/send-code`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ email })
-          });
-          const codeData = await codeRes.json();
-          if (codeRes.ok && codeData.success) {
-            setStep('code');
-            toast({ title: 'Confirme seu email', description: 'Enviamos um código para o seu email.' });
-          } else {
-            toast({ title: 'Erro ao enviar código', description: codeData.error || 'Tente novamente.', variant: 'destructive' });
-          }
+          // Usuário precisa confirmar e-mail - não reenviar código, apenas pedir
+          setStep('code');
+          toast({ title: 'Confirme seu email', description: 'Digite o código que foi enviado para seu email no cadastro.' });
         } else {
           toast({ title: 'Erro no login', description: data.error || 'Credenciais inválidas.', variant: 'destructive' });
         }
@@ -179,7 +169,6 @@ const Login = () => {
                             const d = await r.json();
                             if(r.ok && d.success){
                               toast({title:'Código reenviado', description:'Verifique seu email.'});
-                              if(d.devCode){ toast({title:'Código (dev)', description:d.devCode}); }
                             } else {
                               toast({title:'Erro ao reenviar', description:d.error||'Tente novamente.', variant:'destructive'});
                             }
