@@ -332,15 +332,21 @@ const ComplianceItemCard = memo(({
   }, [currentCompetenciaId, item.id, complianceItems]);
 
   const handleFileUpload = async (file: File) => {
+    console.log('🔍 ComplianceItemCard handleFileUpload called with file:', file.name);
+    console.log('🔍 currentCompetenciaId:', currentCompetenciaId);
+    
     // Verificar se precisa criar competência primeiro
     if (!currentCompetenciaId) {
+      console.log('🔍 No currentCompetenciaId, calling onFileUpload...');
       // Chamar função do pai para criar competência
       await onFileUpload(item.id, file);
       // Após criar, usar a competência atual
       if (currentCompetenciaId) {
+        console.log('🔍 Competência created, processing upload...');
         await processarUpload(file, currentCompetenciaId);
       }
     } else {
+      console.log('🔍 Competência exists, processing upload directly...');
       // Se já existe competência, fazer upload diretamente
       await processarUpload(file, currentCompetenciaId);
     }
@@ -800,8 +806,15 @@ const ComplianceItemCard = memo(({
                 type="file"
                 accept="*/*"
                 onChange={(e) => {
+                  console.log('🔍 Input file onChange triggered');
                   const file = e.target.files?.[0];
-                  if (file) handleFileUpload(file);
+                  console.log('🔍 File selected:', file?.name, file?.size);
+                  if (file) {
+                    console.log('🔍 Calling handleFileUpload with file:', file.name);
+                    handleFileUpload(file);
+                  } else {
+                    console.log('❌ No file selected');
+                  }
                 }}
                 className="hidden"
                 disabled={uploading}
