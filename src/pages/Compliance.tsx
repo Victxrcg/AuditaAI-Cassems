@@ -285,7 +285,7 @@ const ComplianceItemCard = memo(({
 }: {
   item: ComplianceItem;
   onFieldChange: (id: string, field: 'valor' | 'data' | 'observacoes', value: string) => void;
-  onFileUpload: (id: string, file: File) => void;
+  onFileUpload: (id: string, file: File) => Promise<any>;
   onRemoveFile: (id: string, anexoId: number) => void;
   onSave: (id: string) => void;
   gerarParecer: (id: string) => void;
@@ -339,11 +339,15 @@ const ComplianceItemCard = memo(({
     if (!currentCompetenciaId) {
       console.log('🔍 No currentCompetenciaId, calling onFileUpload...');
       // Chamar função do pai para criar competência
-      await onFileUpload(item.id, file);
-      // Após criar, usar a competência atual
-      if (currentCompetenciaId) {
+      const novaCompetencia = await onFileUpload(item.id, file);
+      console.log('🔍 Nova competência retornada:', novaCompetencia);
+      
+      // Se a competência foi criada, fazer upload
+      if (novaCompetencia && novaCompetencia.id) {
         console.log('🔍 Competência created, processing upload...');
-        await processarUpload(file, currentCompetenciaId);
+        await processarUpload(file, novaCompetencia.id.toString());
+      } else {
+        console.log('❌ Erro: Competência não foi criada corretamente');
       }
     } else {
       console.log('🔍 Competência exists, processing upload directly...');
@@ -353,15 +357,22 @@ const ComplianceItemCard = memo(({
   };
 
   const processarUpload = async (file: File, competenciaId: string) => {
+    console.log('🔍 processarUpload called with:', file.name, 'competenciaId:', competenciaId);
+    
     if (!validateFileType(file)) {
+      console.log('❌ File validation failed');
       alert('Arquivo inválido. Verifique se o arquivo não está corrompido.');
       return;
     }
 
     try {
+      console.log('🔍 Starting upload process...');
       setUploading(true);
       const tipoAnexo = getTipoAnexoFromItemId(item.id);
+      console.log('🔍 tipoAnexo:', tipoAnexo);
+      console.log('🔍 Calling uploadAnexo...');
       const novoAnexo = await uploadAnexo(competenciaId, tipoAnexo, file);
+      console.log('🔍 Upload completed:', novoAnexo);
 
       // Recarregar anexos do servidor para garantir sincronização
       const anexosData = await listAnexos(competenciaId);
