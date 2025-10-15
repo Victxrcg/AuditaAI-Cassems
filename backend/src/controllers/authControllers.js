@@ -174,9 +174,28 @@ exports.registrar = async (req, res) => {
     const hashedPassword = senha;
 
     const result = await pool.query(
-      `INSERT INTO usuarios_cassems (nome, nome_empresa, email, senha, perfil, ativo, organizacao, cor_identificacao) VALUES (?, ?, ?, ?, ?, 1, ?, ?)`,
+      `INSERT INTO usuarios_cassems (nome, nome_empresa, email, senha, perfil, ativo, organizacao, cor_identificacao) VALUES (?, ?, ?, ?, ?, 0, ?, ?)`,
       [nome, nomeEmpresa, email, hashedPassword, perfil, organizacao, cor_identificacao]
     );
+
+    // Enviar código de verificação para ativar a conta
+    const code = Math.floor(100000 + Math.random() * 900000).toString();
+    const expiresAt = Date.now() + 10 * 60 * 1000; // 10 minutos
+    emailVerificationStore.set(email, { code, expiresAt });
+    const appName = process.env.APP_NAME || 'Compliance App';
+    const from = process.env.SMTP_FROM || 'no-reply@portes.com.br';
+    await mailer.sendMail({
+      from,
+      to: email,
+      subject: `${appName} - Confirme seu email` ,
+      text: `Bem-vindo ao ${appName}! Seu código de verificação é: ${code}. Expira em 10 minutos.`,
+      html: `<div style="font-family: Arial, sans-serif; line-height:1.6;">
+        <h2>Bem-vindo ao ${appName}!</h2>
+        <p>Use o código abaixo para confirmar seu email e ativar sua conta:</p>
+        <div style="font-size:28px; font-weight:bold; letter-spacing:6px;">${code}</div>
+        <p style="color:#555;">O código expira em 10 minutos.</p>
+      </div>`
+    });
 
     // Buscar o usuário criado (sem senha)
     const newUserRows = await pool.query(
@@ -198,7 +217,7 @@ exports.registrar = async (req, res) => {
 
     res.status(201).json({
       success: true,
-      message: 'Usuário registrado com sucesso',
+      message: 'Usuário registrado. Enviamos um código para confirmar o email.',
       user: userWithOrg
     });
   } catch (err) {
@@ -239,9 +258,8 @@ exports.sendVerificationCode = async (req, res) => {
       </div>`
     });
 
-    // Em ambientes sem SMTP configurado, retornamos o código para facilitar testes
-    const devHint = !process.env.SMTP_HOST ? { devCode: code } : {};
-    return res.json({ success: true, message: 'Código enviado', ...devHint });
+    // Nunca expor o código na resposta
+    return res.json({ success: true, message: 'Código enviado' });
   } catch (err) {
     console.error('❌ Erro ao enviar código de verificação:', err);
     return res.status(500).json({ error: 'Falha ao enviar código' });
@@ -267,8 +285,18 @@ exports.verifyEmailCode = async (req, res) => {
     if (entry.code !== code) {
       return res.status(400).json({ error: 'Código inválido' });
     }
-    // Código válido: consumir e confirmar
+    // Código válido: consumir e confirmar; ativar usuário se existir
     emailVerificationStore.delete(email);
+
+    try {
+      let pool, server;
+      ({ pool, server } = await getDbPoolWithTunnel());
+      await pool.execute(`UPDATE usuarios_cassems SET ativo = 1, updated_at = NOW() WHERE email = ?`, [email]);
+      if (server) server.close();
+    } catch (e) {
+      console.warn('Aviso: falha ao ativar usuário após verificação:', e.message);
+    }
+
     return res.json({ success: true });
   } catch (err) {
     console.error('❌ Erro ao verificar código:', err);

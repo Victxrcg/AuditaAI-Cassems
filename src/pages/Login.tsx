@@ -40,7 +40,13 @@ const Login = () => {
         });
         const data = await res.json();
         if (res.ok && data.success) {
-          // 2) enviar código para o email
+          // Usuário ativo: login direto
+          localStorage.setItem('isAuthenticated', 'true');
+          localStorage.setItem('user', JSON.stringify(data.user));
+          navigate('/dashboard');
+          toast({ title: 'Login realizado com sucesso!' });
+        } else if (data.error === 'Usuário inativo' || (data.error && data.error.toLowerCase().includes('inativo'))) {
+          // Usuário precisa confirmar e-mail
           const codeRes = await fetch(`${API_BASE}/auth/send-code`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -49,13 +55,7 @@ const Login = () => {
           const codeData = await codeRes.json();
           if (codeRes.ok && codeData.success) {
             setStep('code');
-            toast({ title: 'Código enviado', description: 'Verifique seu email e informe o código.' });
-            // Apenas para dev sem SMTP, mostrar código em toast
-            if (codeData.devCode) {
-              toast({ title: 'Código (dev)', description: codeData.devCode });
-            }
-            // Guardar usuário temporariamente até verificar código
-            localStorage.setItem('pendingUser', JSON.stringify(data.user));
+            toast({ title: 'Confirme seu email', description: 'Enviamos um código para o seu email.' });
           } else {
             toast({ title: 'Erro ao enviar código', description: codeData.error || 'Tente novamente.', variant: 'destructive' });
           }
@@ -71,14 +71,19 @@ const Login = () => {
         });
         const verifyData = await verifyRes.json();
         if (verifyRes.ok && verifyData.success) {
-          const pendingUser = localStorage.getItem('pendingUser');
-          if (pendingUser) {
-            localStorage.removeItem('pendingUser');
+          // Tentar login novamente agora que o email foi confirmado
+          const res = await fetch(`${API_BASE}/auth/login`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email, senha: password })
+          });
+          const data = await res.json();
+          if (res.ok && data.success) {
             localStorage.setItem('isAuthenticated', 'true');
-            localStorage.setItem('user', pendingUser);
+            localStorage.setItem('user', JSON.stringify(data.user));
           }
           navigate('/dashboard');
-          toast({ title: 'Login verificado!', description: 'Acesso autorizado.' });
+          toast({ title: 'Email confirmado!', description: 'Acesso autorizado.' });
         } else {
           toast({ title: 'Código inválido', description: verifyData.error || 'Verifique e tente novamente.', variant: 'destructive' });
         }
