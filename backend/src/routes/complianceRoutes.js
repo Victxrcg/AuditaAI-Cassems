@@ -34,15 +34,14 @@ const upload = multer({
       extension: file.originalname ? file.originalname.split('.').pop() : 'unknown'
     });
     
-    // Aceitar qualquer arquivo que tenha nome e tamanho > 0
-    if (file && file.originalname && file.originalname.trim() && file.size > 0) {
-      console.log('✅ Arquivo aceito pelo multer - tipo:', file.originalname.split('.').pop());
+    // Aceitar qualquer arquivo que tenha nome - ignorar size undefined
+    if (file && file.originalname && file.originalname.trim()) {
+      console.log('✅ Arquivo aceito pelo multer - ignorando size undefined');
       cb(null, true);
     } else {
       console.error('❌ Arquivo rejeitado pelo multer:', {
         hasFile: !!file,
         hasOriginalName: !!(file && file.originalname),
-        hasSize: !!(file && file.size > 0),
         originalName: file ? file.originalname : 'undefined',
         size: file ? file.size : 'undefined'
       });
