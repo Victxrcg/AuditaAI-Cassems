@@ -27,7 +27,8 @@ import {
   Building,
   AlertTriangle,
   List,
-  User
+  User,
+  Eye
 } from 'lucide-react';
 
 interface CronogramaItem {
@@ -175,6 +176,13 @@ const Cronograma = () => {
       fetchUsuarios();
     }
   }, [currentUser]);
+
+  // Expandir automaticamente meses com demandas quando os dados ou filtros mudarem
+  useEffect(() => {
+    if (cronogramas.length > 0) {
+      expandirMesesComDemandas();
+    }
+  }, [cronogramas, filtroStatus, filtroPrioridade, filtroOrganizacao]);
 
   // Função para converter data para formato YYYY-MM-DD
   const formatDateForInput = (dateString: string | Date | null) => {
@@ -510,6 +518,22 @@ const Cronograma = () => {
     setGruposExpandidos(new Set(todasChaves));
   };
 
+  // Função para expandir automaticamente meses com demandas
+  const expandirMesesComDemandas = () => {
+    const cronogramasFiltrados = cronogramas.filter(cronograma => {
+      const statusMatch = filtroStatus === 'todos' || cronograma.status === filtroStatus;
+      const prioridadeMatch = filtroPrioridade === 'todos' || cronograma.prioridade === filtroPrioridade;
+      const organizacaoMatch = filtroOrganizacao === 'todos' || cronograma.organizacao === filtroOrganizacao;
+      const buscaMatch = !busca || cronograma.titulo.toLowerCase().includes(busca.toLowerCase()) ||
+                        (cronograma.responsavel_nome && cronograma.responsavel_nome.toLowerCase().includes(busca.toLowerCase()));
+      return statusMatch && prioridadeMatch && organizacaoMatch && buscaMatch;
+    });
+    
+    const grupos = agruparPorMes(cronogramasFiltrados);
+    const mesesComDemandas = grupos.map(([chave]) => chave);
+    setGruposExpandidos(new Set(mesesComDemandas));
+  };
+
   const recolherTodos = () => {
     setGruposExpandidos(new Set());
   };
@@ -715,6 +739,16 @@ const Cronograma = () => {
 
                                 {/* Botões de ação */}
                                 <div className="flex gap-2">
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => {
+                                      setViewingCronograma(cronograma);
+                                      setIsViewDialogOpen(true);
+                                    }}
+                                  >
+                                    <Eye className="h-4 w-4" />
+                                  </Button>
                                   <Button
                                     variant="outline"
                                     size="sm"
