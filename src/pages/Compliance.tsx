@@ -644,24 +644,7 @@ const ComplianceItemCard = memo(({
           </div>
         ) : (
           <>
-            <div className={`grid grid-cols-1 gap-4 ${item.id === '4' ? 'md:grid-cols-2' : 'md:grid-cols-1'}`}>
-              {/* Campo Valor - apenas para Comprovação de Compensações (id: 4) */}
-              {item.id === '4' && (
-                <div>
-                  <Label htmlFor={`valor-${item.id}`}>
-                    <DollarSign className="h-4 w-4 inline mr-1" />
-                    Valor
-                  </Label>
-                  <input
-                    id={`valor-${item.id}`}
-                    type="text"
-                    value={item.valor || ''}
-                    onChange={(e) => onFieldChange(item.id, 'valor', e.target.value)}
-                    placeholder="Digite o valor"
-                    className="mt-1 flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                  />
-                </div>
-              )}
+            <div className={`grid grid-cols-1 gap-4 md:grid-cols-1`}>
 
           {/* Campo Período - apenas para Competência Período (id: 1) */}
           {item.id === '1' && (
@@ -1080,7 +1063,6 @@ export default function Compliance() {
       'observacoes': 'relatorio_faturamento_texto'
     },
     '4': { // Comprovação de Compensações
-      'valor': 'imposto_compensado_texto',
       'data': 'imposto_compensado_data',
       'observacoes': 'imposto_compensado_observacoes'
     },
@@ -1292,8 +1274,8 @@ export default function Compliance() {
               }
               break;
             case '4': // Comprovação de Compensações
-              if (competencia.imposto_compensado_texto) {
-                updatedItem.valor = competencia.imposto_compensado_texto;
+              if (competencia.imposto_compensado_observacoes) {
+                updatedItem.observacoes = competencia.imposto_compensado_observacoes;
               }
               break;
             case '6': // Comprovação de Email
@@ -1323,7 +1305,6 @@ export default function Compliance() {
 
           // PRIMEIRO: Determinar status baseado nos dados reais do banco
           const hasData = (updatedItem.data && updatedItem.data.trim()) ||
-                         (updatedItem.valor && updatedItem.valor.trim()) ||
                          (updatedItem.observacoes && updatedItem.observacoes.trim());
           
           if (hasData) {
@@ -1616,7 +1597,7 @@ export default function Compliance() {
   };
 
   // Salvar campo específico no banco
-  const saveFieldToDatabase = async (itemId: string, field: 'valor' | 'data' | 'observacoes' | 'competencia_inicio' | 'competencia_fim', value: string, userId: number) => {
+  const saveFieldToDatabase = async (itemId: string, field: 'data' | 'observacoes' | 'competencia_inicio' | 'competencia_fim', value: string, userId: number) => {
     if (!currentCompetenciaId) {
       console.error('🔍 Nenhuma competência selecionada');
       return;
@@ -1655,7 +1636,6 @@ export default function Compliance() {
           '2': 'relatorio_inicial',
           '3': 'relatorio_faturamento',
           '4': 'imposto_compensado',
-          '5': 'valor_compensado',
           '6': 'emails',
           '7': 'estabelecimento',
           '8': 'parecer'
@@ -1769,7 +1749,7 @@ export default function Compliance() {
   };
 
   // Handlers estáveis com useCallback
-  const handleFieldChange = useCallback((id: string, field: 'valor' | 'data' | 'observacoes', value: string) => {
+  const handleFieldChange = useCallback((id: string, field: 'data' | 'observacoes', value: string) => {
     setComplianceItems(prev => prev.map(item =>
       item.id === id
         ? { ...item, [field]: value }
@@ -1891,11 +1871,6 @@ export default function Compliance() {
 
       // Salvar cada campo no banco se tiver valor
       const promises = [];
-
-      if (item.valor && item.valor.trim()) {
-        console.log('🔍 Salvando valor:', item.valor, 'para item:', id, 'com user_id:', currentUser.id);
-        promises.push(saveFieldToDatabase(id, 'valor', item.valor, currentUser.id));
-      }
       if (item.data && item.data.trim()) {
         console.log('🔍 Salvando data:', item.data, 'para item:', id, 'com user_id:', currentUser.id);
         promises.push(saveFieldToDatabase(id, 'data', item.data, currentUser.id));
@@ -1931,7 +1906,6 @@ export default function Compliance() {
           i.id === id
             ? {
                 ...i,
-                valor: item.valor || '',
                 data: item.data || '',
                 observacoes: item.observacoes || '',
                 status: 'concluido' as const, // Mudar para concluído
