@@ -44,6 +44,24 @@ app.options('*', (req, res) => {
 app.use(express.json({ limit: '1gb' }));
 app.use(express.urlencoded({ extended: true, limit: '1gb' }));
 
+// Middleware específico para uploads grandes
+app.use((req, res, next) => {
+  // Aumentar timeout para requisições de upload
+  req.setTimeout(30 * 60 * 1000); // 30 minutos
+  res.setTimeout(30 * 60 * 1000); // 30 minutos
+  
+  // Headers específicos para uploads
+  if (req.path.includes('/anexos/')) {
+    res.header('Access-Control-Allow-Origin', req.headers.origin || '*');
+    res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+    res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-user-organization, x-user-id, Accept, Origin, X-Requested-With');
+    res.header('Access-Control-Allow-Credentials', 'true');
+    res.header('Access-Control-Max-Age', '86400'); // 24 horas
+  }
+  
+  next();
+});
+
 // Rotas
 app.use('/api/compliance', complianceRoutes);
 app.use('/api/documentos', documentosRoutes);

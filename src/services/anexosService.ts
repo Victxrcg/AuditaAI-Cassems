@@ -28,6 +28,16 @@ export const uploadAnexo = async (complianceId: string, tipoAnexo: string, file:
 
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({}));
+    
+    // Tratar erros específicos
+    if (response.status === 413) {
+      throw new Error('Arquivo muito grande. O limite máximo é 1GB.');
+    }
+    
+    if (response.status === 400) {
+      throw new Error(errorData.details || errorData.error || 'Arquivo inválido.');
+    }
+    
     throw new Error(errorData.error || 'Erro ao fazer upload do anexo');
   }
 

@@ -365,6 +365,14 @@ const ComplianceItemCard = memo(({
         return;
       }
 
+      // Avisar sobre arquivos grandes
+      if (file.size > 50 * 1024 * 1024) { // > 50MB
+        const confirmUpload = confirm(`Arquivo grande detectado (${formatFileSize(file.size)}). O upload pode demorar alguns minutos. Continuar?`);
+        if (!confirmUpload) {
+          return;
+        }
+      }
+
     try {
       console.log('🔍 Starting upload process...');
       setUploading(true);

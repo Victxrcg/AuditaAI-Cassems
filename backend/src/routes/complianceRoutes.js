@@ -19,7 +19,9 @@ router.use('/competencias/:complianceId/anexos*', (req, res, next) => {
 const upload = multer({
   dest: 'uploads/',
   limits: {
-    fileSize: 1024 * 1024 * 1024 // 1GB - Limite aumentado para arquivos muito grandes
+    fileSize: 1024 * 1024 * 1024, // 1GB - Limite aumentado para arquivos muito grandes
+    files: 10, // Máximo 10 arquivos por requisição
+    fieldSize: 1024 * 1024 * 1024 // 1GB para campos
   },
   fileFilter: (req, file, cb) => {
     // Permitir qualquer tipo de arquivo - apenas verificar se é um arquivo válido
@@ -83,6 +85,23 @@ router.post('/competencias/:complianceId/anexos/:tipoAnexo',
   (err, req, res, next) => {
     if (err) {
       console.error('❌ Erro no multer:', err.message);
+      
+      // Tratar erros específicos
+      if (err.code === 'LIMIT_FILE_SIZE') {
+        return res.status(413).json({ 
+          error: 'Arquivo muito grande', 
+          details: 'O arquivo excede o limite de 1GB',
+          maxSize: '1GB'
+        });
+      }
+      
+      if (err.code === 'LIMIT_UNEXPECTED_FILE') {
+        return res.status(400).json({ 
+          error: 'Arquivo inesperado', 
+          details: 'Verifique se o arquivo foi enviado corretamente'
+        });
+      }
+      
       return res.status(400).json({ 
         error: 'Erro no upload do arquivo', 
         details: err.message 
