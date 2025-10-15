@@ -866,7 +866,7 @@ const loadCardsState = (): Record<string, any> => {
 // Função para inicializar complianceItems com estado salvo
 const initializeComplianceItems = (): ComplianceItem[] => {
   const defaultItems: ComplianceItem[] = [
-    { id: '1', title: 'Competência Período', description: 'Informe o período fiscal referente à competência.', status: 'pendente', isExpanded: false },
+    { id: '1', title: 'Período', description: 'Informe o período fiscal referente à competência.', status: 'pendente', isExpanded: false },
     { id: '2', title: 'Relatório Técnico', description: 'Análise fiscal inicial com pendências, cronograma e parecer sobre as compensações.', status: 'pendente', isExpanded: false },
     { id: '3', title: 'Relatório Faturamento', description: 'Comprovação mensal das compensações: faturamento, notas e impostos pagos.', status: 'pendente', isExpanded: false },
     { id: '4', title: 'Comprovação de Compensações', description: 'Documentos que comprovam compensações realizadas e seus valores.', status: 'pendente', isExpanded: false },
@@ -1385,7 +1385,7 @@ export default function Compliance() {
     
     // Reinicializar cards com status pendente
     setComplianceItems([
-      { id: '1', title: 'Competência Período', description: 'Informe o período fiscal referente à competência.', status: 'pendente', isExpanded: false },
+      { id: '1', title: 'Período', description: 'Informe o período fiscal referente à competência.', status: 'pendente', isExpanded: false },
       { id: '2', title: 'Relatório Técnico', description: 'Análise fiscal inicial com pendências, cronograma e parecer sobre as compensações.', status: 'pendente', isExpanded: false },
       { id: '3', title: 'Relatório Faturamento', description: 'Comprovação mensal das compensações: faturamento, notas e impostos pagos.', status: 'pendente', isExpanded: false },
       { id: '4', title: 'Comprovação de Compensações', description: 'Documentos que comprovam compensações realizadas e seus valores.', status: 'pendente', isExpanded: false },
