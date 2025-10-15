@@ -2,6 +2,17 @@
 const { getDbPoolWithTunnel } = require('../lib/db');
 const fs = require('fs');
 
+// Função para sanitizar nome do arquivo
+function sanitizeFileName(filename) {
+  // Remover caracteres especiais e acentos
+  return filename
+    .normalize('NFD') // Decompor caracteres acentuados
+    .replace(/[\u0300-\u036f]/g, '') // Remover diacríticos
+    .replace(/[^a-zA-Z0-9._-]/g, '_') // Substituir caracteres especiais por _
+    .replace(/_+/g, '_') // Remover underscores duplos
+    .replace(/^_|_$/g, ''); // Remover underscores do início/fim
+}
+
 // Upload de anexo
 exports.uploadAnexo = async (req, res) => {
   let pool, server;
@@ -49,6 +60,11 @@ exports.uploadAnexo = async (req, res) => {
     
     console.log('🔍 Debug - User info from headers:', currentUser);
     
+    // Sanitizar nome do arquivo para evitar problemas de codificação
+    const sanitizedFileName = sanitizeFileName(req.file.originalname);
+    console.log('🔍 Debug - Nome original:', req.file.originalname);
+    console.log('🔍 Debug - Nome sanitizado:', sanitizedFileName);
+    
     // Inserir anexo na tabela compliance_anexos usando a estrutura correta
     const result = await pool.query(`
       INSERT INTO compliance_anexos (
@@ -67,7 +83,7 @@ exports.uploadAnexo = async (req, res) => {
     `, [
       complianceId,
       tipoAnexo,
-      req.file.originalname,
+      sanitizedFileName,
       req.file.path,
       fileData,
       req.file.size,
@@ -95,7 +111,8 @@ exports.uploadAnexo = async (req, res) => {
       success: true,
       data: {
         anexo_id: anexoId,
-        filename: req.file.originalname,
+        filename: sanitizedFileName,
+        original_filename: req.file.originalname,
         size: req.file.size,
         tipo_mime: req.file.mimetype
       }
