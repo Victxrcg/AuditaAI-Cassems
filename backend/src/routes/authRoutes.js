@@ -8,6 +8,8 @@ const router = express.Router();
 router.post('/login', authController.login);
 router.post('/registrar', authController.registrar);
 router.post('/reset-password', authController.resetPassword); // ← NOVA ROTA
+router.post('/send-code', authController.sendVerificationCode);
+router.post('/verify-code', authController.verifyEmailCode);
 router.get('/verificar', authController.verificarToken);
 router.get('/user/:userId', authController.getCurrentUser);
 

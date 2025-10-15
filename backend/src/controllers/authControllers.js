@@ -1,5 +1,32 @@
 // backend/src/controllers/authControllers.js
 const { getDbPoolWithTunnel } = require('../lib/db');
+const nodemailer = require('nodemailer');
+
+// In-memory store for verification codes (email => { code, expiresAt })
+const emailVerificationStore = new Map();
+
+// Create mail transporter from env or noop fallback
+function createMailTransporter() {
+  if (process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS) {
+    return nodemailer.createTransport({
+      host: process.env.SMTP_HOST,
+      port: Number(process.env.SMTP_PORT || 587),
+      secure: Boolean(process.env.SMTP_SECURE === 'true'),
+      auth: {
+        user: process.env.SMTP_USER,
+        pass: process.env.SMTP_PASS,
+      },
+    });
+  }
+  // Fallback transporter that logs emails in dev environments
+  return {
+    sendMail: async (options) => {
+      console.log('📧 [DEV] Email enviado (simulado):', options);
+      return { messageId: 'dev-simulated' };
+    }
+  };
+}
+const mailer = createMailTransporter();
 
 // Login
 exports.login = async (req, res) => {
@@ -180,6 +207,72 @@ exports.registrar = async (req, res) => {
       error: 'Erro interno do servidor',
       details: err.message
     });
+  }
+};
+
+// Enviar código de verificação por email
+exports.sendVerificationCode = async (req, res) => {
+  try {
+    const { email } = req.body || {};
+    if (!email) {
+      return res.status(400).json({ error: 'Email é obrigatório' });
+    }
+
+    // Gerar código de 6 dígitos
+    const code = Math.floor(100000 + Math.random() * 900000).toString();
+    const expiresAt = Date.now() + 10 * 60 * 1000; // 10 minutos
+    emailVerificationStore.set(email, { code, expiresAt });
+
+    const appName = process.env.APP_NAME || 'Compliance App';
+    const from = process.env.SMTP_FROM || 'no-reply@portes.com.br';
+
+    await mailer.sendMail({
+      from,
+      to: email,
+      subject: `${appName} - Código de verificação`,
+      text: `Seu código de verificação é: ${code}. Ele expira em 10 minutos.`,
+      html: `<div style="font-family: Arial, sans-serif; line-height:1.6;">
+        <h2>${appName}</h2>
+        <p>Use o código abaixo para concluir o acesso:</p>
+        <div style="font-size:28px; font-weight:bold; letter-spacing:6px;">${code}</div>
+        <p style="color:#555;">O código expira em 10 minutos.</p>
+      </div>`
+    });
+
+    // Em ambientes sem SMTP configurado, retornamos o código para facilitar testes
+    const devHint = !process.env.SMTP_HOST ? { devCode: code } : {};
+    return res.json({ success: true, message: 'Código enviado', ...devHint });
+  } catch (err) {
+    console.error('❌ Erro ao enviar código de verificação:', err);
+    return res.status(500).json({ error: 'Falha ao enviar código' });
+  }
+};
+
+// Verificar código de verificação
+exports.verifyEmailCode = async (req, res) => {
+  try {
+    const { email, code } = req.body || {};
+    if (!email || !code) {
+      return res.status(400).json({ error: 'Email e código são obrigatórios' });
+    }
+
+    const entry = emailVerificationStore.get(email);
+    if (!entry) {
+      return res.status(400).json({ error: 'Solicite um novo código' });
+    }
+    if (Date.now() > entry.expiresAt) {
+      emailVerificationStore.delete(email);
+      return res.status(400).json({ error: 'Código expirado' });
+    }
+    if (entry.code !== code) {
+      return res.status(400).json({ error: 'Código inválido' });
+    }
+    // Código válido: consumir e confirmar
+    emailVerificationStore.delete(email);
+    return res.json({ success: true });
+  } catch (err) {
+    console.error('❌ Erro ao verificar código:', err);
+    return res.status(500).json({ error: 'Falha na verificação' });
   }
 };
 

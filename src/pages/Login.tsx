@@ -12,6 +12,8 @@ const Login = () => {
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [step, setStep] = useState<'credentials' | 'code'>('credentials');
+  const [code, setCode] = useState('');
   const navigate = useNavigate();
   const { toast } = useToast();
   const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3001';
@@ -29,26 +31,57 @@ const Login = () => {
     setIsLoading(true);
 
     try {
-      const res = await fetch(`${API_BASE}/auth/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: email, senha: password })
-      });
-      const data = await res.json();
-      if (res.ok && data.success) {
-        localStorage.setItem('isAuthenticated', 'true');
-        localStorage.setItem('user', JSON.stringify(data.user));
-        navigate('/dashboard');
-        toast({
-          title: 'Login realizado com sucesso!',
-          description: 'Bem-vindo ao sistema Compliance App.'
+      if (step === 'credentials') {
+        // 1) validar credenciais no backend
+        const res = await fetch(`${API_BASE}/auth/login`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: email, senha: password })
         });
+        const data = await res.json();
+        if (res.ok && data.success) {
+          // 2) enviar código para o email
+          const codeRes = await fetch(`${API_BASE}/auth/send-code`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email })
+          });
+          const codeData = await codeRes.json();
+          if (codeRes.ok && codeData.success) {
+            setStep('code');
+            toast({ title: 'Código enviado', description: 'Verifique seu email e informe o código.' });
+            // Apenas para dev sem SMTP, mostrar código em toast
+            if (codeData.devCode) {
+              toast({ title: 'Código (dev)', description: codeData.devCode });
+            }
+            // Guardar usuário temporariamente até verificar código
+            localStorage.setItem('pendingUser', JSON.stringify(data.user));
+          } else {
+            toast({ title: 'Erro ao enviar código', description: codeData.error || 'Tente novamente.', variant: 'destructive' });
+          }
+        } else {
+          toast({ title: 'Erro no login', description: data.error || 'Credenciais inválidas.', variant: 'destructive' });
+        }
       } else {
-        toast({
-          title: 'Erro no login',
-          description: data.error || 'Credenciais inválidas.',
-          variant: 'destructive',
+        // step === 'code' -> verificar código
+        const verifyRes = await fetch(`${API_BASE}/auth/verify-code`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, code })
         });
+        const verifyData = await verifyRes.json();
+        if (verifyRes.ok && verifyData.success) {
+          const pendingUser = localStorage.getItem('pendingUser');
+          if (pendingUser) {
+            localStorage.removeItem('pendingUser');
+            localStorage.setItem('isAuthenticated', 'true');
+            localStorage.setItem('user', pendingUser);
+          }
+          navigate('/dashboard');
+          toast({ title: 'Login verificado!', description: 'Acesso autorizado.' });
+        } else {
+          toast({ title: 'Código inválido', description: verifyData.error || 'Verifique e tente novamente.', variant: 'destructive' });
+        }
       }
     } catch (err) {
       toast({
@@ -81,40 +114,76 @@ const Login = () => {
             
             <CardContent>
               <form onSubmit={handleSubmit} className="space-y-6">
-                <div className="space-y-2">
-                  <Label htmlFor="email">Email</Label>
-                  <Input
-                    id="email"
-                    type="text"
-                    placeholder="Digite seu email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    required
-                    className="h-12"
-                  />
-                </div>
+                {step === 'credentials' ? (
+                  <>
+                    <div className="space-y-2">
+                      <Label htmlFor="email">Email</Label>
+                      <Input
+                        id="email"
+                        type="text"
+                        placeholder="Digite seu email"
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                        required
+                        className="h-12"
+                      />
+                    </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="password">Senha</Label>
-                  <div className="relative">
-                    <Input
-                      id="password"
-                      type={showPassword ? "text" : "password"}
-                      placeholder="Digite sua senha"
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      required
-                      className="h-12 pr-10"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowPassword(!showPassword)}
-                      className="absolute right-3 top-1/2 transform -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                    >
-                      {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
-                    </button>
-                  </div>
-                </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="password">Senha</Label>
+                      <div className="relative">
+                        <Input
+                          id="password"
+                          type={showPassword ? "text" : "password"}
+                          placeholder="Digite sua senha"
+                          value={password}
+                          onChange={(e) => setPassword(e.target.value)}
+                          required
+                          className="h-12 pr-10"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowPassword(!showPassword)}
+                          className="absolute right-3 top-1/2 transform -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                        >
+                          {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                        </button>
+                      </div>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="space-y-2">
+                      <Label htmlFor="code">Código de verificação</Label>
+                      <Input
+                        id="code"
+                        type="text"
+                        placeholder="Digite o código de 6 dígitos"
+                        value={code}
+                        onChange={(e) => setCode(e.target.value.replace(/[^0-9]/g, '').slice(0,6))}
+                        required
+                        className="h-12 tracking-widest text-center"
+                      />
+                    </div>
+                    <div className="text-right text-sm">
+                      <button type="button" className="text-primary hover:underline"
+                        onClick={async ()=>{
+                          setIsLoading(true);
+                          try{
+                            const r = await fetch(`${API_BASE}/auth/send-code`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email})});
+                            const d = await r.json();
+                            if(r.ok && d.success){
+                              toast({title:'Código reenviado', description:'Verifique seu email.'});
+                              if(d.devCode){ toast({title:'Código (dev)', description:d.devCode}); }
+                            } else {
+                              toast({title:'Erro ao reenviar', description:d.error||'Tente novamente.', variant:'destructive'});
+                            }
+                          }finally{ setIsLoading(false); }
+                        }}
+                      >Reenviar código</button>
+                    </div>
+                  </>
+                )}
 
                 <Button
                   type="submit"
@@ -124,10 +193,10 @@ const Login = () => {
                   {isLoading ? (
                     <div className="flex items-center gap-2">
                       <div className="w-4 h-4 border-2 border-primary-foreground border-t-transparent rounded-full animate-spin"></div>
-                      Entrando...
+                      {step === 'credentials' ? 'Validando...' : 'Verificando...'}
                     </div>
                   ) : (
-                    "Entrar no Sistema"
+                    step === 'credentials' ? 'Continuar' : 'Confirmar código'
                   )}
                 </Button>
 
