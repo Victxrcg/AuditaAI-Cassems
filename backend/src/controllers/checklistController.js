@@ -3,7 +3,18 @@ const { getDbPoolWithTunnel } = require('../lib/db');
 // Helper para tratar retorno do query
 const safeQuery = async (pool, sql, params = []) => {
   const result = await pool.query(sql, params);
-  return Array.isArray(result) ? result[0] : (result.rows || []);
+  console.log("🧩 safeQuery - result:", result);
+  console.log("🧩 safeQuery - typeof result:", typeof result);
+  console.log("🧩 safeQuery - Array.isArray(result):", Array.isArray(result));
+  
+  if (Array.isArray(result)) {
+    return result[0] || [];
+  } else if (result && result.rows) {
+    return result.rows;
+  } else {
+    console.log("🧩 safeQuery - retornando array vazio");
+    return [];
+  }
 };
 
 // Listar itens do checklist de uma demanda
@@ -25,9 +36,16 @@ const listChecklistItems = async (req, res) => {
       ORDER BY ordem ASC, id ASC
     `, [cronogramaId, userOrg]);
 
-    console.log("🟢 Itens encontrados:", rows.length);
+    console.log("🟢 Itens encontrados:", rows?.length || 0);
+    console.log("🟡 rows:", rows);
+    console.log("🟡 typeof rows:", typeof rows);
+    console.log("🟡 Array.isArray(rows):", Array.isArray(rows));
 
-    const items = rows.map(item => ({
+    // Garantir que rows seja sempre um array
+    const safeRows = Array.isArray(rows) ? rows : [];
+    console.log("🟢 safeRows:", safeRows);
+
+    const items = safeRows.map(item => ({
       ...item,
       concluido: Boolean(item?.concluido ?? 0)
     }));
