@@ -174,6 +174,11 @@ const updateChecklistItem = async (req, res) => {
     const userOrg = req.headers['x-user-organization'] || 'cassems';
     const normalizedOrg = normalizeOrganization(userOrg);
 
+    // Somente usuários Portes podem editar
+    if (normalizedOrg !== 'portes') {
+      return res.status(403).json({ success: false, error: 'Sem permissão para editar' });
+    }
+
     const updateFields = [];
     const updateValues = [];
 
@@ -198,8 +203,8 @@ const updateChecklistItem = async (req, res) => {
     const updatedRows = await safeQuery(pool, `
       SELECT id, titulo, descricao, concluido, ordem, created_at, updated_at
       FROM cronograma_checklist 
-      WHERE id = ? AND (organizacao IN (?, ?) OR ? = 'portes')
-    `, [itemId, normalizedOrg, userOrg, normalizedOrg]);
+      WHERE id = ?
+    `, [itemId]);
 
     if (!updatedRows || updatedRows.length === 0) {
       return res.status(404).json({ success: false, error: 'Item não encontrado' });
@@ -226,12 +231,17 @@ const deleteChecklistItem = async (req, res) => {
     const userOrg = req.headers['x-user-organization'] || 'cassems';
     const normalizedOrg = normalizeOrganization(userOrg);
 
+    // Somente usuários Portes podem excluir
+    if (normalizedOrg !== 'portes') {
+      return res.status(403).json({ success: false, error: 'Sem permissão para excluir' });
+    }
+
     ({ pool, server } = await getDbPoolWithTunnel());
 
     const deleteResult = await safeQuery(pool, `
       DELETE FROM cronograma_checklist 
-      WHERE cronograma_id = ? AND id = ? AND (organizacao IN (?, ?) OR ? = 'portes')
-    `, [cronogramaId, itemId, normalizedOrg, userOrg, normalizedOrg]);
+      WHERE cronograma_id = ? AND id = ?
+    `, [cronogramaId, itemId]);
 
     if (!deleteResult || deleteResult.affectedRows === 0) {
       return res.status(404).json({ success: false, error: 'Item não encontrado' });
