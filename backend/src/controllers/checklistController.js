@@ -133,7 +133,7 @@ const createChecklistItem = async (req, res) => {
     
     const itemData = {
       ...newItem,
-      concluido: Boolean(newItem.concluido)
+      concluido: Boolean(newItem?.concluido || 0)
     };
 
     res.status(201).json({
@@ -242,7 +242,7 @@ const updateChecklistItem = async (req, res) => {
     
     const itemData = {
       ...item,
-      concluido: Boolean(item.concluido)
+      concluido: Boolean(item?.concluido || 0)
     };
 
     res.json({
