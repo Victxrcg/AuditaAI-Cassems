@@ -641,8 +641,8 @@ const Cronograma = () => {
         className={`flex items-center h-16 border-b border-gray-100 bg-gray-50 hover:bg-gray-100 transition-colors overflow-hidden ${isDragging ? 'z-50' : ''}`}
       >
         <div className="w-80 px-4 py-3 text-sm text-gray-700 border-r">
-          <div className="flex flex-col gap-2">
-            <div className="flex items-center justify-between gap-2">
+          <div className="flex flex-col gap-2 min-w-0">
+            <div className="flex items-center justify-between gap-2 flex-nowrap min-w-0">
               <div className="flex items-center gap-2 flex-1">
                 {/* Handle de arrastar */}
                 {podeReordenar && (
@@ -668,7 +668,7 @@ const Cronograma = () => {
               </div>
               <Badge 
                 variant={getStatusBadgeInfo(cronograma.status).variant as any}
-                className="text-xs whitespace-nowrap"
+                className="text-xs whitespace-nowrap flex-shrink-0"
               >
                 {getStatusBadgeInfo(cronograma.status).text}
               </Badge>
@@ -2055,7 +2055,7 @@ const Cronograma = () => {
               )}
 
               {/* Ações */}
-              <div className="flex justify-between items-center pt-4 border-t">
+              <div className="flex items-center pt-4 border-t">
                 {currentUser?.organizacao === 'portes' && (
                   <Button
                     variant="outline"
@@ -2065,7 +2065,7 @@ const Cronograma = () => {
                         setIsChecklistOpen(true);
                       }
                     }}
-                    className="bg-blue-50 border-blue-200 text-blue-700 hover:bg-blue-100"
+                    className="mr-auto bg-blue-50 border-blue-200 text-blue-700 hover:bg-blue-100"
                   >
                     <CheckSquare className="h-4 w-4 mr-2" />
                     Checklist
