@@ -101,15 +101,16 @@ const createChecklistItem = async (req, res) => {
     console.log('🔍 Debug - Próxima ordem final:', nextOrder);
 
     console.log('🔍 Debug - Inserindo item...');
-    const [result] = await pool.query(`
+    const result = await pool.query(`
       INSERT INTO cronograma_checklist (
         cronograma_id, titulo, descricao, ordem, created_by, organizacao
       ) VALUES (?, ?, ?, ?, ?, ?)
     `, [cronogramaId, titulo, descricao, nextOrder, userId, userOrg]);
 
-    console.log('🔍 Debug - Item inserido, ID:', result.insertId);
+    console.log('🔍 Debug - Resultado da inserção:', result);
+    console.log('🔍 Debug - Item inserido, ID:', result[0].insertId);
 
-    const [newItem] = await pool.query(`
+    const newItemResult = await pool.query(`
       SELECT 
         id,
         titulo,
@@ -120,7 +121,10 @@ const createChecklistItem = async (req, res) => {
         updated_at
       FROM cronograma_checklist 
       WHERE id = ?
-    `, [result.insertId]);
+    `, [result[0].insertId]);
+    
+    console.log('🔍 Debug - Resultado da busca do item:', newItemResult);
+    const newItem = newItemResult[0];
 
     console.log('🔍 Debug - Item criado com sucesso:', newItem[0]);
 
