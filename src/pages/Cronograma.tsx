@@ -10,6 +10,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 import ErrorBoundary from '@/components/ErrorBoundary';
+import Checklist from '@/components/Checklist';
 import {
   DndContext,
   closestCenter,
@@ -47,7 +48,8 @@ import {
   AlertTriangle,
   List,
   User,
-  GripVertical
+  GripVertical,
+  CheckSquare
 } from 'lucide-react';
 
 interface CronogramaItem {
@@ -92,6 +94,7 @@ const Cronograma = () => {
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [viewingCronograma, setViewingCronograma] = useState<CronogramaItem | null>(null);
   const [isViewDialogOpen, setIsViewDialogOpen] = useState(false);
+  const [isChecklistOpen, setIsChecklistOpen] = useState(false);
   const initialFormData = () => ({
     titulo: '',
     descricao: '',
@@ -473,6 +476,9 @@ const Cronograma = () => {
   
   // Estado para controlar a ordem das demandas por organização (drag & drop)
   const [ordemDemandas, setOrdemDemandas] = useState<Record<string, number[]>>({});
+  
+  // Somente usuários da PORTES podem reordenar na timeline
+  const podeReordenar = (currentUser?.organizacao || '').toLowerCase() === 'portes';
 
   // Sensores para drag & drop
   const sensors = useSensors(
@@ -501,6 +507,7 @@ const Cronograma = () => {
 
   // Função para lidar com o fim do drag & drop
   const handleDragEnd = (event: DragEndEvent) => {
+    if (!podeReordenar) return; // Sem permissão para reordenar
     const { active, over } = event;
 
     if (active.id !== over?.id) {
@@ -563,7 +570,7 @@ const Cronograma = () => {
       transform,
       transition,
       isDragging,
-    } = useSortable({ id: cronograma.id });
+    } = useSortable({ id: cronograma.id, disabled: !podeReordenar });
 
     const style = {
       transform: CSS.Transform.toString(transform),
@@ -575,21 +582,23 @@ const Cronograma = () => {
       <div 
         ref={setNodeRef}
         style={style}
-        className={`flex items-center h-16 border-b border-gray-100 bg-gray-50 hover:bg-gray-100 transition-colors ${isDragging ? 'z-50' : ''}`}
+        className={`flex items-center h-16 border-b border-gray-100 bg-gray-50 hover:bg-gray-100 transition-colors overflow-hidden ${isDragging ? 'z-50' : ''}`}
       >
         <div className="w-80 px-4 py-3 text-sm text-gray-700 border-r">
           <div className="flex flex-col gap-2">
-            <div className="flex items-start justify-between gap-2">
+            <div className="flex items-center justify-between gap-2">
               <div className="flex items-center gap-2 flex-1">
                 {/* Handle de arrastar */}
-                <div
-                  {...attributes}
-                  {...listeners}
-                  className="cursor-grab hover:cursor-grabbing text-gray-400 hover:text-gray-600 transition-colors"
-                  title="Arrastar para reordenar"
-                >
-                  <GripVertical className="h-4 w-4" />
-                </div>
+                {podeReordenar && (
+                  <div
+                    {...attributes}
+                    {...listeners}
+                    className="cursor-grab hover:cursor-grabbing text-gray-400 hover:text-gray-600 transition-colors"
+                    title="Arrastar para reordenar"
+                  >
+                    <GripVertical className="h-4 w-4" />
+                  </div>
+                )}
                 <span 
                   className="truncate cursor-pointer hover:text-blue-600 transition-colors flex-1"
                   onClick={() => {
@@ -601,27 +610,12 @@ const Cronograma = () => {
                   {cronograma.titulo}
                 </span>
               </div>
-              <div className="flex items-center gap-2">
-                <Badge 
-                  variant={getStatusBadgeInfo(cronograma.status).variant as any}
-                  className="text-xs whitespace-nowrap"
-                >
-                  {getStatusBadgeInfo(cronograma.status).text}
-                </Badge>
-                {/* Botão de exclusão */}
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-6 w-6 p-0 text-red-500 hover:text-red-700 hover:bg-red-50"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    openDeleteDialog(cronograma);
-                  }}
-                  title="Excluir demanda"
-                >
-                  <Trash2 className="h-3 w-3" />
-                </Button>
-              </div>
+              <Badge 
+                variant={getStatusBadgeInfo(cronograma.status).variant as any}
+                className="text-xs whitespace-nowrap"
+              >
+                {getStatusBadgeInfo(cronograma.status).text}
+              </Badge>
             </div>
             {cronograma.responsavel_nome && (
               <div className="text-xs text-gray-500 truncate">
@@ -635,7 +629,7 @@ const Cronograma = () => {
         <div className="relative flex-1 h-full">
           {dataInicio && dataFim && (
             <div
-              className={`absolute top-1/2 transform -translate-y-1/2 h-10 rounded-lg ${coresStatus[cronograma.status]} shadow-sm hover:shadow-md transition-all cursor-pointer border-2 border-white hover:scale-105 overflow-hidden`}
+              className={`absolute top-1/2 transform -translate-y-1/2 h-8 rounded-lg ${coresStatus[cronograma.status]} shadow-sm hover:shadow-md transition-all cursor-pointer border-2 border-white hover:scale-105 overflow-hidden`}
               style={{
                 left: posicao.inicio,
                 width: posicao.largura,
@@ -659,6 +653,81 @@ const Cronograma = () => {
           )}
           
           {/* Linha do tempo atual */}
+          <div 
+            className="absolute top-0 bottom-0 w-0.5 bg-red-500 z-10"
+            style={{
+              left: `${((new Date().getTime() - inicioPeriodo.getTime()) / (fimPeriodo.getTime() - inicioPeriodo.getTime())) * 100}%`
+            }}
+            title={`Hoje: ${new Date().toLocaleDateString('pt-BR')}`}
+          />
+        </div>
+      </div>
+    );
+  };
+
+  // Item não arrastável (para usuários sem permissão)
+  const ReadonlyTimelineItem = ({ 
+    cronograma, 
+    dataInicio, 
+    dataFim, 
+    posicao, 
+    coresStatus,
+    inicioPeriodo,
+    fimPeriodo
+  }: {
+    cronograma: CronogramaItem;
+    dataInicio: Date | null;
+    dataFim: Date | null;
+    posicao: { inicio: string; largura: string; colunaInicio: number; colunaFim: number };
+    coresStatus: Record<string, string>;
+    inicioPeriodo: Date;
+    fimPeriodo: Date;
+  }) => {
+    return (
+      <div className={`flex items-center h-16 border-b border-gray-100 bg-gray-50 hover:bg-gray-100 transition-colors overflow-hidden`}>
+        <div className="w-80 px-4 py-3 text-sm text-gray-700 border-r">
+          <div className="flex flex-col gap-2">
+            <div className="flex items-center justify-between gap-2">
+              <span 
+                className="truncate cursor-pointer hover:text-blue-600 transition-colors flex-1"
+                onClick={() => {
+                  setViewingCronograma(cronograma);
+                  setIsViewDialogOpen(true);
+                }}
+                title={`Clique para visualizar: ${cronograma.titulo}`}
+              >
+                {cronograma.titulo}
+              </span>
+              <Badge 
+                variant={getStatusBadgeInfo(cronograma.status).variant as any}
+                className="text-xs whitespace-nowrap"
+              >
+                {getStatusBadgeInfo(cronograma.status).text}
+              </Badge>
+            </div>
+            {cronograma.responsavel_nome && (
+              <div className="text-xs text-gray-500 truncate">
+                {cronograma.responsavel_nome}
+              </div>
+            )}
+          </div>
+        </div>
+        <div className="relative flex-1 h-full">
+          {dataInicio && dataFim && (
+            <div
+              className={`absolute top-1/2 transform -translate-y-1/2 h-8 rounded-lg ${coresStatus[cronograma.status]} shadow-sm hover:shadow-md transition-all cursor-pointer border-2 border-white hover:scale-105 overflow-hidden`}
+              style={{ left: posicao.inicio, width: posicao.largura, minWidth: '60px' }}
+              onClick={() => {
+                setViewingCronograma(cronograma);
+                setIsViewDialogOpen(true);
+              }}
+              title={`${cronograma.titulo}\nStatus: ${getStatusBadgeInfo(cronograma.status).text}\nPeríodo: ${dataInicio.toLocaleDateString('pt-BR')} a ${dataFim.toLocaleDateString('pt-BR')}`}
+            >
+              <span className="text-white text-xs font-medium px-2 whitespace-nowrap overflow-hidden text-ellipsis block">
+                {cronograma.titulo}
+              </span>
+            </div>
+          )}
           <div 
             className="absolute top-0 bottom-0 w-0.5 bg-red-500 z-10"
             style={{
@@ -1139,7 +1208,7 @@ const Cronograma = () => {
                 <CardDescription>
                   {filtroStatus === 'apenas_concluidas' 
                     ? `Visualização temporal das tarefas concluídas (${cronogramasConcluidos.length} tarefas)`
-                    : 'Visualização temporal das demandas por organização - Arraste para reordenar'
+                    : `Visualização temporal das demandas por organização${podeReordenar ? ' - Arraste para reordenar' : ''}`
                   }
                 </CardDescription>
               </div>
@@ -1163,12 +1232,13 @@ const Cronograma = () => {
                 </div>
 
                 {/* Linhas das organizações */}
-                <DndContext 
-                  sensors={sensors}
-                  collisionDetection={closestCenter}
-                  onDragEnd={handleDragEnd}
-                >
-                  {Object.entries(cronogramasOrdenadosPorOrganizacao).map(([organizacao, cronogramasOrg]) => (
+                {podeReordenar ? (
+                  <DndContext 
+                    sensors={sensors}
+                    collisionDetection={closestCenter}
+                    onDragEnd={handleDragEnd}
+                  >
+                    {Object.entries(cronogramasOrdenadosPorOrganizacao).map(([organizacao, cronogramasOrg]) => (
                   <div key={organizacao} className="border-b border-gray-100">
                     {/* Header da organização */}
                     <div className="flex items-center h-16 bg-gray-100">
@@ -1208,7 +1278,44 @@ const Cronograma = () => {
                     </SortableContext>
                   </div>
                 ))}
-                </DndContext>
+                  </DndContext>
+                ) : (
+                  Object.entries(cronogramasOrdenadosPorOrganizacao).map(([organizacao, cronogramasOrg]) => (
+                    <div key={organizacao} className="border-b border-gray-100">
+                      {/* Header da organização */}
+                      <div className="flex items-center h-16 bg-gray-100">
+                        <div className="w-80 px-4 py-4 font-semibold text-gray-900 border-r">
+                          <div className="flex items-center gap-2">
+                            <div className={`w-3 h-3 rounded-full ${coresOrganizacao[organizacao] || 'bg-gray-400'}`}></div>
+                            <span className="truncate">{organizacao.toUpperCase()}</span>
+                          </div>
+                        </div>
+                        {timeUnits.map((_, index) => (
+                          <div key={index} className="border-r flex-1"></div>
+                        ))}
+                      </div>
+
+                      {/* Linhas das demandas (somente leitura) */}
+                      {cronogramasOrg.map((cronograma) => {
+                        const dataInicio = cronograma.data_inicio ? new Date(cronograma.data_inicio) : null;
+                        const dataFim = cronograma.data_fim ? new Date(cronograma.data_fim) : null;
+                        const posicao = calcularPosicaoBarra(dataInicio, dataFim);
+                        return (
+                          <ReadonlyTimelineItem
+                            key={cronograma.id}
+                            cronograma={cronograma}
+                            dataInicio={dataInicio}
+                            dataFim={dataFim}
+                            posicao={posicao}
+                            coresStatus={coresStatus}
+                            inicioPeriodo={inicioPeriodo}
+                            fimPeriodo={fimPeriodo}
+                          />
+                        );
+                      })}
+                    </div>
+                  ))
+                )}
               </div>
             </div>
           </CardContent>
@@ -1829,41 +1936,57 @@ const Cronograma = () => {
               )}
 
               {/* Ações */}
-              <div className="flex justify-end gap-3 pt-4 border-t">
+              <div className="flex justify-between items-center pt-4 border-t">
                 <Button
                   variant="outline"
                   onClick={() => {
-                    setViewingCronograma(null);
-                    setIsViewDialogOpen(false);
-                  }}
-                >
-                  Fechar
-                </Button>
-                <Button
-                  variant="destructive"
-                  className="bg-red-600 hover:bg-red-700"
-                  onClick={() => {
                     if (viewingCronograma) {
                       setIsViewDialogOpen(false);
-                      setCronogramaToDelete(viewingCronograma);
-                      setIsDeleteDialogOpen(true);
+                      setIsChecklistOpen(true);
                     }
                   }}
+                  className="bg-blue-50 border-blue-200 text-blue-700 hover:bg-blue-100"
                 >
-                  <Trash2 className="h-4 w-4 mr-2" />
-                  Excluir
+                  <CheckSquare className="h-4 w-4 mr-2" />
+                  Checklist
                 </Button>
-                <Button
-                  onClick={() => {
-                    setViewingCronograma(null);
-                    setIsViewDialogOpen(false);
-                    setEditingCronograma(viewingCronograma);
-                    setIsEditDialogOpen(true);
-                  }}
-                >
-                  <Edit className="h-4 w-4 mr-2" />
-                  Editar
-                </Button>
+                
+                <div className="flex gap-3">
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setViewingCronograma(null);
+                      setIsViewDialogOpen(false);
+                    }}
+                  >
+                    Fechar
+                  </Button>
+                  <Button
+                    variant="destructive"
+                    className="bg-red-600 hover:bg-red-700"
+                    onClick={() => {
+                      if (viewingCronograma) {
+                        setIsViewDialogOpen(false);
+                        setCronogramaToDelete(viewingCronograma);
+                        setIsDeleteDialogOpen(true);
+                      }
+                    }}
+                  >
+                    <Trash2 className="h-4 w-4 mr-2" />
+                    Excluir
+                  </Button>
+                  <Button
+                    onClick={() => {
+                      setViewingCronograma(null);
+                      setIsViewDialogOpen(false);
+                      setEditingCronograma(viewingCronograma);
+                      setIsEditDialogOpen(true);
+                    }}
+                  >
+                    <Edit className="h-4 w-4 mr-2" />
+                    Editar
+                  </Button>
+                </div>
               </div>
             </div>
           )}
@@ -1944,6 +2067,18 @@ const Cronograma = () => {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Modal do Checklist */}
+      {viewingCronograma && (
+        <Checklist
+          cronogramaId={viewingCronograma.id}
+          isOpen={isChecklistOpen}
+          onClose={() => {
+            setIsChecklistOpen(false);
+            setViewingCronograma(null);
+          }}
+        />
+      )}
       </div>
     </ErrorBoundary>
   );
