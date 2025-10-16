@@ -49,6 +49,14 @@ const createChecklistItem = async (req, res) => {
     const userOrg = req.headers['x-user-organization'] || 'cassems';
     const userId = req.headers['x-user-id'];
 
+    console.log('🔍 Debug - createChecklistItem:', {
+      cronogramaId,
+      titulo,
+      descricao,
+      userOrg,
+      userId
+    });
+
     if (!titulo || !titulo.trim()) {
       return res.status(400).json({
         success: false,
@@ -58,18 +66,38 @@ const createChecklistItem = async (req, res) => {
 
     ({ pool, server } = await getDbPoolWithTunnel());
 
+    console.log('🔍 Debug - Pool conectado, verificando tabela...');
+
+    // Verificar se a tabela existe
+    try {
+      await pool.query('SELECT 1 FROM cronograma_checklist LIMIT 1');
+      console.log('✅ Tabela cronograma_checklist existe');
+    } catch (tableError) {
+      console.error('❌ Erro na tabela cronograma_checklist:', tableError);
+      return res.status(500).json({
+        success: false,
+        error: 'Tabela cronograma_checklist não existe. Execute o script SQL primeiro.'
+      });
+    }
+
     // Obter próxima ordem
+    console.log('🔍 Debug - Obtendo próxima ordem...');
     const [orderRows] = await pool.query(`
       SELECT COALESCE(MAX(ordem), 0) + 1 as next_order
       FROM cronograma_checklist 
       WHERE cronograma_id = ? AND organizacao = ?
     `, [cronogramaId, userOrg]);
 
+    console.log('🔍 Debug - Próxima ordem:', orderRows[0].next_order);
+
+    console.log('🔍 Debug - Inserindo item...');
     const [result] = await pool.query(`
       INSERT INTO cronograma_checklist (
         cronograma_id, titulo, descricao, ordem, created_by, organizacao
       ) VALUES (?, ?, ?, ?, ?, ?)
     `, [cronogramaId, titulo, descricao, orderRows[0].next_order, userId, userOrg]);
+
+    console.log('🔍 Debug - Item inserido, ID:', result.insertId);
 
     const [newItem] = await pool.query(`
       SELECT 
@@ -84,15 +112,25 @@ const createChecklistItem = async (req, res) => {
       WHERE id = ?
     `, [result.insertId]);
 
+    console.log('🔍 Debug - Item criado com sucesso:', newItem[0]);
+
     res.status(201).json({
       success: true,
       data: newItem[0]
     });
   } catch (error) {
-    console.error('Erro ao criar item do checklist:', error);
+    console.error('❌ Erro detalhado ao criar item do checklist:', {
+      message: error.message,
+      code: error.code,
+      errno: error.errno,
+      sqlState: error.sqlState,
+      sqlMessage: error.sqlMessage,
+      stack: error.stack
+    });
     res.status(500).json({
       success: false,
-      error: 'Erro interno do servidor'
+      error: 'Erro interno do servidor',
+      details: error.message
     });
   } finally {
     if (server) {
