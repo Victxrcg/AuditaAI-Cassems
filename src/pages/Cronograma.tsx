@@ -10,6 +10,11 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 import ErrorBoundary from '@/components/ErrorBoundary';
+import { 
+  listChecklistItems, 
+  toggleChecklistItem,
+  type ChecklistItem
+} from '@/services/checklistService';
 import Checklist from '@/components/Checklist';
 import {
   DndContext,
@@ -95,6 +100,8 @@ const Cronograma = () => {
   const [viewingCronograma, setViewingCronograma] = useState<CronogramaItem | null>(null);
   const [isViewDialogOpen, setIsViewDialogOpen] = useState(false);
   const [isChecklistOpen, setIsChecklistOpen] = useState(false);
+  const [checklistItems, setChecklistItems] = useState<ChecklistItem[]>([]);
+  const [checklistLoading, setChecklistLoading] = useState(false);
   const initialFormData = () => ({
     titulo: '',
     descricao: '',
@@ -203,6 +210,46 @@ const Cronograma = () => {
     }
   };
 
+  // Função para carregar itens do checklist
+  const loadChecklistItems = async (cronogramaId: number) => {
+    try {
+      setChecklistLoading(true);
+      const items = await listChecklistItems(cronogramaId);
+      setChecklistItems(items);
+    } catch (error) {
+      console.error('Erro ao carregar checklist:', error);
+      toast({
+        title: "Erro",
+        description: "Erro ao carregar itens do checklist",
+        variant: "destructive",
+      });
+    } finally {
+      setChecklistLoading(false);
+    }
+  };
+
+  // Função para alternar status de conclusão de um item
+  const toggleChecklistItemStatus = async (itemId: number, concluido: boolean) => {
+    if (!viewingCronograma) return;
+    
+    try {
+      await toggleChecklistItem(viewingCronograma.id, itemId, concluido);
+      // Recarregar a lista de itens
+      await loadChecklistItems(viewingCronograma.id);
+      toast({
+        title: "Sucesso",
+        description: concluido ? "Item marcado como concluído" : "Item marcado como pendente",
+      });
+    } catch (error) {
+      console.error('Erro ao atualizar item do checklist:', error);
+      toast({
+        title: "Erro",
+        description: "Erro ao atualizar item do checklist",
+        variant: "destructive",
+      });
+    }
+  };
+
   useEffect(() => {
     if (currentUser) {
       fetchCronogramas();
@@ -217,6 +264,13 @@ const Cronograma = () => {
       expandirMesesComDemandas();
     }
   }, [cronogramas, filtroStatus, filtroPrioridade, filtroOrganizacao]);
+
+  // Carregar checklist quando o modal de visualização abrir
+  useEffect(() => {
+    if (isViewDialogOpen && viewingCronograma) {
+      loadChecklistItems(viewingCronograma.id);
+    }
+  }, [isViewDialogOpen, viewingCronograma]);
 
   // Função para converter data para formato YYYY-MM-DD
   const formatDateForInput = (dateString: string | Date | null) => {
@@ -1924,6 +1978,54 @@ const Cronograma = () => {
                   </div>
                 </div>
               )}
+
+              {/* Checklist */}
+              <div>
+                <h3 className="text-sm font-medium text-gray-600 mb-3">Checklist da Demanda</h3>
+                {checklistLoading ? (
+                  <div className="flex justify-center py-4">
+                    <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
+                  </div>
+                ) : checklistItems.length > 0 ? (
+                  <div className="space-y-2">
+                    {checklistItems.map((item) => (
+                      <div
+                        key={item.id}
+                        className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors"
+                      >
+                        <button
+                          onClick={() => toggleChecklistItemStatus(item.id, !item.concluido)}
+                          className={`flex-shrink-0 w-5 h-5 rounded border-2 flex items-center justify-center transition-colors ${
+                            item.concluido
+                              ? 'bg-green-500 border-green-500 text-white'
+                              : 'border-gray-300 hover:border-green-400'
+                          }`}
+                        >
+                          {item.concluido && <CheckCircle className="h-3 w-3" />}
+                        </button>
+                        <div className="flex-1 min-w-0">
+                          <p className={`text-sm font-medium ${item.concluido ? 'line-through text-gray-500' : 'text-gray-700'}`}>
+                            {item.titulo}
+                          </p>
+                          {item.descricao && (
+                            <p className={`text-xs ${item.concluido ? 'text-gray-400' : 'text-gray-500'}`}>
+                              {item.descricao}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-6 text-gray-500">
+                    <CheckSquare className="h-8 w-8 mx-auto mb-2 text-gray-300" />
+                    <p className="text-sm">Nenhum item no checklist</p>
+                    <p className="text-xs text-gray-400 mt-1">
+                      Clique no botão "Checklist" abaixo para adicionar itens
+                    </p>
+                  </div>
+                )}
+              </div>
 
               {/* Observações */}
               {viewingCronograma.observacoes && (

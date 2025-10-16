@@ -235,9 +235,10 @@ const updateChecklistItem = async (req, res) => {
     }
 
     // Converter concluido de number para boolean
+    const item = updatedItemResult[0][0];
     const itemData = {
-      ...updatedItemResult[0][0],
-      concluido: Boolean(updatedItemResult[0][0].concluido)
+      ...item,
+      concluido: Boolean(item.concluido)
     };
 
     res.json({
