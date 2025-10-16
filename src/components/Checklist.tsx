@@ -49,8 +49,15 @@ export const Checklist: React.FC<ChecklistProps> = ({ cronogramaId, isOpen, onCl
     try {
       setLoading(true);
       const checklistItems = await listChecklistItems(cronogramaId);
-      setItems(checklistItems);
+      console.log('🔍 Debug - Itens recebidos:', checklistItems, 'Tipo:', typeof checklistItems);
+      
+      // Garantir que seja sempre um array
+      const itemsArray = Array.isArray(checklistItems) ? checklistItems : [];
+      console.log('🔍 Debug - Items array final:', itemsArray);
+      setItems(itemsArray);
     } catch (error) {
+      console.error('Erro ao carregar checklist:', error);
+      setItems([]); // Garantir que seja array vazio em caso de erro
       toast({
         title: "Erro",
         description: "Erro ao carregar checklist",
@@ -173,7 +180,7 @@ export const Checklist: React.FC<ChecklistProps> = ({ cronogramaId, isOpen, onCl
   };
 
   // Calcular progresso
-  const itemsArray = items || [];
+  const itemsArray = Array.isArray(items) ? items : [];
   const progress = itemsArray.length > 0 ? (itemsArray.filter(item => item.concluido).length / itemsArray.length) * 100 : 0;
   const completedCount = itemsArray.filter(item => item.concluido).length;
   const visibleItems = hideCompleted ? itemsArray.filter(item => !item.concluido) : itemsArray;
