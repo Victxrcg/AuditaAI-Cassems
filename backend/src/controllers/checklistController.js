@@ -9,6 +9,14 @@ const listChecklistItems = async (req, res) => {
 
     ({ pool, server } = await getDbPoolWithTunnel());
 
+    console.log('🔍 createChecklistItem - Dados recebidos:', {
+      cronogramaId,
+      titulo,
+      descricao,
+      userOrg,
+      userId
+    });
+
     const result = await pool.query(`
       SELECT 
         id,
@@ -22,6 +30,10 @@ const listChecklistItems = async (req, res) => {
       WHERE cronograma_id = ? AND organizacao = ?
       ORDER BY ordem ASC, id ASC
     `, [cronogramaId, userOrg]);
+
+    console.log('🔍 listChecklistItems - result completo:', result);
+    console.log('🔍 listChecklistItems - result[0]:', result[0]);
+    console.log('🔍 listChecklistItems - quantidade de itens:', result[0]?.length || 'undefined');
 
     // Converter concluido de number para boolean
     let items = [];
@@ -104,6 +116,9 @@ const createChecklistItem = async (req, res) => {
       ) VALUES (?, ?, ?, ?, ?, ?)
     `, [cronogramaId, titulo, descricao, nextOrder, userId, userOrg]);
 
+    console.log('🔍 createChecklistItem - insertResult:', insertResult);
+    console.log('🔍 createChecklistItem - insertId:', insertResult.insertId);
+
     const newItemResult = await pool.query(`
       SELECT 
         id,
@@ -116,6 +131,9 @@ const createChecklistItem = async (req, res) => {
       FROM cronograma_checklist 
       WHERE id = ?
     `, [insertResult.insertId]);
+    
+    console.log('🔍 createChecklistItem - newItemResult:', newItemResult);
+    console.log('🔍 createChecklistItem - newItemResult[0]:', newItemResult[0]);
     
     // Converter concluido de number para boolean
     let newItem;
