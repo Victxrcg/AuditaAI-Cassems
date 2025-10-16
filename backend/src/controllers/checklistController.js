@@ -23,9 +23,15 @@ const listChecklistItems = async (req, res) => {
       ORDER BY ordem ASC, id ASC
     `, [cronogramaId, userOrg]);
 
+    // Converter concluido de number para boolean
+    const items = result[0].map(item => ({
+      ...item,
+      concluido: Boolean(item.concluido)
+    }));
+
     res.json({
       success: true,
-      data: result[0]
+      data: items
     });
   } catch (error) {
     console.error('Erro ao listar itens do checklist:', error);
@@ -124,13 +130,23 @@ const createChecklistItem = async (req, res) => {
     `, [insertResult.insertId]);
     
     console.log('🔍 Debug - Resultado da busca do item:', newItemResult);
+    console.log('🔍 Debug - Tipo do resultado:', typeof newItemResult);
+    console.log('🔍 Debug - Length do resultado:', newItemResult?.length);
     const newItem = newItemResult[0];
+    console.log('🔍 Debug - newItem:', newItem);
+    console.log('🔍 Debug - newItem length:', newItem?.length);
 
     console.log('🔍 Debug - Item criado com sucesso:', newItem[0]);
 
+    // Converter concluido de number para boolean
+    const itemData = {
+      ...newItem[0],
+      concluido: Boolean(newItem[0].concluido)
+    };
+
     res.status(201).json({
       success: true,
-      data: newItem[0]
+      data: itemData
     });
   } catch (error) {
     console.error('❌ Erro detalhado ao criar item do checklist:', {
@@ -218,9 +234,15 @@ const updateChecklistItem = async (req, res) => {
       });
     }
 
+    // Converter concluido de number para boolean
+    const itemData = {
+      ...updatedItemResult[0][0],
+      concluido: Boolean(updatedItemResult[0][0].concluido)
+    };
+
     res.json({
       success: true,
-      data: updatedItemResult[0][0]
+      data: itemData
     });
   } catch (error) {
     console.error('Erro ao atualizar item do checklist:', error);
