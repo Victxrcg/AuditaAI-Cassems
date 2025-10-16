@@ -7,9 +7,9 @@ const listChecklistItems = async (req, res) => {
     const { cronogramaId } = req.params;
     const userOrg = req.headers['x-user-organization'] || 'cassems';
 
-    ({ pool, server } = await getDbPoolWithTunnel());
+    [pool, server] = await getDbPoolWithTunnel();
 
-    const result = await pool.query(`
+    const [rows] = await pool.query(`
       SELECT 
         id,
         titulo,
@@ -23,27 +23,15 @@ const listChecklistItems = async (req, res) => {
       ORDER BY ordem ASC, id ASC
     `, [cronogramaId, userOrg]);
 
-    console.log('🔍 listChecklistItems - result completo:', result);
-    console.log('🔍 listChecklistItems - result[0]:', result[0]);
-    console.log('🔍 listChecklistItems - quantidade de itens:', result[0]?.length || 'undefined');
+    console.log('🔍 listChecklistItems - rows:', rows);
+    console.log('🔍 listChecklistItems - quantidade de itens:', rows?.length || 'undefined');
     console.log('🔍 listChecklistItems - cronogramaId:', cronogramaId, 'userOrg:', userOrg);
 
     // Converter concluido de number para boolean
-    let items = [];
-    
-    if (Array.isArray(result[0])) {
-      // Se result[0] é um array (múltiplos itens)
-      items = result[0].map(item => ({
-        ...item,
-        concluido: Boolean(item.concluido)
-      }));
-    } else if (result[0] && typeof result[0] === 'object') {
-      // Se result[0] é um objeto único (um item)
-      items = [{
-        ...result[0],
-        concluido: Boolean(result[0].concluido)
-      }];
-    }
+    const items = rows.map(item => ({
+      ...item,
+      concluido: Boolean(item?.concluido ?? 0)
+    }));
     
     console.log('🔍 listChecklistItems - items processados:', items);
     console.log('🔍 listChecklistItems - quantidade final:', items.length);
@@ -81,7 +69,7 @@ const createChecklistItem = async (req, res) => {
       });
     }
 
-    ({ pool, server } = await getDbPoolWithTunnel());
+    [pool, server] = await getDbPoolWithTunnel();
 
     // Verificar se a tabela existe
     try {
@@ -94,24 +82,23 @@ const createChecklistItem = async (req, res) => {
     }
 
     // Obter próxima ordem
-    const orderResult = await pool.query(`
+    const [orderRows] = await pool.query(`
       SELECT COALESCE(MAX(ordem), 0) + 1 as next_order
       FROM cronograma_checklist 
       WHERE cronograma_id = ? AND organizacao = ?
     `, [cronogramaId, userOrg]);
     
-    console.log('🔍 createChecklistItem - orderResult:', orderResult);
-    console.log('🔍 createChecklistItem - orderResult[0]:', orderResult[0]);
+    console.log('🔍 createChecklistItem - orderRows:', orderRows);
     
     let nextOrder = 1;
-    if (orderResult && orderResult[0] && orderResult[0].length > 0) {
-      const rawValue = orderResult[0][0].next_order;
+    if (orderRows && orderRows.length > 0) {
+      const rawValue = orderRows[0].next_order;
       nextOrder = Number(rawValue);
     }
     
     console.log('🔍 createChecklistItem - nextOrder calculado:', nextOrder);
 
-    const insertResult = await pool.query(`
+    const [insertResult] = await pool.query(`
       INSERT INTO cronograma_checklist (
         cronograma_id, titulo, descricao, ordem, created_by, organizacao
       ) VALUES (?, ?, ?, ?, ?, ?)
@@ -120,7 +107,7 @@ const createChecklistItem = async (req, res) => {
     console.log('🔍 createChecklistItem - insertResult:', insertResult);
     console.log('🔍 createChecklistItem - insertId:', insertResult.insertId);
 
-    const newItemResult = await pool.query(`
+    const [newItemRows] = await pool.query(`
       SELECT 
         id,
         titulo,
@@ -133,26 +120,19 @@ const createChecklistItem = async (req, res) => {
       WHERE id = ?
     `, [insertResult.insertId]);
     
-    console.log('🔍 createChecklistItem - newItemResult:', newItemResult);
-    console.log('🔍 createChecklistItem - newItemResult[0]:', newItemResult[0]);
+    console.log('🔍 createChecklistItem - newItemRows:', newItemRows);
     
-    // Converter concluido de number para boolean
-    let newItem;
-    
-    if (Array.isArray(newItemResult[0])) {
-      newItem = newItemResult[0][0];
-    } else if (newItemResult[0] && typeof newItemResult[0] === 'object') {
-      newItem = newItemResult[0];
-    } else {
+    if (!newItemRows || newItemRows.length === 0) {
       return res.status(500).json({
         success: false,
         error: 'Erro ao buscar item criado'
       });
     }
     
+    const newItem = newItemRows[0];
     const itemData = {
       ...newItem,
-      concluido: Boolean(newItem?.concluido || 0)
+      concluido: Boolean(newItem?.concluido ?? 0)
     };
 
     res.status(201).json({
@@ -215,7 +195,7 @@ const updateChecklistItem = async (req, res) => {
       });
     }
 
-    ({ pool, server } = await getDbPoolWithTunnel());
+    [pool, server] = await getDbPoolWithTunnel();
 
     updateValues.push(cronogramaId, itemId, userOrg);
 
@@ -225,7 +205,7 @@ const updateChecklistItem = async (req, res) => {
       WHERE cronograma_id = ? AND id = ? AND organizacao = ?
     `, updateValues);
 
-    const updatedItemResult = await pool.query(`
+    const [updatedItemRows] = await pool.query(`
       SELECT 
         id,
         titulo,
@@ -238,30 +218,17 @@ const updateChecklistItem = async (req, res) => {
       WHERE id = ? AND organizacao = ?
     `, [itemId, userOrg]);
 
-    if (updatedItemResult[0].length === 0) {
+    if (!updatedItemRows || updatedItemRows.length === 0) {
       return res.status(404).json({
         success: false,
         error: 'Item não encontrado'
       });
     }
 
-    // Converter concluido de number para boolean
-    let item;
-    
-    if (Array.isArray(updatedItemResult[0])) {
-      item = updatedItemResult[0][0];
-    } else if (updatedItemResult[0] && typeof updatedItemResult[0] === 'object') {
-      item = updatedItemResult[0];
-    } else {
-      return res.status(404).json({
-        success: false,
-        error: 'Item não encontrado'
-      });
-    }
-    
+    const item = updatedItemRows[0];
     const itemData = {
       ...item,
-      concluido: Boolean(item?.concluido || 0)
+      concluido: Boolean(item?.concluido ?? 0)
     };
 
     res.json({
@@ -288,14 +255,14 @@ const deleteChecklistItem = async (req, res) => {
     const { cronogramaId, itemId } = req.params;
     const userOrg = req.headers['x-user-organization'] || 'cassems';
 
-    ({ pool, server } = await getDbPoolWithTunnel());
+    [pool, server] = await getDbPoolWithTunnel();
 
-    const deleteResult = await pool.query(`
+    const [deleteResult] = await pool.query(`
       DELETE FROM cronograma_checklist 
       WHERE cronograma_id = ? AND id = ? AND organizacao = ?
     `, [cronogramaId, itemId, userOrg]);
 
-    if (deleteResult[0].affectedRows === 0) {
+    if (deleteResult.affectedRows === 0) {
       return res.status(404).json({
         success: false,
         error: 'Item não encontrado'
