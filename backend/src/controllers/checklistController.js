@@ -7,8 +7,6 @@ const listChecklistItems = async (req, res) => {
     const { cronogramaId } = req.params;
     const userOrg = req.headers['x-user-organization'] || 'cassems';
 
-    console.log('🔍 listChecklistItems - cronogramaId:', cronogramaId, 'userOrg:', userOrg);
-
     ({ pool, server } = await getDbPoolWithTunnel());
 
     const result = await pool.query(`
@@ -24,12 +22,6 @@ const listChecklistItems = async (req, res) => {
       WHERE cronograma_id = ? AND organizacao = ?
       ORDER BY ordem ASC, id ASC
     `, [cronogramaId, userOrg]);
-
-    console.log('🔍 listChecklistItems - result completo:', result);
-    console.log('🔍 listChecklistItems - result[0]:', result[0]);
-    console.log('🔍 listChecklistItems - result[0] length:', result[0]?.length);
-    console.log('🔍 listChecklistItems - Array.isArray(result[0]):', Array.isArray(result[0]));
-    console.log('🔍 listChecklistItems - typeof result[0]:', typeof result[0]);
 
     // Converter concluido de number para boolean
     let items = [];
@@ -47,8 +39,6 @@ const listChecklistItems = async (req, res) => {
         concluido: Boolean(result[0].concluido)
       }];
     }
-
-    console.log('🔍 listChecklistItems - items finais:', items);
 
     res.json({
       success: true,
@@ -127,9 +117,20 @@ const createChecklistItem = async (req, res) => {
       WHERE id = ?
     `, [insertResult.insertId]);
     
-    const newItem = newItemResult[0];
-
     // Converter concluido de number para boolean
+    let newItem;
+    
+    if (Array.isArray(newItemResult[0])) {
+      newItem = newItemResult[0][0];
+    } else if (newItemResult[0] && typeof newItemResult[0] === 'object') {
+      newItem = newItemResult[0];
+    } else {
+      return res.status(500).json({
+        success: false,
+        error: 'Erro ao buscar item criado'
+      });
+    }
+    
     const itemData = {
       ...newItem,
       concluido: Boolean(newItem.concluido)
