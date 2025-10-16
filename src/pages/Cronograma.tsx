@@ -1450,19 +1450,19 @@ const Cronograma = () => {
           {/* Botões de alternância de visualização */}
           <div className="flex bg-gray-100 rounded-lg p-1 mr-2">
             <Button
-              variant={viewMode === 'list' ? 'default' : 'ghost'}
+              variant="ghost"
               size="sm"
               onClick={() => setViewMode('list')}
-              className={viewMode === 'list' ? 'bg-white shadow-sm' : 'hover:bg-gray-200'}
+              className={`flex items-center ${viewMode === 'list' ? 'bg-blue-500 text-white' : 'hover:bg-gray-200 text-gray-800'} rounded-md px-3`}
             >
               <List className="h-4 w-4 mr-2" />
               Lista
             </Button>
             <Button
-              variant={viewMode === 'timeline' ? 'default' : 'ghost'}
+              variant="ghost"
               size="sm"
               onClick={() => setViewMode('timeline')}
-              className={`${viewMode === 'timeline' ? 'bg-white shadow-sm' : 'hover:bg-gray-200'} relative`}
+              className={`flex items-center ${viewMode === 'timeline' ? 'bg-blue-500 text-white' : 'hover:bg-gray-200 text-gray-800'} rounded-md px-3 relative`}
             >
               <BarChart3 className="h-4 w-4 mr-2" />
               Timeline
