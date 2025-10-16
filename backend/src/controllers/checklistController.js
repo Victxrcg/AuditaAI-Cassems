@@ -89,8 +89,16 @@ const createChecklistItem = async (req, res) => {
     `, [cronogramaId, userOrg]);
 
     console.log('🔍 Debug - Resultado da query ordem:', orderRows);
-    const nextOrder = orderRows && orderRows.length > 0 ? orderRows[0].next_order : 1;
-    console.log('🔍 Debug - Próxima ordem:', nextOrder);
+    console.log('🔍 Debug - Tipo do resultado:', typeof orderRows);
+    console.log('🔍 Debug - Length do resultado:', orderRows?.length);
+    
+    let nextOrder = 1;
+    if (orderRows && orderRows.length > 0) {
+      const rawValue = orderRows[0].next_order;
+      console.log('🔍 Debug - Valor bruto:', rawValue, 'Tipo:', typeof rawValue);
+      nextOrder = Number(rawValue);
+    }
+    console.log('🔍 Debug - Próxima ordem final:', nextOrder);
 
     console.log('🔍 Debug - Inserindo item...');
     const [result] = await pool.query(`
