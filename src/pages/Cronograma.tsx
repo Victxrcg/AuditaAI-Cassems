@@ -214,7 +214,9 @@ const Cronograma = () => {
   const loadChecklistItems = async (cronogramaId: number) => {
     try {
       setChecklistLoading(true);
+      console.log('🔍 Carregando checklist para cronograma:', cronogramaId);
       const items = await listChecklistItems(cronogramaId);
+      console.log('🔍 Itens carregados:', items);
       setChecklistItems(items);
     } catch (error) {
       console.error('Erro ao carregar checklist:', error);
@@ -2177,7 +2179,8 @@ const Cronograma = () => {
           isOpen={isChecklistOpen}
           onClose={() => {
             setIsChecklistOpen(false);
-            setViewingCronograma(null);
+            // Volta para o modal de visualização da demanda
+            setIsViewDialogOpen(true);
           }}
         />
       )}

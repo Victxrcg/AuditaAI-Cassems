@@ -7,6 +7,8 @@ const listChecklistItems = async (req, res) => {
     const { cronogramaId } = req.params;
     const userOrg = req.headers['x-user-organization'] || 'cassems';
 
+    console.log('🔍 listChecklistItems - cronogramaId:', cronogramaId, 'userOrg:', userOrg);
+
     ({ pool, server } = await getDbPoolWithTunnel());
 
     const result = await pool.query(`
@@ -23,11 +25,17 @@ const listChecklistItems = async (req, res) => {
       ORDER BY ordem ASC, id ASC
     `, [cronogramaId, userOrg]);
 
+    console.log('🔍 listChecklistItems - result:', result);
+    console.log('🔍 listChecklistItems - result[0]:', result[0]);
+    console.log('🔍 listChecklistItems - Array.isArray(result[0]):', Array.isArray(result[0]));
+
     // Converter concluido de number para boolean
     const items = Array.isArray(result[0]) ? result[0].map(item => ({
       ...item,
       concluido: Boolean(item.concluido)
     })) : [];
+
+    console.log('🔍 listChecklistItems - items finais:', items);
 
     res.json({
       success: true,

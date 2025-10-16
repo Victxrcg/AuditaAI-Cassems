@@ -34,6 +34,9 @@ const getCurrentUser = () => {
 export const listChecklistItems = async (cronogramaId: number): Promise<ChecklistItem[]> => {
   try {
     const currentUser = getCurrentUser();
+    console.log('🔍 listChecklistItems - cronogramaId:', cronogramaId);
+    console.log('🔍 listChecklistItems - currentUser:', currentUser);
+    
     const response = await fetch(`${API_BASE}/cronograma/${cronogramaId}/checklist`, {
       headers: {
         'x-user-organization': currentUser?.organizacao || 'cassems',
@@ -41,11 +44,14 @@ export const listChecklistItems = async (cronogramaId: number): Promise<Checklis
       },
     });
 
+    console.log('🔍 listChecklistItems - response status:', response.status);
+    
     if (!response.ok) {
       throw new Error('Erro ao carregar checklist');
     }
 
     const data = await response.json();
+    console.log('🔍 listChecklistItems - data received:', data);
     return data.success ? data.data : [];
   } catch (error) {
     console.error('Erro ao listar itens do checklist:', error);
