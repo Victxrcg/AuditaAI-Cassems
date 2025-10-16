@@ -640,10 +640,10 @@ const Cronograma = () => {
         style={style}
         className={`flex items-center h-16 border-b border-gray-100 bg-gray-50 hover:bg-gray-100 transition-colors overflow-hidden ${isDragging ? 'z-50' : ''}`}
       >
-        <div className="w-80 px-4 py-3 text-sm text-gray-700 border-r">
+        <div className="w-80 px-4 py-3 text-sm text-gray-700 border-r overflow-hidden">
           <div className="flex flex-col gap-2 min-w-0">
             <div className="flex items-center justify-between gap-2 flex-nowrap min-w-0">
-              <div className="flex items-center gap-2 flex-1">
+              <div className="flex items-center gap-2 flex-1 min-w-0">
                 {/* Handle de arrastar */}
                 {podeReordenar && (
                   <div
@@ -656,7 +656,7 @@ const Cronograma = () => {
                   </div>
                 )}
                 <span 
-                  className="truncate cursor-pointer hover:text-blue-600 transition-colors flex-1"
+                  className="truncate cursor-pointer hover:text-blue-600 transition-colors flex-1 block max-w-full"
                   onClick={() => {
                     setViewingCronograma(cronograma);
                     setIsViewDialogOpen(true);
@@ -668,7 +668,7 @@ const Cronograma = () => {
               </div>
               <Badge 
                 variant={getStatusBadgeInfo(cronograma.status).variant as any}
-                className="text-xs whitespace-nowrap flex-shrink-0"
+                className="text-xs whitespace-nowrap flex-shrink-0 ml-2"
               >
                 {getStatusBadgeInfo(cronograma.status).text}
               </Badge>
