@@ -72,7 +72,7 @@ export const Checklist: React.FC<ChecklistProps> = ({ cronogramaId, isOpen, onCl
       };
 
       const newItem = await createChecklistItem(cronogramaId, newItemData);
-      setItems(prev => [...prev, newItem]);
+      setItems(prev => [...(prev || []), newItem]);
       setNewItemTitle('');
       setNewItemDescription('');
       setShowNewItemForm(false);
@@ -94,7 +94,7 @@ export const Checklist: React.FC<ChecklistProps> = ({ cronogramaId, isOpen, onCl
   const handleToggleItem = async (item: ChecklistItem) => {
     try {
       const updatedItem = await toggleChecklistItem(cronogramaId, item.id, !item.concluido);
-      setItems(prev => prev.map(i => i.id === item.id ? updatedItem : i));
+      setItems(prev => (prev || []).map(i => i.id === item.id ? updatedItem : i));
 
       toast({
         title: "Sucesso",
@@ -119,7 +119,7 @@ export const Checklist: React.FC<ChecklistProps> = ({ cronogramaId, isOpen, onCl
         descricao: editDescription.trim() || undefined,
       });
 
-      setItems(prev => prev.map(i => i.id === editingItem.id ? updatedItem : i));
+      setItems(prev => (prev || []).map(i => i.id === editingItem.id ? updatedItem : i));
       setEditingItem(null);
       setEditTitle('');
       setEditDescription('');
@@ -143,7 +143,7 @@ export const Checklist: React.FC<ChecklistProps> = ({ cronogramaId, isOpen, onCl
 
     try {
       await deleteChecklistItem(cronogramaId, item.id);
-      setItems(prev => prev.filter(i => i.id !== item.id));
+      setItems(prev => (prev || []).filter(i => i.id !== item.id));
 
       toast({
         title: "Sucesso",
@@ -173,9 +173,10 @@ export const Checklist: React.FC<ChecklistProps> = ({ cronogramaId, isOpen, onCl
   };
 
   // Calcular progresso
-  const progress = items.length > 0 ? (items.filter(item => item.concluido).length / items.length) * 100 : 0;
-  const completedCount = items.filter(item => item.concluido).length;
-  const visibleItems = hideCompleted ? items.filter(item => !item.concluido) : items;
+  const itemsArray = items || [];
+  const progress = itemsArray.length > 0 ? (itemsArray.filter(item => item.concluido).length / itemsArray.length) * 100 : 0;
+  const completedCount = itemsArray.filter(item => item.concluido).length;
+  const visibleItems = hideCompleted ? itemsArray.filter(item => !item.concluido) : itemsArray;
 
   useEffect(() => {
     if (isOpen && cronogramaId) {
@@ -198,11 +199,11 @@ export const Checklist: React.FC<ChecklistProps> = ({ cronogramaId, isOpen, onCl
 
         <div className="flex-1 overflow-hidden flex flex-col space-y-4">
           {/* Progresso */}
-          {items.length > 0 && (
+          {itemsArray.length > 0 && (
             <div className="bg-gray-50 p-4 rounded-lg">
               <div className="flex items-center justify-between mb-2">
                 <span className="text-sm font-medium text-gray-700">
-                  Progresso: {completedCount}/{items.length} itens concluídos
+                  Progresso: {completedCount}/{itemsArray.length} itens concluídos
                 </span>
                 <span className="text-sm font-bold text-gray-900">
                   {Math.round(progress)}%
@@ -286,7 +287,7 @@ export const Checklist: React.FC<ChecklistProps> = ({ cronogramaId, isOpen, onCl
             ) : visibleItems.length === 0 ? (
               <div className="text-center py-8 text-gray-500">
                 <CheckCircle className="h-12 w-12 mx-auto mb-4 text-gray-300" />
-                <p>{items.length === 0 ? "Nenhum item no checklist" : "Todos os itens estão concluídos"}</p>
+                <p>{itemsArray.length === 0 ? "Nenhum item no checklist" : "Todos os itens estão concluídos"}</p>
               </div>
             ) : (
               visibleItems.map((item) => (
