@@ -30,10 +30,21 @@ const listChecklistItems = async (req, res) => {
     console.log('🔍 listChecklistItems - Array.isArray(result[0]):', Array.isArray(result[0]));
 
     // Converter concluido de number para boolean
-    const items = Array.isArray(result[0]) ? result[0].map(item => ({
-      ...item,
-      concluido: Boolean(item.concluido)
-    })) : [];
+    let items = [];
+    
+    if (Array.isArray(result[0])) {
+      // Se result[0] é um array (múltiplos itens)
+      items = result[0].map(item => ({
+        ...item,
+        concluido: Boolean(item.concluido)
+      }));
+    } else if (result[0] && typeof result[0] === 'object') {
+      // Se result[0] é um objeto único (um item)
+      items = [{
+        ...result[0],
+        concluido: Boolean(result[0].concluido)
+      }];
+    }
 
     console.log('🔍 listChecklistItems - items finais:', items);
 
