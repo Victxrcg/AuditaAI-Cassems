@@ -44,6 +44,9 @@ const listChecklistItems = async (req, res) => {
         concluido: Boolean(result[0].concluido)
       }];
     }
+    
+    console.log('🔍 listChecklistItems - items processados:', items);
+    console.log('🔍 listChecklistItems - quantidade final:', items.length);
 
     res.json({
       success: true,
