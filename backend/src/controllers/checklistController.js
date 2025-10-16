@@ -48,14 +48,30 @@ const listChecklistItems = async (req, res) => {
     ({ pool, server } = await getDbPoolWithTunnel());
     console.log("🟢 Conexão DB OK");
 
-    const whereClause = normalizedOrg === 'portes' ? `cronograma_id = ?` : `cronograma_id = ? AND organizacao = ?`;
-    const params = normalizedOrg === 'portes' ? [cronogramaId] : [cronogramaId, normalizedOrg];
-    const rows = await safeQuery(pool, `
-      SELECT id, titulo, descricao, concluido, ordem, created_at, updated_at
-      FROM cronograma_checklist 
-      WHERE ${whereClause}
-      ORDER BY ordem ASC, id ASC
-    `, params);
+    let rows;
+    if (normalizedOrg === 'portes') {
+      rows = await safeQuery(pool, `
+        SELECT id, titulo, descricao, concluido, ordem, created_at, updated_at
+        FROM cronograma_checklist 
+        WHERE cronograma_id = ?
+        ORDER BY ordem ASC, id ASC
+      `, [cronogramaId]);
+    } else {
+      // Visível se o item foi criado pela mesma org OU se o cronograma pertence à org do usuário
+      rows = await safeQuery(pool, `
+        SELECT id, titulo, descricao, concluido, ordem, created_at, updated_at
+        FROM cronograma_checklist cc
+        WHERE cc.cronograma_id = ?
+          AND (
+            cc.organizacao IN (?, ?) OR 
+            EXISTS (
+              SELECT 1 FROM cronograma c 
+              WHERE c.id = cc.cronograma_id AND c.organizacao IN (?, ?)
+            )
+          )
+        ORDER BY ordem ASC, id ASC
+      `, [cronogramaId, normalizedOrg, userOrg, normalizedOrg, userOrg]);
+    }
 
     console.log("🟢 Itens encontrados:", rows?.length || 0);
     console.log("🟡 rows:", rows);
@@ -106,8 +122,8 @@ const createChecklistItem = async (req, res) => {
     const orderRows = await safeQuery(pool, `
       SELECT COALESCE(MAX(ordem), 0) + 1 as next_order
       FROM cronograma_checklist 
-      WHERE cronograma_id = ? AND organizacao = ?
-    `, [cronogramaId, normalizedOrg]);
+      WHERE cronograma_id = ? AND (organizacao = ? OR organizacao = ?)
+    `, [cronogramaId, normalizedOrg, userOrg]);
 
     const nextOrder = orderRows.length > 0 ? Number(orderRows[0].next_order) : 1;
     console.log("🔍 createChecklistItem - nextOrder:", nextOrder);
@@ -182,8 +198,8 @@ const updateChecklistItem = async (req, res) => {
     const updatedRows = await safeQuery(pool, `
       SELECT id, titulo, descricao, concluido, ordem, created_at, updated_at
       FROM cronograma_checklist 
-      WHERE id = ? AND (organizacao = ? OR ? = 'portes')
-    `, [itemId, normalizedOrg, normalizedOrg]);
+      WHERE id = ? AND (organizacao IN (?, ?) OR ? = 'portes')
+    `, [itemId, normalizedOrg, userOrg, normalizedOrg]);
 
     if (!updatedRows || updatedRows.length === 0) {
       return res.status(404).json({ success: false, error: 'Item não encontrado' });
@@ -214,8 +230,8 @@ const deleteChecklistItem = async (req, res) => {
 
     const deleteResult = await safeQuery(pool, `
       DELETE FROM cronograma_checklist 
-      WHERE cronograma_id = ? AND id = ? AND (organizacao = ? OR ? = 'portes')
-    `, [cronogramaId, itemId, normalizedOrg, normalizedOrg]);
+      WHERE cronograma_id = ? AND id = ? AND (organizacao IN (?, ?) OR ? = 'portes')
+    `, [cronogramaId, itemId, normalizedOrg, userOrg, normalizedOrg]);
 
     if (!deleteResult || deleteResult.affectedRows === 0) {
       return res.status(404).json({ success: false, error: 'Item não encontrado' });
