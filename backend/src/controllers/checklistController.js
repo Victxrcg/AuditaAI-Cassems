@@ -55,14 +55,6 @@ const createChecklistItem = async (req, res) => {
     const userOrg = req.headers['x-user-organization'] || 'cassems';
     const userId = req.headers['x-user-id'];
 
-    console.log('🔍 Debug - createChecklistItem:', {
-      cronogramaId,
-      titulo,
-      descricao,
-      userOrg,
-      userId
-    });
-
     if (!titulo || !titulo.trim()) {
       return res.status(400).json({
         success: false,
@@ -72,14 +64,10 @@ const createChecklistItem = async (req, res) => {
 
     ({ pool, server } = await getDbPoolWithTunnel());
 
-    console.log('🔍 Debug - Pool conectado, verificando tabela...');
-
     // Verificar se a tabela existe
     try {
       await pool.query('SELECT 1 FROM cronograma_checklist LIMIT 1');
-      console.log('✅ Tabela cronograma_checklist existe');
     } catch (tableError) {
-      console.error('❌ Erro na tabela cronograma_checklist:', tableError);
       return res.status(500).json({
         success: false,
         error: 'Tabela cronograma_checklist não existe. Execute o script SQL primeiro.'
@@ -87,34 +75,23 @@ const createChecklistItem = async (req, res) => {
     }
 
     // Obter próxima ordem
-    console.log('🔍 Debug - Obtendo próxima ordem...');
     const orderResult = await pool.query(`
       SELECT COALESCE(MAX(ordem), 0) + 1 as next_order
       FROM cronograma_checklist 
       WHERE cronograma_id = ? AND organizacao = ?
     `, [cronogramaId, userOrg]);
-
-    console.log('🔍 Debug - Resultado da query ordem:', orderResult);
-    console.log('🔍 Debug - Tipo do resultado:', typeof orderResult);
-    console.log('🔍 Debug - Length do resultado:', orderResult[0]?.length);
     
     let nextOrder = 1;
     if (orderResult && orderResult[0] && orderResult[0].length > 0) {
       const rawValue = orderResult[0][0].next_order;
-      console.log('🔍 Debug - Valor bruto:', rawValue, 'Tipo:', typeof rawValue);
       nextOrder = Number(rawValue);
     }
-    console.log('🔍 Debug - Próxima ordem final:', nextOrder);
 
-    console.log('🔍 Debug - Inserindo item...');
     const insertResult = await pool.query(`
       INSERT INTO cronograma_checklist (
         cronograma_id, titulo, descricao, ordem, created_by, organizacao
       ) VALUES (?, ?, ?, ?, ?, ?)
     `, [cronogramaId, titulo, descricao, nextOrder, userId, userOrg]);
-
-    console.log('🔍 Debug - Resultado da inserção:', insertResult);
-    console.log('🔍 Debug - Item inserido, ID:', insertResult.insertId);
 
     const newItemResult = await pool.query(`
       SELECT 
@@ -129,14 +106,7 @@ const createChecklistItem = async (req, res) => {
       WHERE id = ?
     `, [insertResult.insertId]);
     
-    console.log('🔍 Debug - Resultado da busca do item:', newItemResult);
-    console.log('🔍 Debug - Tipo do resultado:', typeof newItemResult);
-    console.log('🔍 Debug - Length do resultado:', newItemResult?.length);
     const newItem = newItemResult[0];
-    console.log('🔍 Debug - newItem:', newItem);
-    console.log('🔍 Debug - newItem length:', newItem?.length);
-
-    console.log('🔍 Debug - Item criado com sucesso:', newItem);
 
     // Converter concluido de number para boolean
     const itemData = {
