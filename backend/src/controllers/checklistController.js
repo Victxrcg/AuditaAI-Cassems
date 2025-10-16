@@ -1,10 +1,13 @@
-const pool = require('../config/database');
+const { getDbPoolWithTunnel } = require('../lib/db');
 
 // Listar itens do checklist de uma demanda
 const listChecklistItems = async (req, res) => {
+  let pool, server;
   try {
     const { cronogramaId } = req.params;
     const userOrg = req.headers['x-user-organization'] || 'cassems';
+
+    ({ pool, server } = await getDbPoolWithTunnel());
 
     const [rows] = await pool.query(`
       SELECT 
@@ -30,11 +33,16 @@ const listChecklistItems = async (req, res) => {
       success: false,
       error: 'Erro interno do servidor'
     });
+  } finally {
+    if (server) {
+      server.close();
+    }
   }
 };
 
 // Criar novo item do checklist
 const createChecklistItem = async (req, res) => {
+  let pool, server;
   try {
     const { cronogramaId } = req.params;
     const { titulo, descricao } = req.body;
@@ -47,6 +55,8 @@ const createChecklistItem = async (req, res) => {
         error: 'Título é obrigatório'
       });
     }
+
+    ({ pool, server } = await getDbPoolWithTunnel());
 
     // Obter próxima ordem
     const [orderRows] = await pool.query(`
@@ -84,11 +94,16 @@ const createChecklistItem = async (req, res) => {
       success: false,
       error: 'Erro interno do servidor'
     });
+  } finally {
+    if (server) {
+      server.close();
+    }
   }
 };
 
 // Atualizar item do checklist
 const updateChecklistItem = async (req, res) => {
+  let pool, server;
   try {
     const { cronogramaId, itemId } = req.params;
     const { titulo, descricao, concluido, ordem } = req.body;
@@ -120,6 +135,8 @@ const updateChecklistItem = async (req, res) => {
         error: 'Nenhum campo para atualizar'
       });
     }
+
+    ({ pool, server } = await getDbPoolWithTunnel());
 
     updateValues.push(cronogramaId, itemId, userOrg);
 
@@ -159,14 +176,21 @@ const updateChecklistItem = async (req, res) => {
       success: false,
       error: 'Erro interno do servidor'
     });
+  } finally {
+    if (server) {
+      server.close();
+    }
   }
 };
 
 // Excluir item do checklist
 const deleteChecklistItem = async (req, res) => {
+  let pool, server;
   try {
     const { cronogramaId, itemId } = req.params;
     const userOrg = req.headers['x-user-organization'] || 'cassems';
+
+    ({ pool, server } = await getDbPoolWithTunnel());
 
     const [result] = await pool.query(`
       DELETE FROM cronograma_checklist 
@@ -190,6 +214,10 @@ const deleteChecklistItem = async (req, res) => {
       success: false,
       error: 'Erro interno do servidor'
     });
+  } finally {
+    if (server) {
+      server.close();
+    }
   }
 };
 
