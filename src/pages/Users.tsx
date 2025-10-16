@@ -440,7 +440,7 @@ const Users = () => {
                     <SelectItem value="rede_frota">
                       <div className="flex items-center gap-2">
                         <Building className="h-4 w-4" />
-                        REDE FROTA
+                        MARAJÓ / REDE FROTA
                       </div>
                     </SelectItem>
                     {/* Adicionar outras organizações dinamicamente se necessário */}

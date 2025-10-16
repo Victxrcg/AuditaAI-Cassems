@@ -1665,7 +1665,7 @@ const Cronograma = () => {
                         {currentUser?.nome_empresa || currentUser?.organizacao_nome || 
                          (currentUser?.organizacao === 'portes' ? 'PORTES' : 
                           currentUser?.organizacao === 'cassems' ? 'CASSEMS' : 
-                          currentUser?.organizacao === 'rede_frota' ? 'REDE FROTA' : 
+                          currentUser?.organizacao === 'rede_frota' ? 'MARAJÓ / REDE FROTA' : 
                           'SUA ORGANIZAÇÃO')}
                       </div>
                     </SelectItem>
@@ -1692,7 +1692,7 @@ const Cronograma = () => {
                         <SelectItem value="rede_frota">
                           <div className="flex items-center gap-2">
                             <Building className="h-4 w-4" />
-                            REDE FROTA
+                            MARAJÓ / REDE FROTA
                           </div>
                         </SelectItem>
                       </>
@@ -1871,7 +1871,22 @@ const Cronograma = () => {
       {/* Modal de Visualização */}
       <Dialog open={isViewDialogOpen} onOpenChange={setIsViewDialogOpen}>
         <DialogContent className="max-w-2xl">
-          <DialogHeader>
+          <DialogHeader className="relative">
+            {viewingCronograma && (
+              <Button
+                variant="destructive"
+                size="sm"
+                className="absolute right-2 top-2 bg-red-600 hover:bg-red-700"
+                onClick={() => {
+                  setIsViewDialogOpen(false);
+                  setCronogramaToDelete(viewingCronograma);
+                  setIsDeleteDialogOpen(true);
+                }}
+              >
+                <Trash2 className="h-4 w-4 mr-2" />
+                Excluir
+              </Button>
+            )}
             <DialogTitle className="flex items-center gap-2">
               <div className="w-3 h-3 rounded-full bg-blue-500"></div>
               {viewingCronograma?.titulo}
@@ -2065,20 +2080,7 @@ const Cronograma = () => {
                   >
                     Fechar
                   </Button>
-                  <Button
-                    variant="destructive"
-                    className="bg-red-600 hover:bg-red-700"
-                    onClick={() => {
-                      if (viewingCronograma) {
-                        setIsViewDialogOpen(false);
-                        setCronogramaToDelete(viewingCronograma);
-                        setIsDeleteDialogOpen(true);
-                      }
-                    }}
-                  >
-                    <Trash2 className="h-4 w-4 mr-2" />
-                    Excluir
-                  </Button>
+              {/* Excluir movido para topo do modal */}
                   <Button
                     onClick={() => {
                       setViewingCronograma(null);

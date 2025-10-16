@@ -107,7 +107,7 @@ const formatOrganizationName = (org: string | undefined) => {
   const nomes: Record<string, string> = {
     'portes': 'PORTES',
     'cassems': 'CASSEMS',
-    'rede_frota': 'REDE FROTA'
+    'rede_frota': 'MARAJÓ / REDE FROTA'
   };
   
   return nomes[org.toLowerCase()] || org.toUpperCase().replace(/_/g, ' ');

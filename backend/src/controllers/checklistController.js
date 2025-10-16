@@ -36,12 +36,14 @@ const listChecklistItems = async (req, res) => {
     ({ pool, server } = await getDbPoolWithTunnel());
     console.log("🟢 Conexão DB OK");
 
+    const whereClause = userOrg === 'portes' ? `cronograma_id = ?` : `cronograma_id = ? AND organizacao = ?`;
+    const params = userOrg === 'portes' ? [cronogramaId] : [cronogramaId, userOrg];
     const rows = await safeQuery(pool, `
       SELECT id, titulo, descricao, concluido, ordem, created_at, updated_at
       FROM cronograma_checklist 
-      WHERE cronograma_id = ? AND organizacao = ?
+      WHERE ${whereClause}
       ORDER BY ordem ASC, id ASC
-    `, [cronogramaId, userOrg]);
+    `, params);
 
     console.log("🟢 Itens encontrados:", rows?.length || 0);
     console.log("🟡 rows:", rows);
@@ -166,8 +168,8 @@ const updateChecklistItem = async (req, res) => {
     const updatedRows = await safeQuery(pool, `
       SELECT id, titulo, descricao, concluido, ordem, created_at, updated_at
       FROM cronograma_checklist 
-      WHERE id = ? AND organizacao = ?
-    `, [itemId, userOrg]);
+      WHERE id = ? AND (organizacao = ? OR ? = 'portes')
+    `, [itemId, userOrg, userOrg]);
 
     if (!updatedRows || updatedRows.length === 0) {
       return res.status(404).json({ success: false, error: 'Item não encontrado' });
@@ -197,8 +199,8 @@ const deleteChecklistItem = async (req, res) => {
 
     const deleteResult = await safeQuery(pool, `
       DELETE FROM cronograma_checklist 
-      WHERE cronograma_id = ? AND id = ? AND organizacao = ?
-    `, [cronogramaId, itemId, userOrg]);
+      WHERE cronograma_id = ? AND id = ? AND (organizacao = ? OR ? = 'portes')
+    `, [cronogramaId, itemId, userOrg, userOrg]);
 
     if (!deleteResult || deleteResult.affectedRows === 0) {
       return res.status(404).json({ success: false, error: 'Item não encontrado' });
