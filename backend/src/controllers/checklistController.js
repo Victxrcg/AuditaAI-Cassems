@@ -8,8 +8,9 @@ const safeQuery = async (pool, sql, params = []) => {
   console.log("🧩 safeQuery - Array.isArray(result):", Array.isArray(result));
   
   if (Array.isArray(result)) {
-    // Para SELECT queries, retorna os dados
-    return result[0] || [];
+    // Para SELECT queries, retorna o array completo
+    console.log("🧩 safeQuery - retornando array completo");
+    return result;
   } else if (result && result.rows) {
     // Para queries que retornam { rows: [...] }
     return result.rows;
