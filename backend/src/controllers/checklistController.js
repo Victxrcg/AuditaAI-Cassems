@@ -9,14 +9,6 @@ const listChecklistItems = async (req, res) => {
 
     ({ pool, server } = await getDbPoolWithTunnel());
 
-    console.log('🔍 createChecklistItem - Dados recebidos:', {
-      cronogramaId,
-      titulo,
-      descricao,
-      userOrg,
-      userId
-    });
-
     const result = await pool.query(`
       SELECT 
         id,
