@@ -108,7 +108,7 @@ const createChecklistItem = async (req, res) => {
     `, [cronogramaId, titulo, descricao, nextOrder, userId, userOrg]);
 
     console.log('🔍 Debug - Resultado da inserção:', insertResult);
-    console.log('🔍 Debug - Item inserido, ID:', insertResult[0].insertId);
+    console.log('🔍 Debug - Item inserido, ID:', insertResult.insertId);
 
     const newItemResult = await pool.query(`
       SELECT 
@@ -121,7 +121,7 @@ const createChecklistItem = async (req, res) => {
         updated_at
       FROM cronograma_checklist 
       WHERE id = ?
-    `, [insertResult[0].insertId]);
+    `, [insertResult.insertId]);
     
     console.log('🔍 Debug - Resultado da busca do item:', newItemResult);
     const newItem = newItemResult[0];
