@@ -9,7 +9,7 @@ const listChecklistItems = async (req, res) => {
 
     ({ pool, server } = await getDbPoolWithTunnel());
 
-    const [rows] = await pool.query(`
+    const result = await pool.query(`
       SELECT 
         id,
         titulo,
@@ -25,7 +25,7 @@ const listChecklistItems = async (req, res) => {
 
     res.json({
       success: true,
-      data: rows
+      data: result[0]
     });
   } catch (error) {
     console.error('Erro ao listar itens do checklist:', error);
@@ -82,33 +82,33 @@ const createChecklistItem = async (req, res) => {
 
     // Obter próxima ordem
     console.log('🔍 Debug - Obtendo próxima ordem...');
-    const [orderRows] = await pool.query(`
+    const orderResult = await pool.query(`
       SELECT COALESCE(MAX(ordem), 0) + 1 as next_order
       FROM cronograma_checklist 
       WHERE cronograma_id = ? AND organizacao = ?
     `, [cronogramaId, userOrg]);
 
-    console.log('🔍 Debug - Resultado da query ordem:', orderRows);
-    console.log('🔍 Debug - Tipo do resultado:', typeof orderRows);
-    console.log('🔍 Debug - Length do resultado:', orderRows?.length);
+    console.log('🔍 Debug - Resultado da query ordem:', orderResult);
+    console.log('🔍 Debug - Tipo do resultado:', typeof orderResult);
+    console.log('🔍 Debug - Length do resultado:', orderResult[0]?.length);
     
     let nextOrder = 1;
-    if (orderRows && orderRows.length > 0) {
-      const rawValue = orderRows[0].next_order;
+    if (orderResult && orderResult[0] && orderResult[0].length > 0) {
+      const rawValue = orderResult[0][0].next_order;
       console.log('🔍 Debug - Valor bruto:', rawValue, 'Tipo:', typeof rawValue);
       nextOrder = Number(rawValue);
     }
     console.log('🔍 Debug - Próxima ordem final:', nextOrder);
 
     console.log('🔍 Debug - Inserindo item...');
-    const result = await pool.query(`
+    const insertResult = await pool.query(`
       INSERT INTO cronograma_checklist (
         cronograma_id, titulo, descricao, ordem, created_by, organizacao
       ) VALUES (?, ?, ?, ?, ?, ?)
     `, [cronogramaId, titulo, descricao, nextOrder, userId, userOrg]);
 
-    console.log('🔍 Debug - Resultado da inserção:', result);
-    console.log('🔍 Debug - Item inserido, ID:', result[0].insertId);
+    console.log('🔍 Debug - Resultado da inserção:', insertResult);
+    console.log('🔍 Debug - Item inserido, ID:', insertResult[0].insertId);
 
     const newItemResult = await pool.query(`
       SELECT 
@@ -121,7 +121,7 @@ const createChecklistItem = async (req, res) => {
         updated_at
       FROM cronograma_checklist 
       WHERE id = ?
-    `, [result[0].insertId]);
+    `, [insertResult[0].insertId]);
     
     console.log('🔍 Debug - Resultado da busca do item:', newItemResult);
     const newItem = newItemResult[0];
@@ -198,7 +198,7 @@ const updateChecklistItem = async (req, res) => {
       WHERE cronograma_id = ? AND id = ? AND organizacao = ?
     `, updateValues);
 
-    const [updatedItem] = await pool.query(`
+    const updatedItemResult = await pool.query(`
       SELECT 
         id,
         titulo,
@@ -211,7 +211,7 @@ const updateChecklistItem = async (req, res) => {
       WHERE id = ? AND organizacao = ?
     `, [itemId, userOrg]);
 
-    if (updatedItem.length === 0) {
+    if (updatedItemResult[0].length === 0) {
       return res.status(404).json({
         success: false,
         error: 'Item não encontrado'
@@ -220,7 +220,7 @@ const updateChecklistItem = async (req, res) => {
 
     res.json({
       success: true,
-      data: updatedItem[0]
+      data: updatedItemResult[0][0]
     });
   } catch (error) {
     console.error('Erro ao atualizar item do checklist:', error);
@@ -244,12 +244,12 @@ const deleteChecklistItem = async (req, res) => {
 
     ({ pool, server } = await getDbPoolWithTunnel());
 
-    const [result] = await pool.query(`
+    const deleteResult = await pool.query(`
       DELETE FROM cronograma_checklist 
       WHERE cronograma_id = ? AND id = ? AND organizacao = ?
     `, [cronogramaId, itemId, userOrg]);
 
-    if (result.affectedRows === 0) {
+    if (deleteResult[0].affectedRows === 0) {
       return res.status(404).json({
         success: false,
         error: 'Item não encontrado'
