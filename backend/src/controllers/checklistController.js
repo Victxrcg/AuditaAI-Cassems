@@ -8,9 +8,15 @@ const safeQuery = async (pool, sql, params = []) => {
   console.log("🧩 safeQuery - Array.isArray(result):", Array.isArray(result));
   
   if (Array.isArray(result)) {
+    // Para SELECT queries, retorna os dados
     return result[0] || [];
   } else if (result && result.rows) {
+    // Para queries que retornam { rows: [...] }
     return result.rows;
+  } else if (result && typeof result === 'object') {
+    // Para INSERT/UPDATE/DELETE queries (OkPacket), retorna o objeto diretamente
+    console.log("🧩 safeQuery - retornando objeto OkPacket");
+    return result;
   } else {
     console.log("🧩 safeQuery - retornando array vazio");
     return [];
