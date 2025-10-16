@@ -10,6 +10,25 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 import ErrorBoundary from '@/components/ErrorBoundary';
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragEndEvent,
+} from '@dnd-kit/core';
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable';
+import {
+  useSortable,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 import { 
   Calendar, 
   Plus, 
@@ -27,7 +46,8 @@ import {
   Building,
   AlertTriangle,
   List,
-  User
+  User,
+  GripVertical
 } from 'lucide-react';
 
 interface CronogramaItem {
@@ -96,6 +116,18 @@ const Cronograma = () => {
   useEffect(() => {
     const user = JSON.parse(localStorage.getItem('user') || '{}');
     setCurrentUser(user);
+  }, []);
+
+  // Carregar ordem salva das demandas
+  useEffect(() => {
+    const savedOrder = localStorage.getItem('cronograma-order');
+    if (savedOrder) {
+      try {
+        setOrdemDemandas(JSON.parse(savedOrder));
+      } catch (error) {
+        console.error('Erro ao carregar ordem das demandas:', error);
+      }
+    }
   }, []);
 
   // Carregar cronogramas
@@ -438,6 +470,206 @@ const Cronograma = () => {
   
   // Estado para controlar grupos de mês expandidos
   const [gruposExpandidos, setGruposExpandidos] = useState<Set<string>>(new Set());
+  
+  // Estado para controlar a ordem das demandas por organização (drag & drop)
+  const [ordemDemandas, setOrdemDemandas] = useState<Record<string, number[]>>({});
+
+  // Sensores para drag & drop
+  const sensors = useSensors(
+    useSensor(PointerSensor),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  );
+
+  // Função para aplicar ordem personalizada aos cronogramas
+  const aplicarOrdemPersonalizada = (cronogramas: CronogramaItem[], organizacao: string) => {
+    const ordemCustomizada = ordemDemandas[organizacao];
+    if (!ordemCustomizada || ordemCustomizada.length === 0) {
+      return cronogramas;
+    }
+
+    // Criar um mapa para ordenação eficiente
+    const ordemMap = new Map(ordemCustomizada.map((id, index) => [id, index]));
+    
+    return [...cronogramas].sort((a, b) => {
+      const ordemA = ordemMap.get(a.id) ?? 999;
+      const ordemB = ordemMap.get(b.id) ?? 999;
+      return ordemA - ordemB;
+    });
+  };
+
+  // Função para lidar com o fim do drag & drop
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+
+    if (active.id !== over?.id) {
+      // Encontrar a organização do item sendo arrastado
+      const activeItem = cronogramas.find(c => c.id === active.id);
+      if (!activeItem) return;
+
+      const organizacao = activeItem.organizacao || 'outros';
+      
+      // Obter a ordem atual para esta organização
+      const currentOrder = ordemDemandas[organizacao] || cronogramas
+        .filter(c => c.organizacao === organizacao)
+        .map(c => c.id);
+
+      // Encontrar os índices
+      const oldIndex = currentOrder.indexOf(active.id as number);
+      const newIndex = currentOrder.indexOf(over?.id as number);
+
+      if (oldIndex !== -1 && newIndex !== -1) {
+        // Reordenar usando arrayMove
+        const newOrder = arrayMove(currentOrder, oldIndex, newIndex);
+        
+        // Atualizar o estado
+        setOrdemDemandas(prev => ({
+          ...prev,
+          [organizacao]: newOrder
+        }));
+
+        // Salvar no localStorage para persistir a ordem
+        const savedOrder = { ...ordemDemandas, [organizacao]: newOrder };
+        localStorage.setItem('cronograma-order', JSON.stringify(savedOrder));
+      }
+    }
+  };
+
+  // Componente para item arrastável na timeline
+  const SortableTimelineItem = ({ 
+    cronograma, 
+    organizacao, 
+    dataInicio, 
+    dataFim, 
+    posicao, 
+    coresStatus,
+    inicioPeriodo,
+    fimPeriodo
+  }: {
+    cronograma: CronogramaItem;
+    organizacao: string;
+    dataInicio: Date | null;
+    dataFim: Date | null;
+    posicao: { inicio: string; largura: string; colunaInicio: number; colunaFim: number };
+    coresStatus: Record<string, string>;
+    inicioPeriodo: Date;
+    fimPeriodo: Date;
+  }) => {
+    const {
+      attributes,
+      listeners,
+      setNodeRef,
+      transform,
+      transition,
+      isDragging,
+    } = useSortable({ id: cronograma.id });
+
+    const style = {
+      transform: CSS.Transform.toString(transform),
+      transition,
+      opacity: isDragging ? 0.5 : 1,
+    };
+
+    return (
+      <div 
+        ref={setNodeRef}
+        style={style}
+        className={`flex items-center h-16 border-b border-gray-100 bg-gray-50 hover:bg-gray-100 transition-colors ${isDragging ? 'z-50' : ''}`}
+      >
+        <div className="w-80 px-4 py-3 text-sm text-gray-700 border-r">
+          <div className="flex flex-col gap-2">
+            <div className="flex items-start justify-between gap-2">
+              <div className="flex items-center gap-2 flex-1">
+                {/* Handle de arrastar */}
+                <div
+                  {...attributes}
+                  {...listeners}
+                  className="cursor-grab hover:cursor-grabbing text-gray-400 hover:text-gray-600 transition-colors"
+                  title="Arrastar para reordenar"
+                >
+                  <GripVertical className="h-4 w-4" />
+                </div>
+                <span 
+                  className="truncate cursor-pointer hover:text-blue-600 transition-colors flex-1"
+                  onClick={() => {
+                    setViewingCronograma(cronograma);
+                    setIsViewDialogOpen(true);
+                  }}
+                  title={`Clique para visualizar: ${cronograma.titulo}`}
+                >
+                  {cronograma.titulo}
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Badge 
+                  variant={getStatusBadgeInfo(cronograma.status).variant as any}
+                  className="text-xs whitespace-nowrap"
+                >
+                  {getStatusBadgeInfo(cronograma.status).text}
+                </Badge>
+                {/* Botão de exclusão */}
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-6 w-6 p-0 text-red-500 hover:text-red-700 hover:bg-red-50"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    openDeleteDialog(cronograma);
+                  }}
+                  title="Excluir demanda"
+                >
+                  <Trash2 className="h-3 w-3" />
+                </Button>
+              </div>
+            </div>
+            {cronograma.responsavel_nome && (
+              <div className="text-xs text-gray-500 truncate">
+                {cronograma.responsavel_nome}
+              </div>
+            )}
+          </div>
+        </div>
+        
+        {/* Timeline bar interativa */}
+        <div className="relative flex-1 h-full">
+          {dataInicio && dataFim && (
+            <div
+              className={`absolute top-1/2 transform -translate-y-1/2 h-10 rounded-lg ${coresStatus[cronograma.status]} shadow-sm hover:shadow-md transition-all cursor-pointer border-2 border-white hover:scale-105 overflow-hidden`}
+              style={{
+                left: posicao.inicio,
+                width: posicao.largura,
+                minWidth: '60px'
+              }}
+              onClick={() => {
+                setViewingCronograma(cronograma);
+                setIsViewDialogOpen(true);
+              }}
+              title={`${cronograma.titulo}
+             Status: ${getStatusBadgeInfo(cronograma.status).text}
+             Período: ${dataInicio.toLocaleDateString('pt-BR')} a ${dataFim.toLocaleDateString('pt-BR')}
+            ${cronograma.responsavel_nome ? `Responsável: ${cronograma.responsavel_nome}` : 'Sem responsável'}
+            ${cronograma.motivo_atraso ? `Atraso: ${cronograma.motivo_atraso}` : ''}
+             Clique para editar`}
+            >
+              <span className="text-white text-xs font-medium px-2 whitespace-nowrap overflow-hidden text-ellipsis block">
+                {cronograma.titulo}
+              </span>
+            </div>
+          )}
+          
+          {/* Linha do tempo atual */}
+          <div 
+            className="absolute top-0 bottom-0 w-0.5 bg-red-500 z-10"
+            style={{
+              left: `${((new Date().getTime() - inicioPeriodo.getTime()) / (fimPeriodo.getTime() - inicioPeriodo.getTime())) * 100}%`
+            }}
+            title={`Hoje: ${new Date().toLocaleDateString('pt-BR')}`}
+          />
+        </div>
+      </div>
+    );
+  };
 
   // Função para agrupar cronogramas por mês
   const agruparPorMes = (cronogramas: CronogramaItem[]) => {
@@ -818,6 +1050,12 @@ const Cronograma = () => {
       return acc;
     }, {} as Record<string, CronogramaItem[]>);
 
+    // Aplicar ordem personalizada para cada organização
+    const cronogramasOrdenadosPorOrganizacao = Object.entries(cronogramasPorOrganizacao).reduce((acc, [org, cronogramas]) => {
+      acc[org] = aplicarOrdemPersonalizada(cronogramas, org);
+      return acc;
+    }, {} as Record<string, CronogramaItem[]>);
+
     // Calcular período de visualização (fixo em meses)
     const hoje = new Date();
     
@@ -864,7 +1102,7 @@ const Cronograma = () => {
     // Função para calcular posição da barra
     const calcularPosicaoBarra = (dataInicio: Date | null, dataFim: Date | null) => {
       if (!dataInicio || !dataFim) {
-        return { inicio: 0, largura: 0, colunaInicio: 0, colunaFim: 1 };
+        return { inicio: '0%', largura: '0%', colunaInicio: 0, colunaFim: 1 };
       }
       
       const inicioRelativo = Math.max(0, dataInicio.getTime() - inicioPeriodo.getTime());
@@ -901,7 +1139,7 @@ const Cronograma = () => {
                 <CardDescription>
                   {filtroStatus === 'apenas_concluidas' 
                     ? `Visualização temporal das tarefas concluídas (${cronogramasConcluidos.length} tarefas)`
-                    : 'Visualização temporal das demandas por organização'
+                    : 'Visualização temporal das demandas por organização - Arraste para reordenar'
                   }
                 </CardDescription>
               </div>
@@ -925,7 +1163,12 @@ const Cronograma = () => {
                 </div>
 
                 {/* Linhas das organizações */}
-                {Object.entries(cronogramasPorOrganizacao).map(([organizacao, cronogramasOrg]) => (
+                <DndContext 
+                  sensors={sensors}
+                  collisionDetection={closestCenter}
+                  onDragEnd={handleDragEnd}
+                >
+                  {Object.entries(cronogramasOrdenadosPorOrganizacao).map(([organizacao, cronogramasOrg]) => (
                   <div key={organizacao} className="border-b border-gray-100">
                     {/* Header da organização */}
                     <div className="flex items-center h-16 bg-gray-100">
@@ -941,83 +1184,31 @@ const Cronograma = () => {
                     </div>
 
                     {/* Linhas das demandas */}
-                    {cronogramasOrg.map((cronograma) => {
-                      const dataInicio = cronograma.data_inicio ? new Date(cronograma.data_inicio) : null;
-                      const dataFim = cronograma.data_fim ? new Date(cronograma.data_fim) : null;
-                      
-                      const posicao = calcularPosicaoBarra(dataInicio, dataFim);
+                    <SortableContext items={cronogramasOrg.map(c => c.id)} strategy={verticalListSortingStrategy}>
+                      {cronogramasOrg.map((cronograma) => {
+                        const dataInicio = cronograma.data_inicio ? new Date(cronograma.data_inicio) : null;
+                        const dataFim = cronograma.data_fim ? new Date(cronograma.data_fim) : null;
+                        
+                        const posicao = calcularPosicaoBarra(dataInicio, dataFim);
 
-                      return (
-                        <div key={cronograma.id} className="flex items-center h-16 border-b border-gray-100 bg-gray-50 hover:bg-gray-100 transition-colors">
-                          <div className="w-80 px-4 py-3 text-sm text-gray-700 border-r">
-                            <div className="flex flex-col gap-2">
-                              <div className="flex items-start justify-between gap-2">
-                                <span 
-                                  className="truncate cursor-pointer hover:text-blue-600 transition-colors flex-1"
-                                  onClick={() => {
-                                    setViewingCronograma(cronograma);
-                                    setIsViewDialogOpen(true);
-                                  }}
-                                  title={`Clique para visualizar: ${cronograma.titulo}`}
-                                >
-                                   {cronograma.titulo}
-                                </span>
-                                <Badge 
-                                  variant={getStatusBadgeInfo(cronograma.status).variant as any}
-                                  className="text-xs whitespace-nowrap"
-                                >
-                                  {getStatusBadgeInfo(cronograma.status).text}
-                                </Badge>
-                              </div>
-                              {cronograma.responsavel_nome && (
-                                <div className="text-xs text-gray-500 truncate">
-                                  {cronograma.responsavel_nome}
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                          
-                          {/* Timeline bar interativa */}
-                          <div className="relative flex-1 h-full">
-                            {dataInicio && dataFim && (
-                              <div
-                                className={`absolute top-1/2 transform -translate-y-1/2 h-10 rounded-lg ${coresStatus[cronograma.status]} shadow-sm hover:shadow-md transition-all cursor-pointer border-2 border-white hover:scale-105 overflow-hidden`}
-                                style={{
-                                  left: posicao.inicio,
-                                  width: posicao.largura,
-                                  minWidth: '60px'
-                                }}
-                                onClick={() => {
-                                  setViewingCronograma(cronograma);
-                                  setIsViewDialogOpen(true);
-                                }}
-                                title={`${cronograma.titulo}
-                               Status: ${getStatusBadgeInfo(cronograma.status).text}
-                               Período: ${dataInicio.toLocaleDateString('pt-BR')} a ${dataFim.toLocaleDateString('pt-BR')}
-                              ${cronograma.responsavel_nome ? `Responsável: ${cronograma.responsavel_nome}` : 'Sem responsável'}
-                              ${cronograma.motivo_atraso ? `Atraso: ${cronograma.motivo_atraso}` : ''}
-                               Clique para editar`}
-                              >
-                                <span className="text-white text-xs font-medium px-2 whitespace-nowrap overflow-hidden text-ellipsis block">
-                                  {cronograma.titulo}
-                                </span>
-                              </div>
-                            )}
-                            
-                            {/* Linha do tempo atual */}
-                            <div 
-                              className="absolute top-0 bottom-0 w-0.5 bg-red-500 z-10"
-                              style={{
-                                left: `${((hoje.getTime() - inicioPeriodo.getTime()) / (fimPeriodo.getTime() - inicioPeriodo.getTime())) * 100}%`
-                              }}
-                              title={`Hoje: ${hoje.toLocaleDateString('pt-BR')}`}
-                            />
-                          </div>
-                        </div>
-                      );
-                    })}
+                        return (
+                          <SortableTimelineItem
+                            key={cronograma.id}
+                            cronograma={cronograma}
+                            organizacao={organizacao}
+                            dataInicio={dataInicio}
+                            dataFim={dataFim}
+                            posicao={posicao}
+                            coresStatus={coresStatus}
+                            inicioPeriodo={inicioPeriodo}
+                            fimPeriodo={fimPeriodo}
+                          />
+                        );
+                      })}
+                    </SortableContext>
                   </div>
                 ))}
+                </DndContext>
               </div>
             </div>
           </CardContent>
@@ -1647,6 +1838,20 @@ const Cronograma = () => {
                   }}
                 >
                   Fechar
+                </Button>
+                <Button
+                  variant="destructive"
+                  className="bg-red-600 hover:bg-red-700"
+                  onClick={() => {
+                    if (viewingCronograma) {
+                      setIsViewDialogOpen(false);
+                      setCronogramaToDelete(viewingCronograma);
+                      setIsDeleteDialogOpen(true);
+                    }
+                  }}
+                >
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  Excluir
                 </Button>
                 <Button
                   onClick={() => {
