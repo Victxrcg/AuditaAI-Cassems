@@ -2056,19 +2056,21 @@ const Cronograma = () => {
 
               {/* Ações */}
               <div className="flex justify-between items-center pt-4 border-t">
-                <Button
-                  variant="outline"
-                  onClick={() => {
-                    if (viewingCronograma) {
-                      setIsViewDialogOpen(false);
-                      setIsChecklistOpen(true);
-                    }
-                  }}
-                  className="bg-blue-50 border-blue-200 text-blue-700 hover:bg-blue-100"
-                >
-                  <CheckSquare className="h-4 w-4 mr-2" />
-                  Checklist
-                </Button>
+                {currentUser?.organizacao === 'portes' && (
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      if (viewingCronograma) {
+                        setIsViewDialogOpen(false);
+                        setIsChecklistOpen(true);
+                      }
+                    }}
+                    className="bg-blue-50 border-blue-200 text-blue-700 hover:bg-blue-100"
+                  >
+                    <CheckSquare className="h-4 w-4 mr-2" />
+                    Checklist
+                  </Button>
+                )}
                 
                 <div className="flex gap-3">
                   <Button
