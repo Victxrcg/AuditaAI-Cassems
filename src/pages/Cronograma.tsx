@@ -1872,7 +1872,7 @@ const Cronograma = () => {
       <Dialog open={isViewDialogOpen} onOpenChange={setIsViewDialogOpen}>
         <DialogContent className="max-w-2xl">
           <DialogHeader className="relative">
-            {viewingCronograma && (
+            {viewingCronograma && currentUser?.organizacao === 'portes' && (
               <Button
                 variant="destructive"
                 size="sm"
@@ -2080,18 +2080,20 @@ const Cronograma = () => {
                   >
                     Fechar
                   </Button>
-              {/* Excluir movido para topo do modal */}
-                  <Button
-                    onClick={() => {
-                      setViewingCronograma(null);
-                      setIsViewDialogOpen(false);
-                      setEditingCronograma(viewingCronograma);
-                      setIsEditDialogOpen(true);
-                    }}
-                  >
-                    <Edit className="h-4 w-4 mr-2" />
-                    Editar
-                  </Button>
+              {/* Excluir movido para topo do modal; somente Portes pode editar */}
+              {currentUser?.organizacao === 'portes' && (
+                <Button
+                  onClick={() => {
+                    setViewingCronograma(null);
+                    setIsViewDialogOpen(false);
+                    setEditingCronograma(viewingCronograma);
+                    setIsEditDialogOpen(true);
+                  }}
+                >
+                  <Edit className="h-4 w-4 mr-2" />
+                  Editar
+                </Button>
+              )}
                 </div>
               </div>
             </div>
