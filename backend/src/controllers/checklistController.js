@@ -26,6 +26,7 @@ const listChecklistItems = async (req, res) => {
     console.log('🔍 listChecklistItems - result completo:', result);
     console.log('🔍 listChecklistItems - result[0]:', result[0]);
     console.log('🔍 listChecklistItems - quantidade de itens:', result[0]?.length || 'undefined');
+    console.log('🔍 listChecklistItems - cronogramaId:', cronogramaId, 'userOrg:', userOrg);
 
     // Converter concluido de number para boolean
     let items = [];
@@ -96,11 +97,16 @@ const createChecklistItem = async (req, res) => {
       WHERE cronograma_id = ? AND organizacao = ?
     `, [cronogramaId, userOrg]);
     
+    console.log('🔍 createChecklistItem - orderResult:', orderResult);
+    console.log('🔍 createChecklistItem - orderResult[0]:', orderResult[0]);
+    
     let nextOrder = 1;
     if (orderResult && orderResult[0] && orderResult[0].length > 0) {
       const rawValue = orderResult[0][0].next_order;
       nextOrder = Number(rawValue);
     }
+    
+    console.log('🔍 createChecklistItem - nextOrder calculado:', nextOrder);
 
     const insertResult = await pool.query(`
       INSERT INTO cronograma_checklist (
