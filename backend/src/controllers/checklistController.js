@@ -25,9 +25,11 @@ const listChecklistItems = async (req, res) => {
       ORDER BY ordem ASC, id ASC
     `, [cronogramaId, userOrg]);
 
-    console.log('🔍 listChecklistItems - result:', result);
+    console.log('🔍 listChecklistItems - result completo:', result);
     console.log('🔍 listChecklistItems - result[0]:', result[0]);
+    console.log('🔍 listChecklistItems - result[0] length:', result[0]?.length);
     console.log('🔍 listChecklistItems - Array.isArray(result[0]):', Array.isArray(result[0]));
+    console.log('🔍 listChecklistItems - typeof result[0]:', typeof result[0]);
 
     // Converter concluido de number para boolean
     let items = [];
@@ -224,7 +226,19 @@ const updateChecklistItem = async (req, res) => {
     }
 
     // Converter concluido de number para boolean
-    const item = updatedItemResult[0][0];
+    let item;
+    
+    if (Array.isArray(updatedItemResult[0])) {
+      item = updatedItemResult[0][0];
+    } else if (updatedItemResult[0] && typeof updatedItemResult[0] === 'object') {
+      item = updatedItemResult[0];
+    } else {
+      return res.status(404).json({
+        success: false,
+        error: 'Item não encontrado'
+      });
+    }
+    
     const itemData = {
       ...item,
       concluido: Boolean(item.concluido)
