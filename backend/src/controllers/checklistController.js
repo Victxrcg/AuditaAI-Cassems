@@ -1,5 +1,16 @@
 const { getDbPoolWithTunnel } = require('../lib/db');
 
+// Normaliza o nome da organização para um código canônico usado no banco
+const normalizeOrganization = (org) => {
+  if (!org) return '';
+  const s = String(org).toLowerCase().trim();
+  if (s.includes('maraj') || s.includes('rede frota') || s.includes('rede_frota')) return 'rede_frota';
+  if (s.includes('cassems')) return 'cassems';
+  if (s.includes('porte')) return 'portes';
+  // fallback: trocar espaços por underscore
+  return s.replace(/\s+/g, '_');
+};
+
 // Helper para tratar retorno do query
 const safeQuery = async (pool, sql, params = []) => {
   const result = await pool.query(sql, params);
@@ -30,14 +41,15 @@ const listChecklistItems = async (req, res) => {
   try {
     const { cronogramaId } = req.params;
     const userOrg = req.headers['x-user-organization'] || 'cassems';
+    const normalizedOrg = normalizeOrganization(userOrg);
 
     console.log("🟡 listChecklistItems iniciado:", { cronogramaId, userOrg });
 
     ({ pool, server } = await getDbPoolWithTunnel());
     console.log("🟢 Conexão DB OK");
 
-    const whereClause = userOrg === 'portes' ? `cronograma_id = ?` : `cronograma_id = ? AND organizacao = ?`;
-    const params = userOrg === 'portes' ? [cronogramaId] : [cronogramaId, userOrg];
+    const whereClause = normalizedOrg === 'portes' ? `cronograma_id = ?` : `cronograma_id = ? AND organizacao = ?`;
+    const params = normalizedOrg === 'portes' ? [cronogramaId] : [cronogramaId, normalizedOrg];
     const rows = await safeQuery(pool, `
       SELECT id, titulo, descricao, concluido, ordem, created_at, updated_at
       FROM cronograma_checklist 
@@ -81,6 +93,7 @@ const createChecklistItem = async (req, res) => {
     const { cronogramaId } = req.params;
     const { titulo, descricao } = req.body;
     const userOrg = req.headers['x-user-organization'] || 'cassems';
+    const normalizedOrg = normalizeOrganization(userOrg);
     const userId = req.headers['x-user-id'];
 
     if (!titulo || !titulo.trim()) {
@@ -94,7 +107,7 @@ const createChecklistItem = async (req, res) => {
       SELECT COALESCE(MAX(ordem), 0) + 1 as next_order
       FROM cronograma_checklist 
       WHERE cronograma_id = ? AND organizacao = ?
-    `, [cronogramaId, userOrg]);
+    `, [cronogramaId, normalizedOrg]);
 
     const nextOrder = orderRows.length > 0 ? Number(orderRows[0].next_order) : 1;
     console.log("🔍 createChecklistItem - nextOrder:", nextOrder);
@@ -103,7 +116,7 @@ const createChecklistItem = async (req, res) => {
       INSERT INTO cronograma_checklist (
         cronograma_id, titulo, descricao, ordem, created_by, organizacao
       ) VALUES (?, ?, ?, ?, ?, ?)
-    `, [cronogramaId, titulo, descricao, nextOrder, userId, userOrg]);
+    `, [cronogramaId, titulo, descricao, nextOrder, userId, normalizedOrg]);
 
     const insertId = insertResult.insertId || (insertResult[0]?.insertId);
     if (!insertId) {
@@ -143,6 +156,7 @@ const updateChecklistItem = async (req, res) => {
     const { cronogramaId, itemId } = req.params;
     const { titulo, descricao, concluido, ordem } = req.body;
     const userOrg = req.headers['x-user-organization'] || 'cassems';
+    const normalizedOrg = normalizeOrganization(userOrg);
 
     const updateFields = [];
     const updateValues = [];
@@ -169,7 +183,7 @@ const updateChecklistItem = async (req, res) => {
       SELECT id, titulo, descricao, concluido, ordem, created_at, updated_at
       FROM cronograma_checklist 
       WHERE id = ? AND (organizacao = ? OR ? = 'portes')
-    `, [itemId, userOrg, userOrg]);
+    `, [itemId, normalizedOrg, normalizedOrg]);
 
     if (!updatedRows || updatedRows.length === 0) {
       return res.status(404).json({ success: false, error: 'Item não encontrado' });
@@ -194,13 +208,14 @@ const deleteChecklistItem = async (req, res) => {
   try {
     const { cronogramaId, itemId } = req.params;
     const userOrg = req.headers['x-user-organization'] || 'cassems';
+    const normalizedOrg = normalizeOrganization(userOrg);
 
     ({ pool, server } = await getDbPoolWithTunnel());
 
     const deleteResult = await safeQuery(pool, `
       DELETE FROM cronograma_checklist 
       WHERE cronograma_id = ? AND id = ? AND (organizacao = ? OR ? = 'portes')
-    `, [cronogramaId, itemId, userOrg, userOrg]);
+    `, [cronogramaId, itemId, normalizedOrg, normalizedOrg]);
 
     if (!deleteResult || deleteResult.affectedRows === 0) {
       return res.status(404).json({ success: false, error: 'Item não encontrado' });

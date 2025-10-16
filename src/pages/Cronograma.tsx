@@ -1876,7 +1876,7 @@ const Cronograma = () => {
               <Button
                 variant="destructive"
                 size="sm"
-                className="absolute right-2 top-2 bg-red-600 hover:bg-red-700"
+                className="absolute right-16 top-2 bg-red-600 hover:bg-red-700"
                 onClick={() => {
                   setIsViewDialogOpen(false);
                   setCronogramaToDelete(viewingCronograma);
