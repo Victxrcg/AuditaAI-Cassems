@@ -24,10 +24,10 @@ const listChecklistItems = async (req, res) => {
     `, [cronogramaId, userOrg]);
 
     // Converter concluido de number para boolean
-    const items = result[0].map(item => ({
+    const items = Array.isArray(result[0]) ? result[0].map(item => ({
       ...item,
       concluido: Boolean(item.concluido)
-    }));
+    })) : [];
 
     res.json({
       success: true,
@@ -136,12 +136,12 @@ const createChecklistItem = async (req, res) => {
     console.log('🔍 Debug - newItem:', newItem);
     console.log('🔍 Debug - newItem length:', newItem?.length);
 
-    console.log('🔍 Debug - Item criado com sucesso:', newItem[0]);
+    console.log('🔍 Debug - Item criado com sucesso:', newItem);
 
     // Converter concluido de number para boolean
     const itemData = {
-      ...newItem[0],
-      concluido: Boolean(newItem[0].concluido)
+      ...newItem,
+      concluido: Boolean(newItem.concluido)
     };
 
     res.status(201).json({
