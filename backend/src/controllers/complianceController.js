@@ -940,7 +940,6 @@ async function analisarDocumentosAnexados(pool, complianceId) {
         if (extensao === '.pdf') {
           try {
             const pdfParse = require('pdf-parse');
-            const pdfParse = require('pdf-parse');
             const pdfData = await pdfParse(buffer);
             conteudo = pdfData.text;
           } catch (pdfError) {
