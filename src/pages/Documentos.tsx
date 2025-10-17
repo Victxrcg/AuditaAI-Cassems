@@ -148,12 +148,6 @@ export default function Documentos() {
     });
   };
 
-  // Função para visualizar documento
-  const handleViewDocument = (documentId: number) => {
-    // Abrir documento em nova aba
-    const url = `${import.meta.env.VITE_API_URL || 'http://localhost:3001'}/documentos/${documentId}/download`;
-    window.open(url, '_blank');
-  };
 
   // Funções para pastas
   const handleCreatePasta = async () => {
@@ -632,8 +626,6 @@ export default function Documentos() {
             document={previewState.document}
             position={{ x: 0, y: 0 }} // O wrapper gerencia o posicionamento
             onClose={hidePreviewImmediately}
-            onDownload={downloadDocumento}
-            onView={handleViewDocument}
           />
         </div>
       )}

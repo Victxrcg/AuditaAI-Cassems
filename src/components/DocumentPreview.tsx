@@ -6,10 +6,7 @@ import {
   FileText, 
   Image, 
   File, 
-  Download, 
-  Eye, 
   Calendar,
-  User,
   Building,
   Folder,
   X
@@ -28,8 +25,6 @@ interface DocumentPreviewProps {
   };
   position?: { x: number; y: number };
   onClose?: () => void;
-  onDownload?: (id: number) => void;
-  onView?: (id: number) => void;
   className?: string;
 }
 
@@ -37,8 +32,6 @@ export const DocumentPreview: React.FC<DocumentPreviewProps> = ({
   document,
   position = { x: 0, y: 0 },
   onClose,
-  onDownload,
-  onView,
   className
 }) => {
   const [imagePreview, setImagePreview] = useState<string | null>(null);
@@ -222,31 +215,6 @@ export const DocumentPreview: React.FC<DocumentPreviewProps> = ({
           </div>
         </div>
 
-        {/* Ações */}
-        <div className="flex gap-2 mt-4">
-          {onView && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => onView(document.id)}
-              className="flex-1"
-            >
-              <Eye className="h-3 w-3 mr-1" />
-              Visualizar
-            </Button>
-          )}
-          {onDownload && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => onDownload(document.id)}
-              className="flex-1"
-            >
-              <Download className="h-3 w-3 mr-1" />
-              Baixar
-            </Button>
-          )}
-        </div>
       </CardContent>
     </Card>
   );
