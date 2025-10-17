@@ -549,6 +549,8 @@ function extrairSecoesRelevantes(texto, maxTokens = 30000) {
     return texto;
   }
   
+  console.log(`🔍 Documento muito longo (${texto.length} caracteres), extraindo seções relevantes...`);
+  
   // Para documentos muito longos, extrair seções estratégicas
   const linhas = texto.split('\n');
   const secoesRelevantes = [];
@@ -557,7 +559,10 @@ function extrairSecoesRelevantes(texto, maxTokens = 30000) {
   const palavrasChave = [
     'RESUMO', 'EXECUTIVO', 'TOTAL', 'VALOR', 'RAT', 'CNAE', 'ESTABELECIMENTO',
     'CNPJ', 'FUNCIONÁRIO', 'COMPETÊNCIA', 'PAGAMENTO', 'CRÉDITO', 'RECUPERAÇÃO',
-    'TABELA', 'ANEXO', 'FUNDAMENTAÇÃO', 'LEGAL', 'PROCEDIMENTO', 'RETIFICAÇÃO'
+    'TABELA', 'ANEXO', 'FUNDAMENTAÇÃO', 'LEGAL', 'PROCEDIMENTO', 'RETIFICAÇÃO',
+    'CASSEMS', 'PREVIDÊNCIA', 'INSS', 'RECOLHIMENTO', 'PERÍODO', 'EMPRESA',
+    'FOLHA', 'SALÁRIO', 'CONTRIBUIÇÃO', 'ALÍQUOTA', 'IMPOSTO', 'FATURAMENTO',
+    'RECEITA', 'DESPESA', 'BALANÇO', 'DEMONSTRATIVO', 'INADIMPLÊNCIA', 'COBRANÇA'
   ];
   
   let contador = 0;
@@ -576,9 +581,12 @@ function extrairSecoesRelevantes(texto, maxTokens = 30000) {
   }
   
   const resultado = secoesRelevantes.join('\n');
-  return resultado.length > maxCaracteres 
+  const resultadoFinal = resultado.length > maxCaracteres 
     ? resultado.substring(0, maxCaracteres) + '... [OTIMIZADO]'
     : resultado;
+  
+  console.log(`✅ Seções relevantes extraídas: ${resultadoFinal.length} caracteres (${secoesRelevantes.length} linhas)`);
+  return resultadoFinal;
 }
 
 // Função auxiliar para extrair dados de um arquivo específico
@@ -691,29 +699,34 @@ async function assistenteRelatorioTecnico(conteudoArquivo, nomeArquivo) {
 
   try {
     const prompt = `
-Analise o seguinte relatório técnico de recuperação de créditos e extraia as informações mais importantes para compliance fiscal:
+Analise o seguinte relatório técnico de recuperação de créditos previdenciários e extraia as informações mais importantes para compliance fiscal:
 
 ARQUIVO: ${nomeArquivo}
 CONTEÚDO:
 ${extrairSecoesRelevantes(conteudoArquivo, 35000)}
 
-Este é um relatório técnico que pode conter:
-- Análise de recuperação de créditos
-- Dados de clientes e contratos
-- Valores de débitos e créditos
-- Cronogramas de pagamento
-- Análise de inadimplência
-- Estratégias de cobrança
-- Resultados financeiros
-- Conformidade legal
+Este é um relatório técnico de recuperação de créditos previdenciários que pode conter:
+- Análise de recuperação de créditos previdenciários (INSS)
+- Dados da empresa (CNPJ, razão social)
+- Valores de contribuições previdenciárias
+- Períodos de competência analisados
+- Análise de folha de pagamento
+- Cálculos de alíquotas e percentuais
+- Estratégias de recuperação de créditos
+- Resultados financeiros e valores recuperados
+- Conformidade com legislação previdenciária
+- Análise de RAT (Riscos Ambientais do Trabalho)
+- Dados de funcionários e estabelecimentos
 
 Extraia e retorne APENAS um JSON com as seguintes informações:
 {
-  "resumo_executivo": "Resumo em 2-3 linhas do relatório de recuperação de créditos",
+  "resumo_executivo": "Resumo em 2-3 linhas do relatório de recuperação de créditos previdenciários",
   "tipo_relatorio": "Tipo específico do relatório (Recuperação de Créditos RAT/Análise de Inadimplência/etc)",
+  "empresa_analisada": "Nome da empresa analisada (ex: CASSEMS)",
+  "cnpj_empresa": "CNPJ da empresa analisada",
   "periodo_analise": "Período analisado no relatório (ex: 2020-2024)",
-  "total_creditos_analisados": "Valor total dos créditos analisados",
-  "total_recuperado": "Valor total recuperado",
+  "total_creditos_analisados": "Valor total dos créditos previdenciários analisados",
+  "total_recuperado": "Valor total recuperado de contribuições previdenciárias",
   "taxa_recuperacao": "Taxa de recuperação em percentual",
   "estabelecimentos_analisados": ["Lista dos estabelecimentos analisados"],
   "cnpjs_envolvidos": ["Lista dos CNPJs mencionados no relatório"],
@@ -721,6 +734,12 @@ Extraia e retorne APENAS um JSON com as seguintes informações:
   "rat_taxa_aplicada": "Taxa de RAT aplicada (ex: 1%, 2%)",
   "rat_taxa_correta": "Taxa de RAT correta identificada",
   "diferenca_rat": "Diferença entre taxa aplicada e correta",
+  "contribuicoes_previdenciarias": {
+    "patronal": "Valor das contribuições patronais (20%)",
+    "gillrat": "Valor do GILLRAT (2%)",
+    "outras_entidades": "Valor das outras entidades (5,8%)",
+    "total_contribuicoes": "Total das contribuições previdenciárias"
+  },
   "valores_por_ano": {
     "2020": "Valor total recuperado em 2020",
     "2021": "Valor total recuperado em 2021", 
