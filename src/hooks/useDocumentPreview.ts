@@ -25,13 +25,13 @@ export const useDocumentPreview = () => {
     const viewportWidth = window.innerWidth;
     const viewportHeight = window.innerHeight;
     
-    // Posição simples: à direita do elemento, com margem
-    let x = rect.right + 20;
-    let y = rect.top;
+    // Posição simples: à direita do elemento, com margem menor
+    let x = rect.right + 10;
+    let y = rect.top - 5;
     
     // Se não couber à direita, mostrar à esquerda
-    if (x + 320 > viewportWidth) {
-      x = rect.left - 340;
+    if (x + 320 > viewportWidth - 20) {
+      x = rect.left - 330;
     }
     
     // Se ainda não couber, centralizar
@@ -47,13 +47,6 @@ export const useDocumentPreview = () => {
     // Garantir margens mínimas
     x = Math.max(20, x);
     y = Math.max(20, y);
-
-    console.log('🔍 Preview position:', { 
-      x, 
-      y, 
-      rect: { right: rect.right, top: rect.top, left: rect.left },
-      viewport: { width: viewportWidth, height: viewportHeight }
-    });
     
     setPreviewState({
       isVisible: true,

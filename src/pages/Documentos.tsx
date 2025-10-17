@@ -619,7 +619,6 @@ export default function Documentos() {
           style={{
             left: `${previewState.position.x}px`,
             top: `${previewState.position.y}px`,
-            border: '2px solid red', // Debug: borda vermelha para ver onde está
           }}
           onMouseEnter={() => {
             // Cancelar timeout quando mouse entra no preview
