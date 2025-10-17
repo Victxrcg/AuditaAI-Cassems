@@ -391,7 +391,12 @@ const ComplianceItemCard = memo(({
       const access = await canAccessStep(item.id, complianceItems, competenciaId);
       setCanAccess(access);
 
-      onFileUpload(item.id, file);
+      // Recarregar dados de compliance para atualizar status baseado em anexos
+      console.log('🔍 Recarregando dados após upload para atualizar status...');
+      // Chamar função do componente pai para recarregar dados
+      if (typeof onFileUpload === 'function') {
+        await onFileUpload(item.id, file);
+      }
       console.log('Arquivo carregado com sucesso:', file.name);
     } catch (error) {
       console.error('Erro ao fazer upload:', error);
@@ -424,7 +429,7 @@ const ComplianceItemCard = memo(({
   // Se o card não está expandido, mostrar apenas o resumo
   if (!item.isExpanded) {
     return (
-      <Card className={`mb-6 bg-white ${!canAccess ? 'opacity-50' : ''}`}>
+      <Card className={`mb-6 bg-white transition-shadow ${!canAccess ? 'opacity-50' : 'shadow-sm hover:shadow-lg'}`}>
         <CardHeader>
           <div className="flex justify-between items-start">
             <div>
@@ -470,7 +475,7 @@ const ComplianceItemCard = memo(({
   // Se for o Parecer Final, renderizar interface especial de IA
   if (item.id === '8') {
     return (
-      <Card className="mb-6 bg-white">
+      <Card className="mb-6 bg-white transition-shadow shadow-sm hover:shadow-lg">
         <CardHeader>
           <div className="flex justify-between items-start">
             <div>
@@ -613,7 +618,7 @@ const ComplianceItemCard = memo(({
 
   // Renderização normal para outros itens
   return (
-    <Card className={`mb-6 bg-white ${!canAccess ? 'opacity-50' : ''}`}>
+    <Card className={`mb-6 bg-white transition-shadow ${!canAccess ? 'opacity-50' : 'shadow-sm hover:shadow-lg'}`}>
       <CardHeader>
         <div className="flex justify-between items-start">
           <div>
@@ -1248,7 +1253,7 @@ export default function Compliance() {
         console.log('🔍 Debug - ultima_alteracao_em:', competencia.ultima_alteracao_em);
 
         // Mapear os dados do banco para os complianceItems
-        const updatedItems = complianceItems.map(item => {
+        const itemsWithBasicData = complianceItems.map(item => {
           const itemId = item.id;
           let updatedItem = { ...item };
 
@@ -1328,11 +1333,33 @@ export default function Compliance() {
           console.log('🔍 Debug - updatedItem.updatedBy:', updatedItem.updatedBy);
           console.log('🔍 Debug - updatedItem.lastUpdated:', updatedItem.lastUpdated);
 
-          // PRIMEIRO: Determinar status baseado nos dados reais do banco
+          return updatedItem;
+        });
+
+        // Depois, verificar anexos e determinar status para cada item
+        const updatedItems = await Promise.all(itemsWithBasicData.map(async (updatedItem) => {
+          // PRIMEIRO: Determinar status baseado nos dados reais do banco E anexos
           const hasData = (updatedItem.data && updatedItem.data.trim()) ||
                          (updatedItem.observacoes && updatedItem.observacoes.trim());
           
-          if (hasData) {
+          // Verificar se há anexos para este item
+          let hasAnexos = false;
+          if (competenciaId) {
+            try {
+              const tipoAnexo = getTipoAnexoFromItemId(updatedItem.id);
+              const anexosData = await listAnexos(competenciaId);
+              const filteredAnexos = anexosData.filter(anexo => anexo.tipo_anexo === tipoAnexo);
+              hasAnexos = filteredAnexos.length > 0;
+              console.log(`🔍 Item ${updatedItem.id} - hasData: ${hasData}, hasAnexos: ${hasAnexos} (${filteredAnexos.length} anexos)`);
+            } catch (error) {
+              console.error('Erro ao verificar anexos para status:', error);
+            }
+          }
+          
+          // Item está concluído se tem dados OU anexos
+          const isCompleted = hasData || hasAnexos;
+          
+          if (isCompleted) {
             updatedItem.status = 'concluido';
             // Card Parecer Final sempre fica aberto, outros cards com dados ficam fechados
             updatedItem.isExpanded = updatedItem.id === '8' ? true : false;
@@ -1360,7 +1387,7 @@ export default function Compliance() {
           }
 
           return updatedItem;
-        });
+        }));
 
         setComplianceItems(updatedItems);
         console.log(' Compliance items atualizados com dados do banco:', updatedItems);
@@ -1815,9 +1842,14 @@ export default function Compliance() {
       return novaCompetencia;
     }
     
-    // O upload real é feito no componente ComplianceItemCard
+    // Se já há competência, recarregar dados para atualizar status baseado em anexos
+    if (currentCompetenciaId) {
+      console.log('🔍 Recarregando dados após upload para atualizar status...');
+      await loadComplianceData(currentCompetenciaId);
+    }
+    
     return null;
-  }, [currentCompetenciaId, createCompetenciaWithData]);
+  }, [currentCompetenciaId, createCompetenciaWithData, loadComplianceData]);
 
   const handleRemoveFile = useCallback((id: string, anexoId: number) => {
     console.log(' Removendo anexo:', id, anexoId);
@@ -1912,10 +1944,11 @@ export default function Compliance() {
 
       // Se for o item "Período" e tiver data, atualizar a competencia_referencia
       if (id === '1' && item.data && item.data.trim()) {
-        // Se for um período (contém '|'), salvar como está, senão converter para data única
-        const dataParaSalvar = item.data.includes('|') ? item.data : item.data;
-        await updateCompetenciaReferencia(currentCompetenciaId, dataParaSalvar);
-        setCompetenciaData(dataParaSalvar);
+        // Para período, usar a data de início como referência
+        const dataInicio = item.data.includes('|') ? item.data.split('|')[0] : item.data;
+        await updateCompetenciaReferencia(currentCompetenciaId, dataInicio);
+        setCompetenciaData(dataInicio);
+        console.log('🔍 Competência de referência atualizada para:', dataInicio);
       }
 
       // RECARREGAR dados do banco para pegar as informações atualizadas
@@ -1923,6 +1956,11 @@ export default function Compliance() {
         console.log('🔍 Debug - Chamando loadComplianceData para:', currentCompetenciaId);
         await loadComplianceData(currentCompetenciaId);
         console.log('🔍 Debug - loadComplianceData concluído');
+        
+        // Atualizar a lista de competências para mostrar a nova competência
+        console.log('🔍 Atualizando lista de competências...');
+        await loadCompetencias();
+        console.log('🔍 Lista de competências atualizada');
       }
 
       // Atualizar estado local APENAS após salvar com sucesso

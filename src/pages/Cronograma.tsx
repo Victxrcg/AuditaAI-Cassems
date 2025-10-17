@@ -1045,16 +1045,22 @@ const Cronograma = () => {
                             <div className="flex-1 min-w-0">
                               <div className="flex items-start justify-between gap-4">
                                 <div className="flex-1 min-w-0">
-                                  <h4 
-                                    className="text-lg font-medium text-gray-900 mb-2 cursor-pointer hover:text-blue-600 transition-colors"
-                                    onClick={() => {
-                                      setViewingCronograma(cronograma);
-                                      setIsViewDialogOpen(true);
-                                    }}
-                                    title="Clique para visualizar detalhes"
-                                  >
-                                    {cronograma.titulo}
-                                  </h4>
+                                  <div className="flex items-center gap-2 mb-1 min-w-0">
+                                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-gray-100 text-gray-700 flex-shrink-0">
+                                      <Building className="h-3 w-3 mr-1" />
+                                      {(cronograma.organizacao || '').replace(/_/g, ' ').toUpperCase()}
+                                    </span>
+                                    <h4 
+                                      className="text-lg font-medium text-gray-900 cursor-pointer hover:text-blue-600 transition-colors truncate"
+                                      onClick={() => {
+                                        setViewingCronograma(cronograma);
+                                        setIsViewDialogOpen(true);
+                                      }}
+                                      title="Clique para visualizar detalhes"
+                                    >
+                                      {cronograma.titulo}
+                                    </h4>
+                                  </div>
                                   
                                   {/* Status badges */}
                                   <div className="flex items-center gap-2 mb-3">
