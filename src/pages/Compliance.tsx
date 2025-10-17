@@ -1626,21 +1626,22 @@ export default function Compliance() {
   };
 
   // Função auxiliar para salvar campo no banco (sem recursão)
-  const saveFieldToDatabaseDirect = async (dbField: string, value: string, userId: number) => {
-    if (!currentCompetenciaId) {
+  const saveFieldToDatabaseDirect = async (dbField: string, value: string, userId: number, competenciaId?: string) => {
+    const competenciaIdToUse = competenciaId || currentCompetenciaId;
+    if (!competenciaIdToUse) {
       console.error('🔍 Nenhuma competência selecionada');
       return;
     }
 
     try {
       console.log('🔍 Salvando campo diretamente:', {
-        competenciaId: currentCompetenciaId,
+        competenciaId: competenciaIdToUse,
         field: dbField,
         value,
         user_id: userId
       });
 
-      const response = await fetch(`${API_BASE}/compliance/compliance/${currentCompetenciaId}/field`, {
+      const response = await fetch(`${API_BASE}/compliance/compliance/${competenciaIdToUse}/field`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -1663,8 +1664,9 @@ export default function Compliance() {
   };
 
   // Salvar campo específico no banco
-  const saveFieldToDatabase = async (itemId: string, field: 'data' | 'observacoes' | 'competencia_inicio' | 'competencia_fim', value: string, userId: number) => {
-    if (!currentCompetenciaId) {
+  const saveFieldToDatabase = async (itemId: string, field: 'data' | 'observacoes' | 'competencia_inicio' | 'competencia_fim', value: string, userId: number, competenciaId?: string) => {
+    const competenciaIdToUse = competenciaId || currentCompetenciaId;
+    if (!competenciaIdToUse) {
       console.error('🔍 Nenhuma competência selecionada');
       return;
     }
@@ -1681,12 +1683,12 @@ export default function Compliance() {
           
           // Salvar data de início
           if (dataInicio) {
-            await saveFieldToDatabaseDirect('competencia_inicio', dataInicio, userId);
+            await saveFieldToDatabaseDirect('competencia_inicio', dataInicio, userId, competenciaIdToUse);
           }
           
           // Salvar data de fim (se existir)
           if (dataFim) {
-            await saveFieldToDatabaseDirect('competencia_fim', dataFim, userId);
+            await saveFieldToDatabaseDirect('competencia_fim', dataFim, userId, competenciaIdToUse);
           }
           
           return; // Retornar aqui pois já salvamos os campos separados
@@ -1942,13 +1944,15 @@ export default function Compliance() {
 
       // Salvar cada campo no banco se tiver valor
       const promises = [];
+      const competenciaIdToUse = currentCompetenciaId;
+      
       if (item.data && item.data.trim()) {
-        console.log('🔍 Salvando data:', item.data, 'para item:', id, 'com user_id:', currentUser.id);
-        promises.push(saveFieldToDatabase(id, 'data', item.data, currentUser.id));
+        console.log('🔍 Salvando data:', item.data, 'para item:', id, 'com user_id:', currentUser.id, 'competenciaId:', competenciaIdToUse);
+        promises.push(saveFieldToDatabase(id, 'data', item.data, currentUser.id, competenciaIdToUse));
       }
       if (item.observacoes && item.observacoes.trim()) {
-        console.log('🔍 Salvando observacoes:', item.observacoes, 'para item:', id, 'com user_id:', currentUser.id);
-        promises.push(saveFieldToDatabase(id, 'observacoes', item.observacoes, currentUser.id));
+        console.log('🔍 Salvando observacoes:', item.observacoes, 'para item:', id, 'com user_id:', currentUser.id, 'competenciaId:', competenciaIdToUse);
+        promises.push(saveFieldToDatabase(id, 'observacoes', item.observacoes, currentUser.id, competenciaIdToUse));
       }
       
       console.log('🔍 Total de promises para salvar:', promises.length);

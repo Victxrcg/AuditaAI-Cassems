@@ -568,10 +568,17 @@ async function extrairDadosArquivo(caminhoArquivo, nomeArquivo) {
       try {
         const PDFParseClass = await loadPdfParse();
         const pdfData = await new PDFParseClass(buffer);
+        
+        // Verificar se o resultado é um array de bytes (dados binários)
+        if (Array.isArray(pdfData.text)) {
+          console.warn(`⚠️ PDF ${nomeArquivo} retornou dados binários - pode estar protegido ou corrompido`);
+          return { status: 'sem_conteudo', conteudo: 'PDF protegido ou corrompido - não foi possível extrair texto' };
+        }
+        
         // O texto pode estar em diferentes propriedades dependendo da versão
         conteudo = pdfData.text || pdfData.doc?.text || pdfData.toString();
         
-        if (!conteudo || conteudo === '[object Object]') {
+        if (!conteudo || conteudo === '[object Object]' || conteudo.length < 10) {
           console.warn(`⚠️ Nenhum conteúdo extraído de: ${nomeArquivo}`);
           return { status: 'sem_conteudo', conteudo: 'PDF processado mas sem conteúdo de texto extraível' };
         }
