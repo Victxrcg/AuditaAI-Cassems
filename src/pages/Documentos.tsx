@@ -6,6 +6,8 @@ import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
 import FileUploadArea, { FileUploadState } from '@/components/FileUploadArea';
+import DocumentPreview from '@/components/DocumentPreview';
+import { useDocumentPreview } from '@/hooks/useDocumentPreview';
 import { 
   downloadDocumento, 
   listarDocumentos, 
@@ -49,6 +51,15 @@ export default function Documentos() {
     status: 'idle',
     progress: 0
   });
+
+  // Hook para preview de documentos
+  const {
+    previewState,
+    showPreview,
+    hidePreview,
+    hidePreviewImmediately,
+    updatePosition
+  } = useDocumentPreview();
   
   // Estados para formulário de pasta
   const [pastaTitulo, setPastaTitulo] = useState('');
@@ -401,7 +412,13 @@ export default function Documentos() {
         <CardContent>
           <div className="space-y-3">
             {filteredDocs.map((d) => (
-              <div key={d.id} className="flex items-center justify-between p-3 rounded border">
+              <div 
+                key={d.id} 
+                className="flex items-center justify-between p-3 rounded border hover:bg-gray-50 transition-colors cursor-pointer"
+                onMouseEnter={(e) => showPreview(d, e)}
+                onMouseLeave={hidePreview}
+                onMouseMove={(e) => updatePosition(e)}
+              >
                 <div className="flex items-center gap-3 min-w-0">
                   <FileText className="w-5 h-5 text-gray-600" />
                   <div className="min-w-0">
@@ -582,6 +599,20 @@ export default function Documentos() {
             </CardContent>
           </Card>
         </div>
+      )}
+
+      {/* Preview de Documento */}
+      {previewState.isVisible && previewState.document && (
+        <DocumentPreview
+          document={previewState.document}
+          position={previewState.position}
+          onClose={hidePreviewImmediately}
+          onDownload={downloadDocumento}
+          onView={(id) => {
+            // Implementar visualização se necessário
+            console.log('Visualizar documento:', id);
+          }}
+        />
       )}
     </div>
   );
