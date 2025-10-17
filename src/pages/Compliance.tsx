@@ -1298,8 +1298,8 @@ export default function Compliance() {
               else if (competencia.competencia_referencia) {
                 // Se competencia_referencia já está no formato YYYY-MM-DD, usar diretamente
                 const dataFormatada = competencia.competencia_referencia.includes('-') 
-                  ? competencia.competencia_referencia 
-                  : new Date(competencia.competencia_referencia).toISOString().split('T')[0];
+                  ? competencia.competencia_referencia.split('T')[0] // Garantir que pega apenas a parte da data
+                  : competencia.competencia_referencia; // Usar como está se não for ISO
                 updatedItem.data = dataFormatada;
                 setCompetenciaData(dataFormatada);
               }

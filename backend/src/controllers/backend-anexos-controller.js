@@ -113,9 +113,9 @@ exports.uploadAnexo = async (req, res) => {
     const anexoField = `${tipoAnexo}_anexo_id`;
     await pool.query(`
       UPDATE compliance_fiscal 
-      SET ${anexoField} = ? 
+      SET ${anexoField} = ?, ultima_alteracao_por = ?, ultima_alteracao_em = NOW()
       WHERE id = ?
-    `, [anexoId, complianceId]);
+    `, [anexoId, currentUser.id, complianceId]);
 
     // Registrar no histórico que um anexo foi adicionado
     try {
