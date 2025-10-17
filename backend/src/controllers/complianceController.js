@@ -21,6 +21,22 @@ try {
   console.log('⚠️ Erro ao configurar OpenAI:', error.message);
 }
 
+// Função para carregar pdf-parse dinamicamente
+let pdfParse = null;
+const loadPdfParse = async () => {
+  if (!pdfParse) {
+    try {
+      const imported = require('pdf-parse');
+      // A função principal está em PDFParse (com P maiúsculo)
+      pdfParse = imported.PDFParse || imported.default || imported;
+    } catch (error) {
+      console.error('❌ Erro ao carregar pdf-parse:', error);
+      throw new Error('pdf-parse não está disponível');
+    }
+  }
+  return pdfParse;
+};
+
 // Função auxiliar para registrar alterações no histórico
 const registrarAlteracao = async (pool, complianceId, campo, valorAnterior, valorNovo, userId, organizacao) => {
   try {
@@ -550,8 +566,8 @@ async function extrairDadosArquivo(caminhoArquivo, nomeArquivo) {
 
     if (extensao === '.pdf') {
       try {
-        const pdfParse = require('pdf-parse');
-        const pdfData = await pdfParse(buffer);
+        const PDFParseClass = await loadPdfParse();
+        const pdfData = await new PDFParseClass(buffer);
         conteudo = pdfData.text;
       } catch (pdfError) {
         console.error(`Erro ao processar PDF ${nomeArquivo}:`, pdfError.message);
@@ -939,8 +955,8 @@ async function analisarDocumentosAnexados(pool, complianceId) {
         // Processar diferentes tipos de arquivo
         if (extensao === '.pdf') {
           try {
-            const pdfParse = require('pdf-parse');
-            const pdfData = await pdfParse(buffer);
+            const PDFParseClass = await loadPdfParse();
+            const pdfData = await new PDFParseClass(buffer);
             conteudo = pdfData.text;
           } catch (pdfError) {
             console.error(`Erro ao processar PDF ${anexo.nome_arquivo}:`, pdfError.message);
@@ -1532,8 +1548,8 @@ const extrairConteudoArquivos = async (pool, competenciaId) => {
                 conteudo = `Dados CSV (${csvData.length} linhas):\n${JSON.stringify(csvData, null, 2)}`;
               }
             } else if (extensao === '.pdf') {
-            const pdfParse = require('pdf-parse');
-            const pdfData = await pdfParse(buffer);
+            const PDFParseClass = await loadPdfParse();
+            const pdfData = await new PDFParseClass(buffer);
             conteudo = pdfData.text;
           } else if (extensao === '.eml') {
             const email = await simpleParser(buffer);
@@ -1571,8 +1587,8 @@ const extrairConteudoArquivos = async (pool, competenciaId) => {
                 conteudo = `Dados CSV (${csvData.length} linhas):\n${JSON.stringify(csvData, null, 2)}`;
               }
             } else if (extensao === '.pdf') {
-            const pdfParse = require('pdf-parse');
-            const pdfData = await pdfParse(buffer);
+            const PDFParseClass = await loadPdfParse();
+            const pdfData = await new PDFParseClass(buffer);
             conteudo = pdfData.text;
           } else if (extensao === '.eml') {
             const email = await simpleParser(buffer);
