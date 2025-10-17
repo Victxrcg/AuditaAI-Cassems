@@ -484,7 +484,519 @@ exports.uploadAnexo = async (req, res) => {
   }
 };
 
-// Gerar parecer com IA
+// Função auxiliar para estimar tokens (aproximação: 1 token ≈ 4 caracteres)
+function estimarTokens(texto) {
+  return Math.ceil(texto.length / 4);
+}
+
+// Função auxiliar para truncar texto baseado em tokens
+function truncarPorTokens(texto, maxTokens) {
+  const maxCaracteres = maxTokens * 4; // Aproximação conservadora
+  if (texto.length <= maxCaracteres) {
+    return texto;
+  }
+  return texto.substring(0, maxCaracteres) + '... [TRUNCADO]';
+}
+
+// Função auxiliar para extrair seções relevantes de documentos longos
+function extrairSecoesRelevantes(texto, maxTokens = 30000) {
+  const maxCaracteres = maxTokens * 4;
+  
+  if (texto.length <= maxCaracteres) {
+    return texto;
+  }
+  
+  // Para documentos muito longos, extrair seções estratégicas
+  const linhas = texto.split('\n');
+  const secoesRelevantes = [];
+  
+  // Procurar por seções importantes
+  const palavrasChave = [
+    'RESUMO', 'EXECUTIVO', 'TOTAL', 'VALOR', 'RAT', 'CNAE', 'ESTABELECIMENTO',
+    'CNPJ', 'FUNCIONÁRIO', 'COMPETÊNCIA', 'PAGAMENTO', 'CRÉDITO', 'RECUPERAÇÃO',
+    'TABELA', 'ANEXO', 'FUNDAMENTAÇÃO', 'LEGAL', 'PROCEDIMENTO', 'RETIFICAÇÃO'
+  ];
+  
+  let contador = 0;
+  for (let i = 0; i < linhas.length && contador < maxCaracteres; i++) {
+    const linha = linhas[i];
+    
+    // Incluir linhas com palavras-chave importantes
+    const temPalavraChave = palavrasChave.some(palavra => 
+      linha.toUpperCase().includes(palavra.toUpperCase())
+    );
+    
+    if (temPalavraChave || contador < maxCaracteres * 0.3) {
+      secoesRelevantes.push(linha);
+      contador += linha.length + 1;
+    }
+  }
+  
+  const resultado = secoesRelevantes.join('\n');
+  return resultado.length > maxCaracteres 
+    ? resultado.substring(0, maxCaracteres) + '... [OTIMIZADO]'
+    : resultado;
+}
+
+// Função auxiliar para extrair dados de um arquivo específico
+async function extrairDadosArquivo(caminhoArquivo, nomeArquivo) {
+  try {
+    if (!fs.existsSync(caminhoArquivo)) {
+      return { status: 'arquivo_nao_encontrado', conteudo: 'Arquivo não encontrado no servidor' };
+    }
+
+    const buffer = fs.readFileSync(caminhoArquivo);
+    const extensao = path.extname(nomeArquivo).toLowerCase();
+    let conteudo = '';
+
+    if (extensao === '.pdf') {
+      try {
+        const pdfData = await pdfParse(buffer);
+        conteudo = pdfData.text;
+      } catch (pdfError) {
+        console.error(`Erro ao processar PDF ${nomeArquivo}:`, pdfError.message);
+        return { status: 'erro_processamento', conteudo: 'Erro ao processar PDF - arquivo pode estar corrompido' };
+      }
+    } else if (extensao === '.csv') {
+      try {
+        const csvData = csv.parse(buffer, { columns: true });
+        conteudo = `Dados CSV (${csvData.length} linhas):\n${JSON.stringify(csvData, null, 2)}`;
+      } catch (csvError) {
+        console.error(`Erro ao processar CSV ${nomeArquivo}:`, csvError.message);
+        return { status: 'erro_processamento', conteudo: 'Erro ao processar CSV - formato inválido' };
+      }
+    } else if (extensao === '.eml') {
+      try {
+        const email = await simpleParser(buffer);
+        conteudo = `Email de: ${email.from?.text || 'N/A'}\nPara: ${email.to?.text || 'N/A'}\nAssunto: ${email.subject || 'N/A'}\nData: ${email.date || 'N/A'}\n\nConteúdo:\n${email.text || email.html || 'Sem conteúdo'}`;
+      } catch (emailError) {
+        console.error(`Erro ao processar email ${nomeArquivo}:`, emailError.message);
+        return { status: 'erro_processamento', conteudo: 'Erro ao processar email - formato inválido' };
+      }
+    } else {
+      try {
+        conteudo = buffer.toString('utf8');
+      } catch (textError) {
+        return { status: 'erro_processamento', conteudo: 'Arquivo binário - não foi possível extrair texto' };
+      }
+    }
+
+    return { status: 'processado', conteudo };
+  } catch (error) {
+    console.error(`Erro ao extrair dados do arquivo ${nomeArquivo}:`, error.message);
+    return { status: 'erro_processamento', conteudo: `Erro ao processar: ${error.message}` };
+  }
+}
+
+// Assistente especializado para Relatório Técnico
+async function assistenteRelatorioTecnico(conteudoArquivo, nomeArquivo) {
+  if (!conteudoArquivo || conteudoArquivo.includes('Erro ao processar')) {
+    return { status: 'erro', dados: 'Não foi possível processar o arquivo' };
+  }
+
+  try {
+    const prompt = `
+Analise o seguinte relatório técnico de recuperação de créditos e extraia as informações mais importantes para compliance fiscal:
+
+ARQUIVO: ${nomeArquivo}
+CONTEÚDO:
+${extrairSecoesRelevantes(conteudoArquivo, 35000)}
+
+Este é um relatório técnico que pode conter:
+- Análise de recuperação de créditos
+- Dados de clientes e contratos
+- Valores de débitos e créditos
+- Cronogramas de pagamento
+- Análise de inadimplência
+- Estratégias de cobrança
+- Resultados financeiros
+- Conformidade legal
+
+Extraia e retorne APENAS um JSON com as seguintes informações:
+{
+  "resumo_executivo": "Resumo em 2-3 linhas do relatório de recuperação de créditos",
+  "tipo_relatorio": "Tipo específico do relatório (Recuperação de Créditos RAT/Análise de Inadimplência/etc)",
+  "periodo_analise": "Período analisado no relatório (ex: 2020-2024)",
+  "total_creditos_analisados": "Valor total dos créditos analisados",
+  "total_recuperado": "Valor total recuperado",
+  "taxa_recuperacao": "Taxa de recuperação em percentual",
+  "estabelecimentos_analisados": ["Lista dos estabelecimentos analisados"],
+  "cnpjs_envolvidos": ["Lista dos CNPJs mencionados no relatório"],
+  "cnae_principal": "CNAE principal identificado (ex: 8650-0/01)",
+  "rat_taxa_aplicada": "Taxa de RAT aplicada (ex: 1%, 2%)",
+  "rat_taxa_correta": "Taxa de RAT correta identificada",
+  "diferenca_rat": "Diferença entre taxa aplicada e correta",
+  "valores_por_ano": {
+    "2020": "Valor total recuperado em 2020",
+    "2021": "Valor total recuperado em 2021", 
+    "2022": "Valor total recuperado em 2022",
+    "2023": "Valor total recuperado em 2023",
+    "2024": "Valor total recuperado em 2024"
+  },
+  "funcionarios_por_cargo": {
+    "enfermagem": "Total de funcionários de enfermagem",
+    "administrativo": "Total de funcionários administrativos",
+    "outros": "Total de outros funcionários"
+  },
+  "principais_achados": ["Lista dos principais achados técnicos sobre recuperação"],
+  "pendencias_identificadas": ["Lista de pendências encontradas nos processos"],
+  "valores_importantes": ["Valores monetários específicos mencionados"],
+  "datas_relevantes": ["Datas importantes mencionadas (vencimentos, pagamentos, etc)"],
+  "procedimentos_retificacao": ["Procedimentos de retificação mencionados"],
+  "fundamentacao_legal": ["Fundamentação legal citada (ex: IN RFB, Decreto, etc)"],
+  "conformidade_geral": "Avaliação geral de conformidade (Conforme/Parcialmente Conforme/Não Conforme)",
+  "recomendacoes_tecnicas": ["Recomendações técnicas específicas para melhoria"],
+  "riscos_identificados": ["Riscos fiscais, operacionais ou de crédito identificados"],
+  "indicadores_performance": ["Indicadores de performance mencionados"],
+  "observacoes_legais": ["Observações sobre aspectos legais e regulatórios"],
+  "sistemas_utilizados": ["Sistemas mencionados (eSocial, DCOMPWEB, etc)"]
+}
+
+IMPORTANTE: 
+- Foque em dados quantitativos e qualitativos relevantes
+- Identifique valores monetários, percentuais e datas
+- Extraia informações sobre estratégias e resultados
+- Retorne APENAS o JSON, sem texto adicional
+    `;
+
+    const completion = await openai.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [
+        {
+          role: "system",
+          content: "Você é um especialista em análise de relatórios técnicos de recuperação de créditos e compliance fiscal. Extraia informações específicas, quantitativas e qualitativas. Foque em dados financeiros, estratégias e conformidade. Retorne apenas JSON válido."
+        },
+        {
+          role: "user",
+          content: prompt
+        }
+      ],
+      max_tokens: 3000,
+      temperature: 0.2
+    });
+
+    const resposta = completion.choices[0].message.content;
+    const dados = JSON.parse(resposta);
+    return { status: 'sucesso', dados };
+  } catch (error) {
+    console.error('Erro no assistente de Relatório Técnico:', error);
+    return { status: 'erro', dados: 'Erro ao analisar relatório técnico' };
+  }
+}
+
+// Assistente especializado para Relatório de Faturamento
+async function assistenteRelatorioFaturamento(conteudoArquivo, nomeArquivo) {
+  if (!conteudoArquivo || conteudoArquivo.includes('Erro ao processar')) {
+    return { status: 'erro', dados: 'Não foi possível processar o arquivo' };
+  }
+
+  try {
+    const prompt = `
+Analise o seguinte relatório de faturamento e extraia dados fiscais importantes:
+
+ARQUIVO: ${nomeArquivo}
+CONTEÚDO:
+${truncarPorTokens(conteudoArquivo, 25000)}
+
+Extraia e retorne APENAS um JSON com as seguintes informações:
+{
+  "periodo_faturamento": "Período do faturamento",
+  "valor_total_faturado": "Valor total faturado",
+  "impostos_devidos": "Valor total de impostos devidos",
+  "impostos_pagos": "Valor total de impostos pagos",
+  "saldo_impostos": "Saldo de impostos (devido - pago)",
+  "principais_clientes": ["Lista dos principais clientes"],
+  "atividade_principal": "Descrição da atividade principal",
+  "regime_tributario": "Regime tributário identificado",
+  "conformidade_fiscal": "Status de conformidade fiscal",
+  "observacoes_importantes": ["Observações importantes sobre o faturamento"]
+}
+
+IMPORTANTE: Retorne APENAS o JSON, sem texto adicional.
+    `;
+
+    const completion = await openai.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [
+        {
+          role: "system",
+          content: "Você é um especialista em análise de relatórios de faturamento fiscal. Extraia dados específicos e estruturados. Retorne apenas JSON válido."
+        },
+        {
+          role: "user",
+          content: prompt
+        }
+      ],
+      max_tokens: 2000,
+      temperature: 0.2
+    });
+
+    const resposta = completion.choices[0].message.content;
+    const dados = JSON.parse(resposta);
+    return { status: 'sucesso', dados };
+  } catch (error) {
+    console.error('Erro no assistente de Relatório de Faturamento:', error);
+    return { status: 'erro', dados: 'Erro ao analisar relatório de faturamento' };
+  }
+}
+
+// Assistente especializado para Comprovação de Compensações
+async function assistenteComprovacaoCompensacoes(conteudoArquivo, nomeArquivo) {
+  if (!conteudoArquivo || conteudoArquivo.includes('Erro ao processar')) {
+    return { status: 'erro', dados: 'Não foi possível processar o arquivo' };
+  }
+
+  try {
+    const prompt = `
+Analise o seguinte documento de comprovação de compensações e extraia informações fiscais:
+
+ARQUIVO: ${nomeArquivo}
+CONTEÚDO:
+${truncarPorTokens(conteudoArquivo, 25000)}
+
+Extraia e retorne APENAS um JSON com as seguintes informações:
+{
+  "tipo_compensacao": "Tipo de compensação identificada",
+  "valor_compensado": "Valor total compensado",
+  "periodo_compensacao": "Período da compensação",
+  "impostos_compensados": ["Lista de impostos compensados"],
+  "documentos_comprobatórios": ["Documentos que comprovam a compensação"],
+  "status_compensacao": "Status da compensação (Aprovada/Pendente/Rejeitada)",
+  "observacoes_compensacao": ["Observações sobre a compensação"],
+  "conformidade_legal": "Conformidade com a legislação",
+  "prazo_compensacao": "Prazo para compensação se aplicável"
+}
+
+IMPORTANTE: Retorne APENAS o JSON, sem texto adicional.
+    `;
+
+    const completion = await openai.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [
+        {
+          role: "system",
+          content: "Você é um especialista em análise de documentos de compensação fiscal. Extraia dados específicos e estruturados. Retorne apenas JSON válido."
+        },
+        {
+          role: "user",
+          content: prompt
+        }
+      ],
+      max_tokens: 2000,
+      temperature: 0.2
+    });
+
+    const resposta = completion.choices[0].message.content;
+    const dados = JSON.parse(resposta);
+    return { status: 'sucesso', dados };
+  } catch (error) {
+    console.error('Erro no assistente de Comprovação de Compensações:', error);
+    return { status: 'erro', dados: 'Erro ao analisar comprovação de compensações' };
+  }
+}
+
+// Assistente especializado para Emails
+async function assistenteEmails(conteudoArquivo, nomeArquivo) {
+  if (!conteudoArquivo || conteudoArquivo.includes('Erro ao processar')) {
+    return { status: 'erro', dados: 'Não foi possível processar o arquivo' };
+  }
+
+  try {
+    const prompt = `
+Analise o seguinte email e extraia informações relevantes para compliance:
+
+ARQUIVO: ${nomeArquivo}
+CONTEÚDO:
+${truncarPorTokens(conteudoArquivo, 25000)}
+
+Extraia e retorne APENAS um JSON com as seguintes informações:
+{
+  "assunto": "Assunto do email",
+  "remetente": "Remetente do email",
+  "destinatario": "Destinatário do email",
+  "data_envio": "Data de envio",
+  "tipo_comunicacao": "Tipo de comunicação (Fiscal/Operacional/Administrativa)",
+  "urgencia": "Nível de urgência (Alta/Média/Baixa)",
+  "acoes_solicitadas": ["Ações solicitadas no email"],
+  "prazo_resposta": "Prazo para resposta se mencionado",
+  "documentos_anexos": ["Documentos mencionados como anexos"],
+  "observacoes_importantes": ["Observações importantes do email"]
+}
+
+IMPORTANTE: Retorne APENAS o JSON, sem texto adicional.
+    `;
+
+    const completion = await openai.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [
+        {
+          role: "system",
+          content: "Você é um especialista em análise de comunicações por email para compliance. Extraia informações específicas e estruturadas. Retorne apenas JSON válido."
+        },
+        {
+          role: "user",
+          content: prompt
+        }
+      ],
+      max_tokens: 2000,
+      temperature: 0.2
+    });
+
+    const resposta = completion.choices[0].message.content;
+    const dados = JSON.parse(resposta);
+    return { status: 'sucesso', dados };
+  } catch (error) {
+    console.error('Erro no assistente de Emails:', error);
+    return { status: 'erro', dados: 'Erro ao analisar email' };
+  }
+}
+
+// Assistente especializado para Notas Fiscais
+async function assistenteNotasFiscais(conteudoArquivo, nomeArquivo) {
+  if (!conteudoArquivo || conteudoArquivo.includes('Erro ao processar')) {
+    return { status: 'erro', dados: 'Não foi possível processar o arquivo' };
+  }
+
+  try {
+    const prompt = `
+Analise o seguinte documento de notas fiscais e extraia informações fiscais:
+
+ARQUIVO: ${nomeArquivo}
+CONTEÚDO:
+${truncarPorTokens(conteudoArquivo, 25000)}
+
+Extraia e retorne APENAS um JSON com as seguintes informações:
+{
+  "numero_nota": "Número da nota fiscal",
+  "data_emissao": "Data de emissão",
+  "valor_total": "Valor total da nota",
+  "valor_impostos": "Valor dos impostos",
+  "cliente": "Dados do cliente",
+  "servico_produto": "Descrição do serviço/produto",
+  "status_nota": "Status da nota (Emitida/Cancelada/Inutilizada)",
+  "tipo_operacao": "Tipo de operação (Venda/Serviço/Outros)",
+  "observacoes_fiscais": ["Observações fiscais importantes"],
+  "conformidade_legal": "Conformidade com a legislação"
+}
+
+IMPORTANTE: Retorne APENAS o JSON, sem texto adicional.
+    `;
+
+    const completion = await openai.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [
+        {
+          role: "system",
+          content: "Você é um especialista em análise de notas fiscais. Extraia dados específicos e estruturados. Retorne apenas JSON válido."
+        },
+        {
+          role: "user",
+          content: prompt
+        }
+      ],
+      max_tokens: 2000,
+      temperature: 0.2
+    });
+
+    const resposta = completion.choices[0].message.content;
+    const dados = JSON.parse(resposta);
+    return { status: 'sucesso', dados };
+  } catch (error) {
+    console.error('Erro no assistente de Notas Fiscais:', error);
+    return { status: 'erro', dados: 'Erro ao analisar notas fiscais' };
+  }
+}
+
+// Função auxiliar para analisar documentos anexados
+async function analisarDocumentosAnexados(pool, complianceId) {
+  try {
+    // Buscar todos os anexos da competência
+    const [anexos] = await pool.query(`
+      SELECT * FROM compliance_anexos 
+      WHERE compliance_id = ? 
+      ORDER BY tipo_anexo, created_at
+    `, [complianceId]);
+
+    const analises = [];
+
+    for (const anexo of anexos) {
+      try {
+        const caminhoArquivo = anexo.caminho_arquivo;
+        if (!fs.existsSync(caminhoArquivo)) {
+          analises.push({
+            tipo: anexo.tipo_anexo,
+            arquivo: anexo.nome_arquivo,
+            status: 'arquivo_nao_encontrado',
+            conteudo: 'Arquivo não encontrado no servidor'
+          });
+          continue;
+        }
+
+        const buffer = fs.readFileSync(caminhoArquivo);
+        const extensao = path.extname(anexo.nome_arquivo).toLowerCase();
+        let conteudo = '';
+
+        // Processar diferentes tipos de arquivo
+        if (extensao === '.pdf') {
+          try {
+            const pdfData = await pdfParse(buffer);
+            conteudo = pdfData.text;
+          } catch (pdfError) {
+            console.error(`Erro ao processar PDF ${anexo.nome_arquivo}:`, pdfError.message);
+            conteudo = 'Erro ao processar PDF - arquivo pode estar corrompido';
+          }
+        } else if (extensao === '.csv') {
+          try {
+            const csvData = csv.parse(buffer, { columns: true });
+            conteudo = `Dados CSV (${csvData.length} linhas):\n${JSON.stringify(csvData, null, 2)}`;
+          } catch (csvError) {
+            console.error(`Erro ao processar CSV ${anexo.nome_arquivo}:`, csvError.message);
+            conteudo = 'Erro ao processar CSV - formato inválido';
+          }
+        } else if (extensao === '.eml') {
+          try {
+            const email = await simpleParser(buffer);
+            conteudo = `Email de: ${email.from?.text || 'N/A'}\nPara: ${email.to?.text || 'N/A'}\nAssunto: ${email.subject || 'N/A'}\n\nConteúdo:\n${email.text || email.html || 'Sem conteúdo'}`;
+          } catch (emailError) {
+            console.error(`Erro ao processar email ${anexo.nome_arquivo}:`, emailError.message);
+            conteudo = 'Erro ao processar email - formato inválido';
+          }
+        } else {
+          // Para outros tipos, tentar ler como texto
+          try {
+            conteudo = buffer.toString('utf8');
+          } catch (textError) {
+            conteudo = 'Arquivo binário - não foi possível extrair texto';
+          }
+        }
+
+        analises.push({
+          tipo: anexo.tipo_anexo,
+          arquivo: anexo.nome_arquivo,
+          tamanho: anexo.tamanho,
+          status: 'processado',
+          conteudo: conteudo.substring(0, 8000) // Aumentar para 8000 caracteres por arquivo
+        });
+
+      } catch (error) {
+        console.error(`Erro ao processar anexo ${anexo.nome_arquivo}:`, error.message);
+        analises.push({
+          tipo: anexo.tipo_anexo,
+          arquivo: anexo.nome_arquivo,
+          status: 'erro_processamento',
+          conteudo: `Erro ao processar: ${error.message}`
+        });
+      }
+    }
+
+    return analises;
+  } catch (error) {
+    console.error('Erro ao analisar documentos anexados:', error);
+    return [];
+  }
+}
+
+// Gerar parecer com IA - VERSÃO COM ASSISTENTES ESPECIALIZADOS
 exports.gerarParecer = async (req, res) => {
   let pool, server;
   try {
@@ -512,59 +1024,248 @@ exports.gerarParecer = async (req, res) => {
 
     const competencia = rows[0];
     
-    // Preparar dados para a IA
-    const dadosCompliance = {
-      competencia_referencia: competencia.competencia_referencia,
-      relatorio_inicial: competencia.relatorio_inicial_texto,
-      relatorio_faturamento: competencia.relatorio_faturamento_texto,
-      imposto_compensado: competencia.imposto_compensado_texto,
-      valor_compensado: competencia.valor_compensado_texto,
-      emails: competencia.emails_texto,
-      estabelecimento: competencia.estabelecimento_texto
+    console.log('🔍 Iniciando análise com assistentes especializados...');
+    
+    // Buscar anexos por tipo
+    const [anexos] = await pool.query(`
+      SELECT * FROM compliance_anexos 
+      WHERE compliance_id = ? 
+      ORDER BY tipo_anexo, created_at
+    `, [id]);
+
+    // Variáveis para armazenar dados extraídos pelos assistentes
+    const dadosExtraidos = {
+      relatorio_tecnico: null,
+      relatorio_faturamento: null,
+      comprovacao_compensacoes: null,
+      emails: null,
+      notas_fiscais: null
     };
 
-    // Gerar prompt para a IA
+    // Processar cada anexo com o assistente apropriado
+    for (const anexo of anexos) {
+      console.log(`📄 Processando ${anexo.tipo_anexo}: ${anexo.nome_arquivo}`);
+      
+      // Extrair dados do arquivo
+      const dadosArquivo = await extrairDadosArquivo(anexo.caminho_arquivo, anexo.nome_arquivo);
+      
+      if (dadosArquivo.status === 'processado') {
+        const tokensEstimados = estimarTokens(dadosArquivo.conteudo);
+        const tokensOtimizados = estimarTokens(extrairSecoesRelevantes(dadosArquivo.conteudo, 35000));
+        console.log(`📊 ${anexo.nome_arquivo}: ${tokensEstimados} tokens originais → ${tokensOtimizados} tokens otimizados`);
+      }
+      
+      if (dadosArquivo.status === 'processado') {
+        let resultadoAssistente = null;
+        
+        // Chamar assistente apropriado baseado no tipo do anexo
+        switch (anexo.tipo_anexo) {
+          case 'relatorio_inicial':
+            resultadoAssistente = await assistenteRelatorioTecnico(dadosArquivo.conteudo, anexo.nome_arquivo);
+            if (resultadoAssistente.status === 'sucesso') {
+              dadosExtraidos.relatorio_tecnico = resultadoAssistente.dados;
+            }
+            break;
+            
+          case 'relatorio_faturamento':
+            resultadoAssistente = await assistenteRelatorioFaturamento(dadosArquivo.conteudo, anexo.nome_arquivo);
+            if (resultadoAssistente.status === 'sucesso') {
+              dadosExtraidos.relatorio_faturamento = resultadoAssistente.dados;
+            }
+            break;
+            
+          case 'imposto_compensado':
+            resultadoAssistente = await assistenteComprovacaoCompensacoes(dadosArquivo.conteudo, anexo.nome_arquivo);
+            if (resultadoAssistente.status === 'sucesso') {
+              dadosExtraidos.comprovacao_compensacoes = resultadoAssistente.dados;
+            }
+            break;
+            
+          case 'emails':
+            resultadoAssistente = await assistenteEmails(dadosArquivo.conteudo, anexo.nome_arquivo);
+            if (resultadoAssistente.status === 'sucesso') {
+              dadosExtraidos.emails = resultadoAssistente.dados;
+            }
+            break;
+            
+          case 'estabelecimento':
+            resultadoAssistente = await assistenteNotasFiscais(dadosArquivo.conteudo, anexo.nome_arquivo);
+            if (resultadoAssistente.status === 'sucesso') {
+              dadosExtraidos.notas_fiscais = resultadoAssistente.dados;
+            }
+            break;
+        }
+        
+        console.log(`✅ ${anexo.tipo_anexo} processado: ${resultadoAssistente?.status || 'erro'}`);
+      }
+    }
+
+    // Obter data do período do banco
+    const dataPeriodo = competencia.competencia_referencia || 
+                       (competencia.competencia_inicio && competencia.competencia_fim ? 
+                        `${competencia.competencia_inicio} a ${competencia.competencia_fim}` : 
+                        'Não informado');
+
+    // Gerar prompt final robusto com dados extraídos
     const prompt = `
-      Gere um parecer técnico de compliance fiscal baseado nos seguintes dados:
-      
-      Competência: ${dadosCompliance.competencia_referencia}
-      Relatório Inicial: ${dadosCompliance.relatorio_inicial || 'Não informado'}
-      Relatório de Faturamento: ${dadosCompliance.relatorio_faturamento || 'Não informado'}
-      Imposto Compensado: ${dadosCompliance.imposto_compensado || 'Não informado'}
-      Valor Compensado: ${dadosCompliance.valor_compensado || 'Não informado'}
-      Emails: ${dadosCompliance.emails || 'Não informado'}
-      Estabelecimento: ${dadosCompliance.estabelecimento || 'Não informado'}
-      
-      O parecer deve ser profissional, técnico e incluir:
-      - Análise dos dados fornecidos
-      - Conformidade com a legislação fiscal
-      - Recomendações específicas
-      - Conclusões e próximos passos
+Você é um especialista em compliance fiscal brasileiro com mais de 15 anos de experiência. Gere um parecer técnico profissional e detalhado baseado nos seguintes dados:
+
+## DADOS DA COMPETÊNCIA
+**Período de Referência:** ${dataPeriodo}
+**Data de Criação:** ${new Date(competencia.created_at).toLocaleDateString('pt-BR')}
+**Status Atual:** ${competencia.status || 'Em análise'}
+
+## ANÁLISE DE RELATÓRIO TÉCNICO
+${dadosExtraidos.relatorio_tecnico ? `
+**Tipo de Relatório:** ${dadosExtraidos.relatorio_tecnico.tipo_relatorio}
+**Período de Análise:** ${dadosExtraidos.relatorio_tecnico.periodo_analise}
+**Resumo Executivo:** ${dadosExtraidos.relatorio_tecnico.resumo_executivo}
+**Total de Créditos Analisados:** ${dadosExtraidos.relatorio_tecnico.total_creditos_analisados}
+**Total Recuperado:** ${dadosExtraidos.relatorio_tecnico.total_recuperado}
+**Taxa de Recuperação:** ${dadosExtraidos.relatorio_tecnico.taxa_recuperacao}
+**Estabelecimentos Analisados:** ${dadosExtraidos.relatorio_tecnico.estabelecimentos_analisados?.join(', ')}
+**CNPJs Envolvidos:** ${dadosExtraidos.relatorio_tecnico.cnpjs_envolvidos?.join(', ')}
+**CNAE Principal:** ${dadosExtraidos.relatorio_tecnico.cnae_principal}
+**Taxa RAT Aplicada:** ${dadosExtraidos.relatorio_tecnico.rat_taxa_aplicada}
+**Taxa RAT Correta:** ${dadosExtraidos.relatorio_tecnico.rat_taxa_correta}
+**Diferença RAT:** ${dadosExtraidos.relatorio_tecnico.diferenca_rat}
+**Valores por Ano:**
+${dadosExtraidos.relatorio_tecnico.valores_por_ano ? `
+- 2020: ${dadosExtraidos.relatorio_tecnico.valores_por_ano['2020']}
+- 2021: ${dadosExtraidos.relatorio_tecnico.valores_por_ano['2021']}
+- 2022: ${dadosExtraidos.relatorio_tecnico.valores_por_ano['2022']}
+- 2023: ${dadosExtraidos.relatorio_tecnico.valores_por_ano['2023']}
+- 2024: ${dadosExtraidos.relatorio_tecnico.valores_por_ano['2024']}
+` : ''}
+**Funcionários por Cargo:**
+${dadosExtraidos.relatorio_tecnico.funcionarios_por_cargo ? `
+- Enfermagem: ${dadosExtraidos.relatorio_tecnico.funcionarios_por_cargo.enfermagem}
+- Administrativo: ${dadosExtraidos.relatorio_tecnico.funcionarios_por_cargo.administrativo}
+- Outros: ${dadosExtraidos.relatorio_tecnico.funcionarios_por_cargo.outros}
+` : ''}
+**Principais Achados:** ${dadosExtraidos.relatorio_tecnico.principais_achados?.join(', ')}
+**Pendências Identificadas:** ${dadosExtraidos.relatorio_tecnico.pendencias_identificadas?.join(', ')}
+**Procedimentos de Retificação:** ${dadosExtraidos.relatorio_tecnico.procedimentos_retificacao?.join(', ')}
+**Fundamentação Legal:** ${dadosExtraidos.relatorio_tecnico.fundamentacao_legal?.join(', ')}
+**Sistemas Utilizados:** ${dadosExtraidos.relatorio_tecnico.sistemas_utilizados?.join(', ')}
+**Conformidade Geral:** ${dadosExtraidos.relatorio_tecnico.conformidade_geral}
+**Riscos Identificados:** ${dadosExtraidos.relatorio_tecnico.riscos_identificados?.join(', ')}
+**Indicadores de Performance:** ${dadosExtraidos.relatorio_tecnico.indicadores_performance?.join(', ')}
+**Observações Legais:** ${dadosExtraidos.relatorio_tecnico.observacoes_legais?.join(', ')}
+` : '**Status:** Nenhum relatório técnico analisado'}
+
+## ANÁLISE DE RELATÓRIO DE FATURAMENTO
+${dadosExtraidos.relatorio_faturamento ? `
+**Período de Faturamento:** ${dadosExtraidos.relatorio_faturamento.periodo_faturamento}
+**Valor Total Faturado:** ${dadosExtraidos.relatorio_faturamento.valor_total_faturado}
+**Impostos Devidos:** ${dadosExtraidos.relatorio_faturamento.impostos_devidos}
+**Impostos Pagos:** ${dadosExtraidos.relatorio_faturamento.impostos_pagos}
+**Saldo de Impostos:** ${dadosExtraidos.relatorio_faturamento.saldo_impostos}
+**Regime Tributário:** ${dadosExtraidos.relatorio_faturamento.regime_tributario}
+**Conformidade Fiscal:** ${dadosExtraidos.relatorio_faturamento.conformidade_fiscal}
+` : '**Status:** Nenhum relatório de faturamento analisado'}
+
+## ANÁLISE DE COMPROVAÇÃO DE COMPENSAÇÕES
+${dadosExtraidos.comprovacao_compensacoes ? `
+**Tipo de Compensação:** ${dadosExtraidos.comprovacao_compensacoes.tipo_compensacao}
+**Valor Compensado:** ${dadosExtraidos.comprovacao_compensacoes.valor_compensado}
+**Período da Compensação:** ${dadosExtraidos.comprovacao_compensacoes.periodo_compensacao}
+**Impostos Compensados:** ${dadosExtraidos.comprovacao_compensacoes.impostos_compensados?.join(', ')}
+**Status da Compensação:** ${dadosExtraidos.comprovacao_compensacoes.status_compensacao}
+**Conformidade Legal:** ${dadosExtraidos.comprovacao_compensacoes.conformidade_legal}
+` : '**Status:** Nenhuma comprovação de compensação analisada'}
+
+## ANÁLISE DE COMUNICAÇÕES POR EMAIL
+${dadosExtraidos.emails ? `
+**Assunto:** ${dadosExtraidos.emails.assunto}
+**Remetente:** ${dadosExtraidos.emails.remetente}
+**Data de Envio:** ${dadosExtraidos.emails.data_envio}
+**Tipo de Comunicação:** ${dadosExtraidos.emails.tipo_comunicacao}
+**Urgência:** ${dadosExtraidos.emails.urgencia}
+**Ações Solicitadas:** ${dadosExtraidos.emails.acoes_solicitadas?.join(', ')}
+` : '**Status:** Nenhuma comunicação por email analisada'}
+
+## ANÁLISE DE NOTAS FISCAIS
+${dadosExtraidos.notas_fiscais ? `
+**Número da Nota:** ${dadosExtraidos.notas_fiscais.numero_nota}
+**Data de Emissão:** ${dadosExtraidos.notas_fiscais.data_emissao}
+**Valor Total:** ${dadosExtraidos.notas_fiscais.valor_total}
+**Valor dos Impostos:** ${dadosExtraidos.notas_fiscais.valor_impostos}
+**Cliente:** ${dadosExtraidos.notas_fiscais.cliente}
+**Status da Nota:** ${dadosExtraidos.notas_fiscais.status_nota}
+**Conformidade Legal:** ${dadosExtraidos.notas_fiscais.conformidade_legal}
+` : '**Status:** Nenhuma nota fiscal analisada'}
+
+## INSTRUÇÕES PARA O PARECER FINAL
+
+Gere um parecer técnico profissional seguindo esta estrutura:
+
+### 1. RESUMO EXECUTIVO
+- Síntese dos principais achados baseados nas análises realizadas
+- Status geral de conformidade fiscal
+- Principais riscos identificados pelos assistentes
+
+### 2. ANÁLISE DETALHADA
+- Análise integrada dos dados extraídos pelos assistentes
+- Conformidade com a legislação fiscal vigente
+- Identificação de inconsistências ou pendências
+- Correlação entre os diferentes documentos analisados
+
+### 3. PONTOS DE ATENÇÃO
+- Questões que requerem atenção imediata
+- Possíveis não conformidades identificadas
+- Riscos fiscais específicos encontrados
+
+### 4. RECOMENDAÇÕES
+- Ações corretivas necessárias baseadas nas análises
+- Melhorias no processo de compliance
+- Próximos passos recomendados
+
+### 5. CONCLUSÃO
+- Avaliação final da conformidade
+- Nível de risco geral
+- Recomendação de aprovação ou necessidade de ajustes
+
+**IMPORTANTE:** 
+- Use linguagem técnica e profissional
+- Cite artigos da legislação quando relevante
+- Seja específico e objetivo
+- Inclua valores e datas extraídos pelos assistentes
+- Mantenha tom formal mas acessível
+- Limite o parecer a no máximo 2500 palavras
     `;
 
-    // Chamar OpenAI
+    console.log('🤖 Gerando parecer final com IA...');
+    
+    // Calcular tokens do prompt final
+    const tokensPromptFinal = estimarTokens(prompt);
+    console.log(`📊 Tokens estimados do prompt final: ${tokensPromptFinal}`);
+    
+    // Chamar OpenAI com modelo mais avançado
     const completion = await openai.chat.completions.create({
-      model: "gpt-3.5-turbo",
+      model: "gpt-4o-mini",
       messages: [
         {
           role: "system",
-          content: "Você é um especialista em compliance fiscal brasileiro. Gere pareceres técnicos profissionais e detalhados."
+          content: "Você é um especialista em compliance fiscal brasileiro com mais de 15 anos de experiência. Gere pareceres técnicos profissionais, detalhados e baseados em evidências extraídas por assistentes especializados. Use linguagem formal mas acessível, cite legislação quando relevante e seja específico em suas recomendações."
         },
         {
           role: "user",
           content: prompt
         }
       ],
-      max_tokens: 2000,
-      temperature: 0.7
+      max_tokens: 4500,
+      temperature: 0.3
     });
 
     const parecer = completion.choices[0].message.content;
 
+    console.log('✅ Parecer final gerado com sucesso');
+
     // Atualizar o parecer no banco
     await pool.query(`
       UPDATE compliance_fiscal 
-      SET parecer_texto = ?, status = 'em_analise'
+      SET parecer_texto = ?, status = 'em_analise', ultima_alteracao_em = NOW()
       WHERE id = ?
     `, [parecer, id]);
 
@@ -572,7 +1273,13 @@ exports.gerarParecer = async (req, res) => {
       success: true,
       data: {
         parecer,
-        status: 'em_analise'
+        status: 'em_analise',
+        dados_extraidos: dadosExtraidos,
+        resumo: {
+          total_anexos: anexos.length,
+          assistentes_executados: Object.values(dadosExtraidos).filter(d => d !== null).length,
+          periodo_analisado: dataPeriodo
+        }
       }
     });
   } catch (error) {
