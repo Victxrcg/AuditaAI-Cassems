@@ -21,32 +21,34 @@ export const useDocumentPreview = () => {
       clearTimeout(timeoutRef.current);
     }
 
-    const rect = event.currentTarget.getBoundingClientRect();
     const viewportWidth = window.innerWidth;
     const viewportHeight = window.innerHeight;
+    const previewWidth = 320;
+    const previewHeight = 250;
     
-    // Posição simples: à direita do elemento, com margem menor
-    let x = rect.right + 10;
-    let y = rect.top - 5;
+    // Usar posição do mouse como base
+    let x = event.clientX + 15; // 15px à direita do cursor
+    let y = event.clientY - 10; // 10px acima do cursor
     
-    // Se não couber à direita, mostrar à esquerda
-    if (x + 320 > viewportWidth - 20) {
-      x = rect.left - 330;
+    // Ajustar se sair da tela à direita
+    if (x + previewWidth > viewportWidth - 20) {
+      x = event.clientX - previewWidth - 15; // À esquerda do cursor
     }
     
-    // Se ainda não couber, centralizar
+    // Ajustar se sair da tela à esquerda
     if (x < 20) {
-      x = (viewportWidth - 320) / 2;
+      x = 20; // Margem mínima
     }
     
-    // Ajustar verticalmente se sair da tela
-    if (y + 250 > viewportHeight) {
-      y = viewportHeight - 270;
+    // Ajustar se sair da tela acima
+    if (y < 20) {
+      y = 20; // Margem mínima
     }
     
-    // Garantir margens mínimas
-    x = Math.max(20, x);
-    y = Math.max(20, y);
+    // Ajustar se sair da tela abaixo
+    if (y + previewHeight > viewportHeight - 20) {
+      y = viewportHeight - previewHeight - 20;
+    }
     
     setPreviewState({
       isVisible: true,
@@ -78,15 +80,38 @@ export const useDocumentPreview = () => {
   const updatePosition = useCallback((event: React.MouseEvent) => {
     if (!previewState.isVisible) return;
 
-    const rect = event.currentTarget.getBoundingClientRect();
-    const position = {
-      x: rect.right + 10,
-      y: rect.top
-    };
+    const viewportWidth = window.innerWidth;
+    const viewportHeight = window.innerHeight;
+    const previewWidth = 320;
+    const previewHeight = 250;
+    
+    // Usar posição do mouse como base
+    let x = event.clientX + 15; // 15px à direita do cursor
+    let y = event.clientY - 10; // 10px acima do cursor
+    
+    // Ajustar se sair da tela à direita
+    if (x + previewWidth > viewportWidth - 20) {
+      x = event.clientX - previewWidth - 15; // À esquerda do cursor
+    }
+    
+    // Ajustar se sair da tela à esquerda
+    if (x < 20) {
+      x = 20; // Margem mínima
+    }
+    
+    // Ajustar se sair da tela acima
+    if (y < 20) {
+      y = 20; // Margem mínima
+    }
+    
+    // Ajustar se sair da tela abaixo
+    if (y + previewHeight > viewportHeight - 20) {
+      y = viewportHeight - previewHeight - 20;
+    }
 
     setPreviewState(prev => ({
       ...prev,
-      position
+      position: { x, y }
     }));
   }, [previewState.isVisible]);
 
