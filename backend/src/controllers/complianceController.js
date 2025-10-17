@@ -2,7 +2,6 @@
 const { getDbPoolWithTunnel, resetPool, executeQueryWithRetry } = require('../lib/db');
 const fs = require('fs');
 const path = require('path');
-const pdfParse = require('pdf-parse');
 const csv = require('csv-parse/sync');
 const { simpleParser } = require('mailparser');
 
@@ -551,6 +550,7 @@ async function extrairDadosArquivo(caminhoArquivo, nomeArquivo) {
 
     if (extensao === '.pdf') {
       try {
+        const pdfParse = require('pdf-parse');
         const pdfData = await pdfParse(buffer);
         conteudo = pdfData.text;
       } catch (pdfError) {
@@ -939,6 +939,8 @@ async function analisarDocumentosAnexados(pool, complianceId) {
         // Processar diferentes tipos de arquivo
         if (extensao === '.pdf') {
           try {
+            const pdfParse = require('pdf-parse');
+            const pdfParse = require('pdf-parse');
             const pdfData = await pdfParse(buffer);
             conteudo = pdfData.text;
           } catch (pdfError) {
@@ -1531,6 +1533,7 @@ const extrairConteudoArquivos = async (pool, competenciaId) => {
                 conteudo = `Dados CSV (${csvData.length} linhas):\n${JSON.stringify(csvData, null, 2)}`;
               }
             } else if (extensao === '.pdf') {
+            const pdfParse = require('pdf-parse');
             const pdfData = await pdfParse(buffer);
             conteudo = pdfData.text;
           } else if (extensao === '.eml') {
@@ -1569,6 +1572,7 @@ const extrairConteudoArquivos = async (pool, competenciaId) => {
                 conteudo = `Dados CSV (${csvData.length} linhas):\n${JSON.stringify(csvData, null, 2)}`;
               }
             } else if (extensao === '.pdf') {
+            const pdfParse = require('pdf-parse');
             const pdfData = await pdfParse(buffer);
             conteudo = pdfData.text;
           } else if (extensao === '.eml') {
