@@ -40,6 +40,12 @@ const loadPdfParse = async () => {
 // Função auxiliar para registrar alterações no histórico
 const registrarAlteracao = async (pool, complianceId, campo, valorAnterior, valorNovo, userId, organizacao) => {
   try {
+    // Verificar se complianceId é válido (não 'null' string)
+    if (!complianceId || complianceId === 'null' || complianceId === null) {
+      console.warn('⚠️ ComplianceId inválido para histórico:', complianceId);
+      return;
+    }
+    
     // Para parecer_texto, não salvar o conteúdo completo, apenas indicar que foi gerado
     let valorAnteriorTratado = valorAnterior;
     let valorNovoTratado = valorNovo;
@@ -341,15 +347,20 @@ exports.updateComplianceField = async (req, res) => {
     
     // Validação específica para campos de data
     if (field === 'competencia_inicio' || field === 'competencia_fim' || field === 'competencia_referencia') {
+      console.log(`🔍 Debug - Validando campo de data: ${field} = ${value}`);
       const date = new Date(value);
       const year = date.getFullYear();
       
+      console.log(`🔍 Debug - Data parseada: ${date.toISOString()}, Ano: ${year}`);
+      
       if (year < 1900 || year > 2099) {
+        console.log(`❌ Debug - Ano inválido: ${year}`);
         return res.status(400).json({
           success: false,
           error: `Ano da ${field === 'competencia_inicio' ? 'data de início' : field === 'competencia_fim' ? 'data de fim' : 'data'} deve estar entre 1900 e 2099`
         });
       }
+      console.log(`✅ Debug - Data válida para ${field}`);
     }
 
     // Mapear campos do frontend para campos do banco PRIMEIRO
@@ -431,7 +442,11 @@ exports.updateComplianceField = async (req, res) => {
     query += ` WHERE id = ?`;
     params.push(id);
 
-    await pool.query(query, params);
+    console.log('🔍 Debug - Query final:', query);
+    console.log('🔍 Debug - Params:', params);
+    
+    const result = await pool.query(query, params);
+    console.log('🔍 Debug - Resultado da query:', result);
     
     // Registrar no histórico
     try {
@@ -580,8 +595,15 @@ async function extrairDadosArquivo(caminhoArquivo, nomeArquivo) {
         
         if (!conteudo || conteudo === '[object Object]' || conteudo.length < 10) {
           console.warn(`⚠️ Nenhum conteúdo extraído de: ${nomeArquivo}`);
+          console.log('🔍 Debug - Conteúdo extraído:', conteudo);
+          console.log('🔍 Debug - Tipo do conteúdo:', typeof conteudo);
+          console.log('🔍 Debug - Tamanho do conteúdo:', conteudo?.length);
           return { status: 'sem_conteudo', conteudo: 'PDF processado mas sem conteúdo de texto extraível' };
         }
+        
+        // Log do conteúdo extraído para debug
+        console.log(`✅ PDF ${nomeArquivo} - Conteúdo extraído: ${conteudo.length} caracteres`);
+        console.log(`🔍 Primeiros 200 caracteres: ${conteudo.substring(0, 200)}`);
       } catch (pdfError) {
         console.error(`Erro ao processar PDF ${nomeArquivo}:`, pdfError.message);
         return { status: 'erro_processamento', conteudo: 'Erro ao processar PDF - arquivo pode estar corrompido' };

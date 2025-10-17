@@ -5,6 +5,12 @@ const fs = require('fs');
 // Função auxiliar para registrar alterações no histórico
 const registrarAlteracao = async (pool, complianceId, campo, valorAnterior, valorNovo, userId, organizacao) => {
   try {
+    // Verificar se complianceId é válido (não 'null' string)
+    if (!complianceId || complianceId === 'null' || complianceId === null) {
+      console.warn('⚠️ ComplianceId inválido para histórico:', complianceId);
+      return;
+    }
+    
     await pool.query(`
       INSERT INTO compliance_historico 
       (compliance_id, campo_alterado, valor_anterior, valor_novo, alterado_por, organizacao_alteracao)
