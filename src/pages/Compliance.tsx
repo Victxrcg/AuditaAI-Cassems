@@ -1019,6 +1019,18 @@ const HistoricoAlteracoes = ({ historico, loading }: { historico: HistoricoAlter
                     </div>
                   )}
                 </div>
+              ) : alteracao.campo_alterado.startsWith('anexo_') ? (
+                <div className="text-sm text-green-600 bg-green-50 p-2 rounded border-l-4 border-green-400">
+                  <span className="font-medium">Ação:</span> {alteracao.valor_novo}
+                  {alteracao.valor_anterior && alteracao.valor_anterior !== '[Nenhum arquivo anterior]' && (
+                    <div className="mt-1 text-xs text-gray-600">
+                      {alteracao.valor_anterior}
+                    </div>
+                  )}
+                  <div className="mt-1 text-xs text-gray-500">
+                    Tipo: {alteracao.campo_alterado.replace('anexo_', '').replace('_', ' ').toUpperCase()}
+                  </div>
+                </div>
               ) : (
                 <>
                   {alteracao.valor_anterior && (

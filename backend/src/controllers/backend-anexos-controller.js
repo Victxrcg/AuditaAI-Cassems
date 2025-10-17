@@ -2,6 +2,19 @@
 const { getDbPoolWithTunnel } = require('../lib/db');
 const fs = require('fs');
 
+// Função auxiliar para registrar alterações no histórico
+const registrarAlteracao = async (pool, complianceId, campo, valorAnterior, valorNovo, userId, organizacao) => {
+  try {
+    await pool.query(`
+      INSERT INTO compliance_historico 
+      (compliance_id, campo_alterado, valor_anterior, valor_novo, alterado_por, organizacao_alteracao)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `, [complianceId, campo, valorAnterior, valorNovo, userId, organizacao]);
+  } catch (error) {
+    console.error('❌ Erro ao registrar alteração no histórico:', error);
+  }
+};
+
 // Função para sanitizar nome do arquivo
 function sanitizeFileName(filename) {
   // Remover caracteres especiais e acentos
@@ -103,6 +116,22 @@ exports.uploadAnexo = async (req, res) => {
       SET ${anexoField} = ? 
       WHERE id = ?
     `, [anexoId, complianceId]);
+
+    // Registrar no histórico que um anexo foi adicionado
+    try {
+      await registrarAlteracao(
+        pool, 
+        complianceId, 
+        `anexo_${tipoAnexo}`, 
+        '[Nenhum arquivo anterior]', 
+        `[Arquivo adicionado: ${sanitizedFileName}]`, 
+        currentUser.id, 
+        currentUser.organizacao || 'cassems'
+      );
+      console.log('✅ Histórico de anexo registrado com sucesso');
+    } catch (histError) {
+      console.error('❌ Erro ao registrar histórico de anexo (continuando):', histError.message);
+    }
 
     // Remover arquivo temporário
     fs.unlinkSync(req.file.path);
@@ -214,7 +243,7 @@ exports.removeAnexo = async (req, res) => {
     
     // Buscar informações do anexo
     const anexoRows = await pool.query(`
-      SELECT compliance_id, tipo_anexo
+      SELECT compliance_id, tipo_anexo, nome_arquivo
       FROM compliance_anexos 
       WHERE id = ?
     `, [anexoId]);
@@ -224,6 +253,14 @@ exports.removeAnexo = async (req, res) => {
     }
 
     const anexo = anexoRows[0];
+    
+    // Obter informações do usuário atual dos headers
+    const userOrg = req.headers['x-user-organization'] || 'cassems';
+    const userId = req.headers['x-user-id'] || '1';
+    const currentUser = { 
+      id: parseInt(userId), 
+      organizacao: userOrg 
+    };
     
     // Remover anexo da tabela compliance_anexos
     await pool.query(`
@@ -238,6 +275,22 @@ exports.removeAnexo = async (req, res) => {
       SET ${anexoField} = NULL 
       WHERE id = ? AND ${anexoField} = ?
     `, [anexo.compliance_id, anexoId]);
+
+    // Registrar no histórico que um anexo foi removido
+    try {
+      await registrarAlteracao(
+        pool, 
+        anexo.compliance_id, 
+        `anexo_${anexo.tipo_anexo}`, 
+        `[Arquivo anterior: ${anexo.nome_arquivo}]`, 
+        '[Arquivo removido]', 
+        currentUser.id, 
+        currentUser.organizacao || 'cassems'
+      );
+      console.log('✅ Histórico de remoção de anexo registrado com sucesso');
+    } catch (histError) {
+      console.error('❌ Erro ao registrar histórico de remoção de anexo (continuando):', histError.message);
+    }
 
     res.json({
       success: true,
