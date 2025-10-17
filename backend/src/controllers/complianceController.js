@@ -27,8 +27,12 @@ const loadPdfParse = async () => {
   if (!pdfParse) {
     try {
       const imported = require('pdf-parse');
+      console.log('🔍 Debug - pdf-parse imported:', typeof imported);
+      console.log('🔍 Debug - imported keys:', Object.keys(imported));
+      
       // A função principal está em PDFParse (com P maiúsculo)
       pdfParse = imported.PDFParse;
+      console.log('🔍 Debug - PDFParse type:', typeof pdfParse);
     } catch (error) {
       console.error('❌ Erro ao carregar pdf-parse:', error);
       throw new Error('pdf-parse não está disponível');
@@ -582,7 +586,12 @@ async function extrairDadosArquivo(caminhoArquivo, nomeArquivo) {
     if (extensao === '.pdf') {
       try {
         const PDFParseClass = await loadPdfParse();
+        console.log('🔍 Debug - PDFParseClass type:', typeof PDFParseClass);
+        console.log('🔍 Debug - PDFParseClass constructor:', PDFParseClass?.constructor?.name);
+        
         const pdfData = await new PDFParseClass(buffer);
+        console.log('🔍 Debug - pdfData type:', typeof pdfData);
+        console.log('🔍 Debug - pdfData constructor:', pdfData?.constructor?.name);
         
         // Verificar se o resultado é um array de bytes (dados binários)
         if (Array.isArray(pdfData.text)) {
@@ -591,7 +600,16 @@ async function extrairDadosArquivo(caminhoArquivo, nomeArquivo) {
         }
         
         // O texto pode estar em diferentes propriedades dependendo da versão
+        console.log('🔍 Debug - pdfData structure:', Object.keys(pdfData));
+        console.log('🔍 Debug - pdfData.text type:', typeof pdfData.text);
+        console.log('🔍 Debug - pdfData.text length:', pdfData.text?.length);
+        console.log('🔍 Debug - pdfData.text preview:', pdfData.text?.substring(0, 100));
+        
         conteudo = pdfData.text || pdfData.doc?.text || pdfData.toString();
+        
+        console.log('🔍 Debug - Conteúdo final:', conteudo);
+        console.log('🔍 Debug - Tipo do conteúdo final:', typeof conteudo);
+        console.log('🔍 Debug - Tamanho do conteúdo final:', conteudo?.length);
         
         if (!conteudo || conteudo === '[object Object]' || conteudo.length < 10) {
           console.warn(`⚠️ Nenhum conteúdo extraído de: ${nomeArquivo}`);
