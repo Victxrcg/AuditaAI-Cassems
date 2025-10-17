@@ -10,7 +10,7 @@ import {
   X, 
   Loader2,
   Cloud,
-  CloudCheck,
+  CloudDone,
   CloudOff
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -330,7 +330,7 @@ export const FileUploadArea: React.FC<FileUploadAreaProps> = ({
                 }}
                 className="text-green-600 border-green-300 hover:bg-green-50"
               >
-                <CloudCheck className="h-4 w-4 mr-2" />
+                <CloudDone className="h-4 w-4 mr-2" />
                 Arquivo Enviado
               </Button>
             )}
