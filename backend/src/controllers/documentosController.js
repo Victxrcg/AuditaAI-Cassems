@@ -26,7 +26,21 @@ exports.upload = multer({
   }
 });
 
-async function ensureTable() {
+async function ensureTables() {
+  // Criar tabela de pastas
+  await executeQueryWithRetry(`
+    CREATE TABLE IF NOT EXISTS pastas_documentos (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      titulo VARCHAR(255) NOT NULL,
+      descricao TEXT NULL,
+      organizacao VARCHAR(50) NULL,
+      criado_por INT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+  `, []);
+
+  // Criar tabela de documentos com referência à pasta
   await executeQueryWithRetry(`
     CREATE TABLE IF NOT EXISTS documentos (
       id INT AUTO_INCREMENT PRIMARY KEY,
@@ -36,14 +50,16 @@ async function ensureTable() {
       mimetype VARCHAR(100) NULL,
       organizacao VARCHAR(50) NULL,
       enviado_por INT NULL,
-      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      pasta_id INT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (pasta_id) REFERENCES pastas_documentos(id) ON DELETE SET NULL
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
   `, []);
 }
 
 exports.listar = async (req, res) => {
   try {
-    await ensureTable();
+    await ensureTables();
     const userOrganization = req.headers['x-user-organization'] || req.query.organizacao;
     let where = '';
     const params = [];
@@ -52,7 +68,7 @@ exports.listar = async (req, res) => {
       params.push(userOrganization);
     }
     const rows = await executeQueryWithRetry(`
-      SELECT id, nome_arquivo, caminho, tamanho, mimetype, organizacao, enviado_por, created_at
+      SELECT id, nome_arquivo, caminho, tamanho, mimetype, organizacao, enviado_por, pasta_id, created_at
       FROM documentos
       ${where}
       ORDER BY created_at DESC
@@ -63,7 +79,8 @@ exports.listar = async (req, res) => {
       ...row,
       id: Number(row.id),
       tamanho: Number(row.tamanho),
-      enviado_por: row.enviado_por ? Number(row.enviado_por) : null
+      enviado_por: row.enviado_por ? Number(row.enviado_por) : null,
+      pasta_id: row.pasta_id ? Number(row.pasta_id) : null
     }));
     
     res.json(processedRows);
@@ -75,15 +92,15 @@ exports.listar = async (req, res) => {
 
 exports.enviar = async (req, res) => {
   try {
-    await ensureTable();
+    await ensureTables();
     if (!req.file) return res.status(400).json({ error: 'Nenhum arquivo enviado' });
     const { originalname, path: filePath, size, mimetype } = req.file;
-    const { userId, organizacao } = req.body;
+    const { userId, organizacao, pastaId } = req.body;
     const org = organizacao || req.headers['x-user-organization'] || 'cassems';
     const result = await executeQueryWithRetry(`
-      INSERT INTO documentos (nome_arquivo, caminho, tamanho, mimetype, organizacao, enviado_por)
-      VALUES (?, ?, ?, ?, ?, ?)
-    `, [originalname, filePath, size, mimetype, org, userId || null]);
+      INSERT INTO documentos (nome_arquivo, caminho, tamanho, mimetype, organizacao, enviado_por, pasta_id)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `, [originalname, filePath, size, mimetype, org, userId || null, pastaId || null]);
     res.json({ success: true, id: Number(result.insertId), filename: originalname, size });
   } catch (err) {
     console.error('❌ Erro ao enviar documento:', err);
@@ -93,7 +110,7 @@ exports.enviar = async (req, res) => {
 
 exports.baixar = async (req, res) => {
   try {
-    await ensureTable();
+    await ensureTables();
     const { id } = req.params;
     const rows = await executeQueryWithRetry('SELECT nome_arquivo, caminho FROM documentos WHERE id = ?', [id]);
     if (!rows || rows.length === 0) return res.status(404).json({ error: 'Documento não encontrado' });
@@ -108,7 +125,7 @@ exports.baixar = async (req, res) => {
 
 exports.remover = async (req, res) => {
   try {
-    await ensureTable();
+    await ensureTables();
     const { id } = req.params;
     const rows = await executeQueryWithRetry('SELECT caminho FROM documentos WHERE id = ?', [id]);
     if (!rows || rows.length === 0) return res.status(404).json({ error: 'Documento não encontrado' });
@@ -121,6 +138,142 @@ exports.remover = async (req, res) => {
   } catch (err) {
     console.error('❌ Erro ao remover documento:', err);
     res.status(500).json({ error: 'Erro ao remover documento', details: err.message });
+  }
+};
+
+// ===== FUNÇÕES PARA PASTAS =====
+
+// Listar pastas
+exports.listarPastas = async (req, res) => {
+  try {
+    await ensureTables();
+    const userOrganization = req.headers['x-user-organization'] || req.query.organizacao;
+    let where = '';
+    const params = [];
+    if (userOrganization && userOrganization !== 'portes') {
+      where = 'WHERE organizacao = ?';
+      params.push(userOrganization);
+    }
+    const rows = await executeQueryWithRetry(`
+      SELECT p.*, 
+             COUNT(d.id) as total_documentos
+      FROM pastas_documentos p
+      LEFT JOIN documentos d ON p.id = d.pasta_id
+      ${where}
+      GROUP BY p.id
+      ORDER BY p.titulo ASC
+    `, params);
+    
+    const processedRows = rows.map(row => ({
+      ...row,
+      id: Number(row.id),
+      total_documentos: Number(row.total_documentos),
+      criado_por: row.criado_por ? Number(row.criado_por) : null
+    }));
+    
+    res.json(processedRows);
+  } catch (err) {
+    console.error('❌ Erro ao listar pastas:', err);
+    res.status(500).json({ error: 'Erro ao listar pastas', details: err.message });
+  }
+};
+
+// Criar pasta
+exports.criarPasta = async (req, res) => {
+  try {
+    await ensureTables();
+    const { titulo, descricao } = req.body;
+    const userId = req.headers['x-user-id'] || req.body.userId;
+    const organizacao = req.headers['x-user-organization'] || req.body.organizacao || 'cassems';
+    
+    if (!titulo) {
+      return res.status(400).json({ error: 'Título da pasta é obrigatório' });
+    }
+    
+    const result = await executeQueryWithRetry(`
+      INSERT INTO pastas_documentos (titulo, descricao, organizacao, criado_por)
+      VALUES (?, ?, ?, ?)
+    `, [titulo, descricao || null, organizacao, userId || null]);
+    
+    res.json({ 
+      success: true, 
+      id: Number(result.insertId), 
+      titulo,
+      descricao: descricao || null
+    });
+  } catch (err) {
+    console.error('❌ Erro ao criar pasta:', err);
+    res.status(500).json({ error: 'Erro ao criar pasta', details: err.message });
+  }
+};
+
+// Atualizar pasta
+exports.atualizarPasta = async (req, res) => {
+  try {
+    await ensureTables();
+    const { id } = req.params;
+    const { titulo, descricao } = req.body;
+    
+    if (!titulo) {
+      return res.status(400).json({ error: 'Título da pasta é obrigatório' });
+    }
+    
+    await executeQueryWithRetry(`
+      UPDATE pastas_documentos 
+      SET titulo = ?, descricao = ?, updated_at = CURRENT_TIMESTAMP
+      WHERE id = ?
+    `, [titulo, descricao || null, id]);
+    
+    res.json({ success: true, message: 'Pasta atualizada com sucesso' });
+  } catch (err) {
+    console.error('❌ Erro ao atualizar pasta:', err);
+    res.status(500).json({ error: 'Erro ao atualizar pasta', details: err.message });
+  }
+};
+
+// Remover pasta
+exports.removerPasta = async (req, res) => {
+  try {
+    await ensureTables();
+    const { id } = req.params;
+    
+    // Verificar se a pasta tem documentos
+    const docs = await executeQueryWithRetry(
+      'SELECT COUNT(*) as count FROM documentos WHERE pasta_id = ?', 
+      [id]
+    );
+    
+    if (docs[0].count > 0) {
+      return res.status(400).json({ 
+        error: 'Não é possível remover pasta com documentos. Mova ou remova os documentos primeiro.' 
+      });
+    }
+    
+    await executeQueryWithRetry('DELETE FROM pastas_documentos WHERE id = ?', [id]);
+    res.json({ success: true, message: 'Pasta removida com sucesso' });
+  } catch (err) {
+    console.error('❌ Erro ao remover pasta:', err);
+    res.status(500).json({ error: 'Erro ao remover pasta', details: err.message });
+  }
+};
+
+// Mover documento para pasta
+exports.moverDocumento = async (req, res) => {
+  try {
+    await ensureTables();
+    const { id } = req.params;
+    const { pastaId } = req.body;
+    
+    await executeQueryWithRetry(`
+      UPDATE documentos 
+      SET pasta_id = ?
+      WHERE id = ?
+    `, [pastaId || null, id]);
+    
+    res.json({ success: true, message: 'Documento movido com sucesso' });
+  } catch (err) {
+    console.error('❌ Erro ao mover documento:', err);
+    res.status(500).json({ error: 'Erro ao mover documento', details: err.message });
   }
 };
 
