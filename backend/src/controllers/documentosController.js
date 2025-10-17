@@ -40,7 +40,26 @@ async function ensureTables() {
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
   `, []);
 
-  // Criar tabela de documentos com referência à pasta
+  // Verificar se a coluna pasta_id existe na tabela documentos
+  const columns = await executeQueryWithRetry(`
+    SELECT COLUMN_NAME 
+    FROM INFORMATION_SCHEMA.COLUMNS 
+    WHERE TABLE_SCHEMA = DATABASE() 
+    AND TABLE_NAME = 'documentos' 
+    AND COLUMN_NAME = 'pasta_id'
+  `, []);
+
+  // Se a coluna não existir, adicionar
+  if (columns.length === 0) {
+    await executeQueryWithRetry(`
+      ALTER TABLE documentos 
+      ADD COLUMN pasta_id INT NULL,
+      ADD CONSTRAINT fk_documentos_pasta 
+      FOREIGN KEY (pasta_id) REFERENCES pastas_documentos(id) ON DELETE SET NULL
+    `, []);
+  }
+
+  // Criar tabela de documentos se não existir
   await executeQueryWithRetry(`
     CREATE TABLE IF NOT EXISTS documentos (
       id INT AUTO_INCREMENT PRIMARY KEY,
@@ -151,7 +170,7 @@ exports.listarPastas = async (req, res) => {
     let where = '';
     const params = [];
     if (userOrganization && userOrganization !== 'portes') {
-      where = 'WHERE organizacao = ?';
+      where = 'WHERE p.organizacao = ?';
       params.push(userOrganization);
     }
     const rows = await executeQueryWithRetry(`
