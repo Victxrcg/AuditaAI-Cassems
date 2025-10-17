@@ -11,28 +11,43 @@ import Register from "./pages/Register";
 import Users from "./pages/Users";
 import Cronograma from "./pages/Cronograma";
 import Documentos from "./pages/Documentos";
+import Manutencao from "./pages/Manutencao";
+import { useServerStatus } from "./hooks/useServerStatus";
 
 const queryClient = new QueryClient();
+
+const AppContent = () => {
+  const { isOnline } = useServerStatus();
+
+  // Se o servidor estiver offline, mostrar página de manutenção
+  if (!isOnline) {
+    return <Manutencao />;
+  }
+
+  return (
+    <BrowserRouter>
+      <Routes>
+        <Route path="/login" element={<Login />} />
+        <Route path="/registrar" element={<Register />} />
+        <Route path="/compliance" element={<Layout><Compliance /></Layout>} />
+        <Route path="/cronograma" element={<Layout><Cronograma /></Layout>} />
+        <Route path="/documentos" element={<Layout><Documentos /></Layout>} />
+        <Route path="/usuarios" element={<Layout><Users /></Layout>} />
+        {/* Redireciona / e /dashboard para /compliance */}
+        <Route path="/" element={<Navigate to="/compliance" />} />
+        <Route path="/dashboard" element={<Navigate to="/compliance" />} />
+        <Route path="*" element={<NotFound />} />
+      </Routes>
+    </BrowserRouter>
+  );
+};
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
       <Toaster />
       <Sonner />
-      <BrowserRouter>
-        <Routes>
-          <Route path="/login" element={<Login />} />
-          <Route path="/registrar" element={<Register />} />
-          <Route path="/compliance" element={<Layout><Compliance /></Layout>} />
-          <Route path="/cronograma" element={<Layout><Cronograma /></Layout>} />
-          <Route path="/documentos" element={<Layout><Documentos /></Layout>} />
-          <Route path="/usuarios" element={<Layout><Users /></Layout>} />
-          {/* Redireciona / e /dashboard para /compliance */}
-          <Route path="/" element={<Navigate to="/compliance" />} />
-          <Route path="/dashboard" element={<Navigate to="/compliance" />} />
-          <Route path="*" element={<NotFound />} />
-        </Routes>
-      </BrowserRouter>
+      <AppContent />
     </TooltipProvider>
   </QueryClientProvider>
 );

@@ -7,6 +7,7 @@ const usuariosRoutes = require('./routes/usuariosRoutes');
 const authRoutes = require('./routes/authRoutes');
 const cronogramaRoutes = require('./routes/cronogramaRoutes');
 const checklistRoutes = require('./routes/checklistRoutes');
+const healthRoutes = require('./routes/healthRoutes');
 const { getPoolStatus, getDbPool } = require('./lib/db');
 const app = express();
 
@@ -70,6 +71,7 @@ app.use('/api/usuarios', usuariosRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/cronograma', cronogramaRoutes);
 app.use('/api', checklistRoutes);
+app.use('/api', healthRoutes);
 
 // Rota de teste
 app.get('/api/health', (req, res) => {
