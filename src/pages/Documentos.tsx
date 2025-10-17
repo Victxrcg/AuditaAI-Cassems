@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
 import FileUploadArea, { FileUploadState } from '@/components/FileUploadArea';
 import DocumentPreview from '@/components/DocumentPreview';
+import PreviewWrapper from '@/components/PreviewWrapper';
 import { useDocumentPreview } from '@/hooks/useDocumentPreview';
 import { 
   downloadDocumento, 
@@ -60,6 +61,9 @@ export default function Documentos() {
     hidePreviewImmediately,
     updatePosition
   } = useDocumentPreview();
+
+  // Ref para timeout do preview
+  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
   
   // Estados para formulário de pasta
   const [pastaTitulo, setPastaTitulo] = useState('');
@@ -603,16 +607,27 @@ export default function Documentos() {
 
       {/* Preview de Documento */}
       {previewState.isVisible && previewState.document && (
-        <DocumentPreview
-          document={previewState.document}
+        <PreviewWrapper
           position={previewState.position}
-          onClose={hidePreviewImmediately}
-          onDownload={downloadDocumento}
-          onView={(id) => {
-            // Implementar visualização se necessário
-            console.log('Visualizar documento:', id);
+          onMouseEnter={() => {
+            // Cancelar timeout quando mouse entra no preview
+            if (timeoutRef.current) {
+              clearTimeout(timeoutRef.current);
+            }
           }}
-        />
+          onMouseLeave={hidePreview}
+        >
+          <DocumentPreview
+            document={previewState.document}
+            position={{ x: 0, y: 0 }} // O wrapper gerencia o posicionamento
+            onClose={hidePreviewImmediately}
+            onDownload={downloadDocumento}
+            onView={(id) => {
+              // Implementar visualização se necessário
+              console.log('Visualizar documento:', id);
+            }}
+          />
+        </PreviewWrapper>
       )}
     </div>
   );

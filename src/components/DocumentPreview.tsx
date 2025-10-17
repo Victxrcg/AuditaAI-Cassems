@@ -122,23 +122,8 @@ export const DocumentPreview: React.FC<DocumentPreviewProps> = ({
   // Posicionar o preview
   useEffect(() => {
     if (previewRef.current) {
-      const rect = previewRef.current.getBoundingClientRect();
-      const viewportWidth = window.innerWidth;
-      const viewportHeight = window.innerHeight;
-      
-      let x = position.x;
-      let y = position.y;
-      
-      // Ajustar posição se sair da tela
-      if (x + rect.width > viewportWidth) {
-        x = viewportWidth - rect.width - 10;
-      }
-      if (y + rect.height > viewportHeight) {
-        y = viewportHeight - rect.height - 10;
-      }
-      
-      previewRef.current.style.left = `${Math.max(10, x)}px`;
-      previewRef.current.style.top = `${Math.max(10, y)}px`;
+      previewRef.current.style.left = `${position.x}px`;
+      previewRef.current.style.top = `${position.y}px`;
     }
   }, [position]);
 
@@ -146,12 +131,17 @@ export const DocumentPreview: React.FC<DocumentPreviewProps> = ({
     <Card
       ref={previewRef}
       className={cn(
-        "fixed z-50 w-80 shadow-2xl border-2 bg-white animate-in fade-in-0 zoom-in-95 duration-200",
+        "w-80 shadow-2xl border-2 bg-white animate-in fade-in-0 zoom-in-95 duration-200 pointer-events-auto",
+        position.x === 0 && position.y === 0 ? "relative" : "fixed z-[9999]",
         className
       )}
       style={{
-        left: position.x,
-        top: position.y,
+        ...(position.x !== 0 || position.y !== 0 ? {
+          left: position.x,
+          top: position.y,
+        } : {}),
+        maxWidth: '320px',
+        minWidth: '280px'
       }}
     >
       <CardContent className="p-4">

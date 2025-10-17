@@ -22,15 +22,36 @@ export const useDocumentPreview = () => {
     }
 
     const rect = event.currentTarget.getBoundingClientRect();
-    const position = {
-      x: rect.right + 10, // Mostrar à direita do elemento
-      y: rect.top
-    };
+    const viewportWidth = window.innerWidth;
+    const viewportHeight = window.innerHeight;
+    
+    // Calcular posição ideal
+    let x = rect.right + 10;
+    let y = rect.top;
+    
+    // Se não couber à direita, mostrar à esquerda
+    if (x + 320 > viewportWidth) { // 320px é a largura do preview
+      x = rect.left - 330; // 330px para dar espaço
+    }
+    
+    // Se não couber à esquerda, centralizar
+    if (x < 10) {
+      x = (viewportWidth - 320) / 2;
+    }
+    
+    // Ajustar posição vertical se sair da tela
+    if (y + 200 > viewportHeight) { // 200px é altura aproximada do preview
+      y = viewportHeight - 220;
+    }
+    
+    // Garantir que não saia da tela
+    x = Math.max(10, Math.min(x, viewportWidth - 330));
+    y = Math.max(10, Math.min(y, viewportHeight - 220));
 
     setPreviewState({
       isVisible: true,
       document,
-      position
+      position: { x, y }
     });
   }, []);
 
@@ -41,7 +62,7 @@ export const useDocumentPreview = () => {
         ...prev,
         isVisible: false
       }));
-    }, 100);
+    }, 200); // Aumentar delay para dar tempo de mover o mouse para o preview
   }, []);
 
   const hidePreviewImmediately = useCallback(() => {
