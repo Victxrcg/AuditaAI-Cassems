@@ -4,6 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const csv = require('csv-parse/sync');
 const { simpleParser } = require('mailparser');
+const mammoth = require('mammoth');
 
 // Configurar OpenAI (opcional)
 let openai = null;
@@ -424,7 +425,11 @@ exports.updateComplianceField = async (req, res) => {
       console.log('✅ Debug - Competência_referencia atualizada diretamente');
       
       // Registrar no histórico
-      await registrarAlteracao(pool, id, field, valorAnterior, value, user_id, userOrg);
+      if (id && id !== 'null' && id !== null) {
+        await registrarAlteracao(pool, id, field, valorAnterior, value, user_id, userOrg);
+      } else {
+        console.warn('⚠️ ID inválido para histórico:', id);
+      }
       
       return res.json({
         success: true,
@@ -454,8 +459,12 @@ exports.updateComplianceField = async (req, res) => {
     
     // Registrar no histórico
     try {
-    await registrarAlteracao(pool, id, field, valorAnterior, value, user_id, userOrg);
-      console.log('✅ Histórico registrado com sucesso');
+      if (id && id !== 'null' && id !== null) {
+        await registrarAlteracao(pool, id, field, valorAnterior, value, user_id, userOrg);
+        console.log('✅ Histórico registrado com sucesso');
+      } else {
+        console.warn('⚠️ ID inválido para histórico:', id);
+      }
     } catch (histError) {
       console.error('❌ Erro ao registrar histórico (continuando):', histError.message);
       // Não falhar a operação principal por causa do histórico
@@ -641,6 +650,23 @@ async function extrairDadosArquivo(caminhoArquivo, nomeArquivo) {
       } catch (emailError) {
         console.error(`Erro ao processar email ${nomeArquivo}:`, emailError.message);
         return { status: 'erro_processamento', conteudo: 'Erro ao processar email - formato inválido' };
+      }
+    } else if (extensao === '.docx') {
+      try {
+        console.log(`🔄 Processando DOCX ${nomeArquivo}...`);
+        const result = await mammoth.extractRawText({ buffer: buffer });
+        conteudo = result.value;
+        
+        if (!conteudo || conteudo.length < 10) {
+          console.warn(`⚠️ Nenhum conteúdo extraído de DOCX: ${nomeArquivo}`);
+          return { status: 'sem_conteudo', conteudo: 'DOCX processado mas sem conteúdo de texto extraível' };
+        }
+        
+        console.log(`✅ DOCX ${nomeArquivo} - Conteúdo extraído: ${conteudo.length} caracteres`);
+        console.log(`🔍 Primeiros 200 caracteres: ${conteudo.substring(0, 200)}`);
+      } catch (docxError) {
+        console.error(`Erro ao processar DOCX ${nomeArquivo}:`, docxError.message);
+        return { status: 'erro_processamento', conteudo: 'Erro ao processar DOCX - arquivo pode estar corrompido' };
       }
     } else {
       try {
