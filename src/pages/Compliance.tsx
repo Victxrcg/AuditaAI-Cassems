@@ -747,106 +747,108 @@ const ComplianceItemCard = memo(({
           </div>
         </div>
 
-        {/* Seção de Anexos */}
-        <div>
-          <Label htmlFor={`anexo-${item.id}`}>Anexar Arquivo</Label>
-          <div className="mt-1">
-            {/* Lista de anexos existentes */}
-            {anexos.length > 0 && (
-              <div className="mb-4 space-y-2">
-                {anexos.map((anexo) => (
-                  <div key={anexo.id} className="flex items-center justify-between p-3 border rounded-lg bg-gray-50">
-                    <div className="flex items-center gap-2">
-                      <span className="text-lg">{getFileIcon(anexo.nome_arquivo || 'arquivo')}</span>
-                      <div>
-                        <span className="text-sm font-medium">{anexo.nome_arquivo || 'Arquivo sem nome'}</span>
-                        <span className="text-xs text-gray-500 ml-2">
-                          ({formatFileSize(anexo.tamanho_arquivo || 0)})
-                        </span>
+        {/* Seção de Anexos - apenas para itens que não sejam Período */}
+        {item.id !== '1' && (
+          <div>
+            <Label htmlFor={`anexo-${item.id}`}>Anexar Arquivo</Label>
+            <div className="mt-1">
+              {/* Lista de anexos existentes */}
+              {anexos.length > 0 && (
+                <div className="mb-4 space-y-2">
+                  {anexos.map((anexo) => (
+                    <div key={anexo.id} className="flex items-center justify-between p-3 border rounded-lg bg-gray-50">
+                      <div className="flex items-center gap-2">
+                        <span className="text-lg">{getFileIcon(anexo.nome_arquivo || 'arquivo')}</span>
+                        <div>
+                          <span className="text-sm font-medium">{anexo.nome_arquivo || 'Arquivo sem nome'}</span>
+                          <span className="text-xs text-gray-500 ml-2">
+                            ({formatFileSize(anexo.tamanho_arquivo || 0)})
+                          </span>
+                        </div>
+                      </div>
+                      <div className="flex gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleDownloadAnexo(anexo)}
+                        >
+                          <Download className="h-4 w-4 mr-1" />
+                          Baixar
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleRemoveAnexo(anexo.id)}
+                          className="text-red-600 hover:text-red-700"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
                       </div>
                     </div>
-                    <div className="flex gap-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleDownloadAnexo(anexo)}
-                      >
-                        <Download className="h-4 w-4 mr-1" />
-                        Baixar
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleRemoveAnexo(anexo.id)}
-                        className="text-red-600 hover:text-red-700"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
+                  ))}
+                </div>
+              )}
 
-            {/* Upload de novo arquivo */}
-            <div 
-              className={`border-2 border-dashed rounded-lg p-6 text-center transition-colors cursor-pointer ${
-                isDragOver 
-                  ? 'border-blue-400 bg-blue-50' 
-                  : 'border-gray-300 hover:border-gray-400'
-              }`}
-              onDragOver={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                setIsDragOver(true);
-              }}
-              onDragLeave={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                setIsDragOver(false);
-              }}
-              onDrop={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                setIsDragOver(false);
-                
-                const files = e.dataTransfer.files;
-                if (files.length > 0) {
-                  const file = files[0];
-                  handleFileUpload(file);
-                }
-              }}
-              onClick={() => {
-                const input = document.getElementById(`anexo-${item.id}`) as HTMLInputElement;
-                if (input) input.click();
-              }}
-            >
-              <Upload className="h-8 w-8 mx-auto text-gray-400 mb-2" />
-              <p className="text-sm text-gray-600 mb-2">
-                {uploading ? 'Fazendo upload...' : 'Clique para fazer upload ou arraste o arquivo aqui'}
-              </p>
-              <Input
-                id={`anexo-${item.id}`}
-                type="file"
-                accept="*/*"
-                onChange={(e) => {
-                  const file = e.target.files?.[0];
-                  if (file) handleFileUpload(file);
+              {/* Upload de novo arquivo */}
+              <div 
+                className={`border-2 border-dashed rounded-lg p-6 text-center transition-colors cursor-pointer ${
+                  isDragOver 
+                    ? 'border-blue-400 bg-blue-50' 
+                    : 'border-gray-300 hover:border-gray-400'
+                }`}
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setIsDragOver(true);
                 }}
-                className="hidden"
-                disabled={uploading}
-              />
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => document.getElementById(`anexo-${item.id}`)?.click()}
-                disabled={uploading}
+                onDragLeave={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setIsDragOver(false);
+                }}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setIsDragOver(false);
+                  
+                  const files = e.dataTransfer.files;
+                  if (files.length > 0) {
+                    const file = files[0];
+                    handleFileUpload(file);
+                  }
+                }}
+                onClick={() => {
+                  const input = document.getElementById(`anexo-${item.id}`) as HTMLInputElement;
+                  if (input) input.click();
+                }}
               >
-                {uploading ? 'Uploading...' : 'Selecionar Arquivo'}
-              </Button>
+                <Upload className="h-8 w-8 mx-auto text-gray-400 mb-2" />
+                <p className="text-sm text-gray-600 mb-2">
+                  {uploading ? 'Fazendo upload...' : 'Clique para fazer upload ou arraste o arquivo aqui'}
+                </p>
+                <Input
+                  id={`anexo-${item.id}`}
+                  type="file"
+                  accept="*/*"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) handleFileUpload(file);
+                  }}
+                  className="hidden"
+                  disabled={uploading}
+                />
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => document.getElementById(`anexo-${item.id}`)?.click()}
+                  disabled={uploading}
+                >
+                  {uploading ? 'Uploading...' : 'Selecionar Arquivo'}
+                </Button>
+              </div>
             </div>
           </div>
-        </div>
+        )}
 
             {/* Adicionar indicador de quem editou por último */}
             {getEditIndicator(item)}
@@ -1342,9 +1344,9 @@ export default function Compliance() {
           const hasData = (updatedItem.data && updatedItem.data.trim()) ||
                          (updatedItem.observacoes && updatedItem.observacoes.trim());
           
-          // Verificar se há anexos para este item
+          // Verificar se há anexos para este item (exceto para Período)
           let hasAnexos = false;
-          if (competenciaId) {
+          if (competenciaId && updatedItem.id !== '1') {
             try {
               const tipoAnexo = getTipoAnexoFromItemId(updatedItem.id);
               const anexosData = await listAnexos(competenciaId);
@@ -1356,8 +1358,8 @@ export default function Compliance() {
             }
           }
           
-          // Item está concluído se tem dados OU anexos
-          const isCompleted = hasData || hasAnexos;
+          // Item está concluído se tem dados OU anexos (para Período, apenas dados)
+          const isCompleted = updatedItem.id === '1' ? hasData : (hasData || hasAnexos);
           
           if (isCompleted) {
             updatedItem.status = 'concluido';
