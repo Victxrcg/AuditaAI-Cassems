@@ -420,7 +420,7 @@ exports.updateComplianceField = async (req, res) => {
       console.log('✅ Debug - Competência_referencia atualizada diretamente');
       
       // Registrar no histórico
-      await registrarAlteracao(pool, id, field, valorAnterior, value, user_id, userOrg,);
+      await registrarAlteracao(pool, id, field, valorAnterior, value, user_id, userOrg);
       
       return res.json({
         success: true,

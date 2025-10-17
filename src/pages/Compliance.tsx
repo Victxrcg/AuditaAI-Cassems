@@ -1897,7 +1897,9 @@ export default function Compliance() {
     if (!item) return;
 
     // Se não há competência selecionada, criar uma nova
-    if (!currentCompetenciaId) {
+    let competenciaIdToUse = currentCompetenciaId;
+    
+    if (!competenciaIdToUse) {
       console.log('🔍 Nenhuma competência selecionada, criando nova...');
       
       // Criar competência com data atual como referência
@@ -1912,8 +1914,11 @@ export default function Compliance() {
         return;
       }
       
+      // Usar o ID da competência criada diretamente
+      competenciaIdToUse = novaCompetencia.id.toString();
+      
       // Definir a nova competência como atual
-      setCurrentCompetenciaId(novaCompetencia.id.toString());
+      setCurrentCompetenciaId(competenciaIdToUse);
       setSelectedCompetencia(novaCompetencia);
       
       // Reinicializar cards com status pendente
@@ -1944,7 +1949,6 @@ export default function Compliance() {
 
       // Salvar cada campo no banco se tiver valor
       const promises = [];
-      const competenciaIdToUse = currentCompetenciaId;
       
       if (item.data && item.data.trim()) {
         console.log('🔍 Salvando data:', item.data, 'para item:', id, 'com user_id:', currentUser.id, 'competenciaId:', competenciaIdToUse);
