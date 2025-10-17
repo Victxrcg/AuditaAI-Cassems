@@ -28,16 +28,16 @@ export const PreviewWrapper: React.FC<PreviewWrapperProps> = ({
       let y = position.y;
       
       // Ajustar posição se sair da tela
-      if (x + rect.width > viewportWidth) {
-        x = viewportWidth - rect.width - 10;
+      if (x + rect.width > viewportWidth - 20) {
+        x = viewportWidth - rect.width - 20;
       }
-      if (y + rect.height > viewportHeight) {
-        y = viewportHeight - rect.height - 10;
+      if (y + rect.height > viewportHeight - 20) {
+        y = viewportHeight - rect.height - 20;
       }
       
       // Garantir que não saia da tela
-      x = Math.max(10, x);
-      y = Math.max(10, y);
+      x = Math.max(20, x);
+      y = Math.max(20, y);
       
       wrapperRef.current.style.left = `${x}px`;
       wrapperRef.current.style.top = `${y}px`;

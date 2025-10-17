@@ -25,29 +25,36 @@ export const useDocumentPreview = () => {
     const viewportWidth = window.innerWidth;
     const viewportHeight = window.innerHeight;
     
-    // Calcular posição ideal
-    let x = rect.right + 10;
+    // Posição simples: à direita do elemento, com margem
+    let x = rect.right + 20;
     let y = rect.top;
     
     // Se não couber à direita, mostrar à esquerda
-    if (x + 320 > viewportWidth) { // 320px é a largura do preview
-      x = rect.left - 330; // 330px para dar espaço
+    if (x + 320 > viewportWidth) {
+      x = rect.left - 340;
     }
     
-    // Se não couber à esquerda, centralizar
-    if (x < 10) {
+    // Se ainda não couber, centralizar
+    if (x < 20) {
       x = (viewportWidth - 320) / 2;
     }
     
-    // Ajustar posição vertical se sair da tela
-    if (y + 200 > viewportHeight) { // 200px é altura aproximada do preview
-      y = viewportHeight - 220;
+    // Ajustar verticalmente se sair da tela
+    if (y + 250 > viewportHeight) {
+      y = viewportHeight - 270;
     }
     
-    // Garantir que não saia da tela
-    x = Math.max(10, Math.min(x, viewportWidth - 330));
-    y = Math.max(10, Math.min(y, viewportHeight - 220));
+    // Garantir margens mínimas
+    x = Math.max(20, x);
+    y = Math.max(20, y);
 
+    console.log('🔍 Preview position:', { 
+      x, 
+      y, 
+      rect: { right: rect.right, top: rect.top, left: rect.left },
+      viewport: { width: viewportWidth, height: viewportHeight }
+    });
+    
     setPreviewState({
       isVisible: true,
       document,

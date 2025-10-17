@@ -148,6 +148,13 @@ export default function Documentos() {
     });
   };
 
+  // Função para visualizar documento
+  const handleViewDocument = (documentId: number) => {
+    // Abrir documento em nova aba
+    const url = `${import.meta.env.VITE_API_URL || 'http://localhost:3001'}/documentos/${documentId}/download`;
+    window.open(url, '_blank');
+  };
+
   // Funções para pastas
   const handleCreatePasta = async () => {
     if (!pastaTitulo.trim()) return;
@@ -607,8 +614,13 @@ export default function Documentos() {
 
       {/* Preview de Documento */}
       {previewState.isVisible && previewState.document && (
-        <PreviewWrapper
-          position={previewState.position}
+        <div
+          className="fixed z-[9999] pointer-events-auto"
+          style={{
+            left: `${previewState.position.x}px`,
+            top: `${previewState.position.y}px`,
+            border: '2px solid red', // Debug: borda vermelha para ver onde está
+          }}
           onMouseEnter={() => {
             // Cancelar timeout quando mouse entra no preview
             if (timeoutRef.current) {
@@ -622,12 +634,9 @@ export default function Documentos() {
             position={{ x: 0, y: 0 }} // O wrapper gerencia o posicionamento
             onClose={hidePreviewImmediately}
             onDownload={downloadDocumento}
-            onView={(id) => {
-              // Implementar visualização se necessário
-              console.log('Visualizar documento:', id);
-            }}
+            onView={handleViewDocument}
           />
-        </PreviewWrapper>
+        </div>
       )}
     </div>
   );
