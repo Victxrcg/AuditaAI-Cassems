@@ -29,7 +29,8 @@ import {
   Plus, 
   Edit, 
   Move,
-  X
+  X,
+  AlertTriangle
 } from 'lucide-react';
 
 export default function Documentos() {
@@ -42,6 +43,8 @@ export default function Documentos() {
   const [showCreatePasta, setShowCreatePasta] = useState(false);
   const [editingPasta, setEditingPasta] = useState<Pasta | null>(null);
   const [movingDoc, setMovingDoc] = useState<Documento | null>(null);
+  const [deletingPasta, setDeletingPasta] = useState<Pasta | null>(null);
+  const [deletingDoc, setDeletingDoc] = useState<Documento | null>(null);
   
   // Estados para formulário de pasta
   const [pastaTitulo, setPastaTitulo] = useState('');
@@ -104,13 +107,36 @@ export default function Documentos() {
   };
 
   const handleDeletePasta = async (pastaId: number) => {
-    if (!confirm('Tem certeza que deseja remover esta pasta? Documentos dentro dela serão movidos para "Sem pasta".')) return;
+    const pasta = pastas.find(p => p.id === pastaId);
+    if (pasta) {
+      setDeletingPasta(pasta);
+    }
+  };
+
+  const confirmDeletePasta = async () => {
+    if (!deletingPasta) return;
     try {
-      await removerPasta(pastaId);
+      await removerPasta(deletingPasta.id);
+      setDeletingPasta(null);
       await load();
     } catch (error) {
       console.error('Erro ao remover pasta:', error);
       alert('Erro ao remover pasta. Verifique se ela está vazia.');
+    }
+  };
+
+  const handleDeleteDocument = async (doc: Documento) => {
+    setDeletingDoc(doc);
+  };
+
+  const confirmDeleteDocument = async () => {
+    if (!deletingDoc) return;
+    try {
+      await removerDocumento(deletingDoc.id);
+      setDeletingDoc(null);
+      await load();
+    } catch (error) {
+      console.error('Erro ao remover documento:', error);
     }
   };
 
@@ -158,24 +184,29 @@ export default function Documentos() {
           </div>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="space-y-2">
             {/* Pasta "Sem pasta" */}
             <div 
-              className={`p-4 border-2 rounded-lg cursor-pointer transition-colors ${
+              className={`flex items-center justify-between p-3 rounded-lg cursor-pointer transition-colors ${
                 selectedPasta === null 
-                  ? 'border-blue-500 bg-blue-50' 
-                  : 'border-gray-200 hover:border-gray-300'
+                  ? 'bg-blue-50 border-2 border-blue-500' 
+                  : 'hover:bg-gray-50 border-2 border-transparent'
               }`}
               onClick={() => setSelectedPasta(null)}
             >
-              <div className="flex items-center gap-3">
-                <Folder className="w-6 h-6 text-gray-500" />
-                <div>
+              <div className="flex items-center gap-3 min-w-0">
+                <Folder className="w-5 h-5 text-gray-500" />
+                <div className="min-w-0">
                   <h3 className="font-medium">Sem pasta</h3>
                   <p className="text-sm text-gray-500">
                     {docs.filter(doc => !doc.pasta_id).length} documentos
                   </p>
                 </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <Badge variant="secondary" className="text-xs">
+                  {docs.filter(doc => !doc.pasta_id).length} docs
+                </Badge>
               </div>
             </div>
 
@@ -183,30 +214,28 @@ export default function Documentos() {
             {pastas.map((pasta) => (
               <div 
                 key={pasta.id}
-                className={`p-4 border-2 rounded-lg cursor-pointer transition-colors ${
+                className={`flex items-center justify-between p-3 rounded-lg cursor-pointer transition-colors ${
                   selectedPasta === pasta.id 
-                    ? 'border-blue-500 bg-blue-50' 
-                    : 'border-gray-200 hover:border-gray-300'
+                    ? 'bg-blue-50 border-2 border-blue-500' 
+                    : 'hover:bg-gray-50 border-2 border-transparent'
                 }`}
                 onClick={() => setSelectedPasta(pasta.id)}
               >
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3 min-w-0">
-                    <FolderOpen className="w-6 h-6 text-blue-500" />
-                    <div className="min-w-0">
-                      <h3 className="font-medium truncate" title={pasta.titulo}>
-                        {pasta.titulo}
-                      </h3>
-                      <p className="text-sm text-gray-500">
-                        {pasta.total_documentos} documentos
-                      </p>
-                      {pasta.descricao && (
-                        <p className="text-xs text-gray-400 truncate" title={pasta.descricao}>
-                          {pasta.descricao}
-                        </p>
-                      )}
-                    </div>
+                <div className="flex items-center gap-3 min-w-0 flex-1">
+                  <FolderOpen className="w-5 h-5 text-blue-500" />
+                  <div className="min-w-0 flex-1">
+                    <h3 className="font-medium truncate" title={pasta.titulo}>
+                      {pasta.titulo}
+                    </h3>
+                    <p className="text-sm text-gray-500 truncate">
+                      {pasta.descricao || 'Sem descrição'}
+                    </p>
                   </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Badge variant="secondary" className="text-xs">
+                    {pasta.total_documentos} docs
+                  </Badge>
                   <div className="flex gap-1">
                     <Button 
                       variant="ghost" 
@@ -215,6 +244,7 @@ export default function Documentos() {
                         e.stopPropagation();
                         startEditPasta(pasta);
                       }}
+                      className="h-8 w-8 p-0"
                     >
                       <Edit className="w-4 h-4" />
                     </Button>
@@ -225,6 +255,7 @@ export default function Documentos() {
                         e.stopPropagation();
                         handleDeletePasta(pasta.id);
                       }}
+                      className="h-8 w-8 p-0 text-red-600 hover:text-red-700 hover:bg-red-50"
                     >
                       <Trash2 className="w-4 h-4" />
                     </Button>
@@ -340,7 +371,7 @@ export default function Documentos() {
                   <Button variant="outline" size="sm" onClick={() => downloadDocumento(d.id)}>
                     <Download className="w-4 h-4" />
                   </Button>
-                  <Button variant="outline" size="sm" onClick={async () => { await removerDocumento(d.id); await load(); }}>
+                  <Button variant="outline" size="sm" onClick={() => handleDeleteDocument(d)}>
                     <Trash2 className="w-4 h-4" />
                   </Button>
                 </div>
@@ -395,6 +426,103 @@ export default function Documentos() {
                       {pasta.titulo}
                     </Button>
                   ))}
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* Modal de confirmação de exclusão de pasta */}
+      {deletingPasta && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <Card className="w-96">
+            <CardHeader>
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-red-100 rounded-full">
+                  <AlertTriangle className="w-6 h-6 text-red-600" />
+                </div>
+                <div>
+                  <CardTitle className="text-red-800">Confirmar Exclusão</CardTitle>
+                  <CardDescription>Esta ação não pode ser desfeita</CardDescription>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
+                  <p className="text-sm text-red-800 font-medium mb-2">
+                    Tem certeza que deseja remover a pasta <strong>"{deletingPasta.titulo}"</strong>?
+                  </p>
+                  <p className="text-sm text-red-700">
+                    {deletingPasta.total_documentos > 0 
+                      ? `Os ${deletingPasta.total_documentos} documento(s) dentro dela serão movidos para "Sem pasta".`
+                      : 'A pasta está vazia e será removida permanentemente.'
+                    }
+                  </p>
+                </div>
+                <div className="flex gap-3 justify-end">
+                  <Button 
+                    variant="outline" 
+                    onClick={() => setDeletingPasta(null)}
+                  >
+                    Cancelar
+                  </Button>
+                  <Button 
+                    variant="destructive" 
+                    onClick={confirmDeletePasta}
+                    className="bg-red-600 hover:bg-red-700"
+                  >
+                    <Trash2 className="w-4 h-4 mr-2" />
+                    Excluir Pasta
+                  </Button>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* Modal de confirmação de exclusão de documento */}
+      {deletingDoc && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <Card className="w-96">
+            <CardHeader>
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-red-100 rounded-full">
+                  <AlertTriangle className="w-6 h-6 text-red-600" />
+                </div>
+                <div>
+                  <CardTitle className="text-red-800">Confirmar Exclusão</CardTitle>
+                  <CardDescription>Esta ação não pode ser desfeita</CardDescription>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
+                  <p className="text-sm text-red-800 font-medium mb-2">
+                    Tem certeza que deseja remover o documento <strong>"{deletingDoc.nome_arquivo}"</strong>?
+                  </p>
+                  <p className="text-sm text-red-700">
+                    O arquivo será removido permanentemente do servidor.
+                  </p>
+                </div>
+                <div className="flex gap-3 justify-end">
+                  <Button 
+                    variant="outline" 
+                    onClick={() => setDeletingDoc(null)}
+                  >
+                    Cancelar
+                  </Button>
+                  <Button 
+                    variant="destructive" 
+                    onClick={confirmDeleteDocument}
+                    className="bg-red-600 hover:bg-red-700"
+                  >
+                    <Trash2 className="w-4 h-4 mr-2" />
+                    Excluir Documento
+                  </Button>
                 </div>
               </div>
             </CardContent>
