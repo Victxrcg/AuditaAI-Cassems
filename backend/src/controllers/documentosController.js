@@ -41,22 +41,35 @@ async function ensureTables() {
   `, []);
 
   // Verificar se a coluna pasta_id existe na tabela documentos
-  const columns = await executeQueryWithRetry(`
-    SELECT COLUMN_NAME 
-    FROM INFORMATION_SCHEMA.COLUMNS 
-    WHERE TABLE_SCHEMA = DATABASE() 
-    AND TABLE_NAME = 'documentos' 
-    AND COLUMN_NAME = 'pasta_id'
-  `, []);
-
-  // Se a coluna não existir, adicionar
-  if (columns.length === 0) {
-    await executeQueryWithRetry(`
-      ALTER TABLE documentos 
-      ADD COLUMN pasta_id INT NULL,
-      ADD CONSTRAINT fk_documentos_pasta 
-      FOREIGN KEY (pasta_id) REFERENCES pastas_documentos(id) ON DELETE SET NULL
+  try {
+    const columns = await executeQueryWithRetry(`
+      SELECT COLUMN_NAME 
+      FROM INFORMATION_SCHEMA.COLUMNS 
+      WHERE TABLE_SCHEMA = DATABASE() 
+      AND TABLE_NAME = 'documentos' 
+      AND COLUMN_NAME = 'pasta_id'
     `, []);
+
+    // Se a coluna não existir, adicionar
+    if (columns.length === 0) {
+      await executeQueryWithRetry(`
+        ALTER TABLE documentos 
+        ADD COLUMN pasta_id INT NULL
+      `, []);
+      
+      // Adicionar constraint separadamente para evitar conflitos
+      try {
+        await executeQueryWithRetry(`
+          ALTER TABLE documentos 
+          ADD CONSTRAINT fk_documentos_pasta 
+          FOREIGN KEY (pasta_id) REFERENCES pastas_documentos(id) ON DELETE SET NULL
+        `, []);
+      } catch (constraintError) {
+        console.log('⚠️ Constraint já existe ou erro ao criar:', constraintError.message);
+      }
+    }
+  } catch (error) {
+    console.log('⚠️ Erro ao verificar/criar coluna pasta_id:', error.message);
   }
 
   // Criar tabela de documentos se não existir
@@ -179,7 +192,7 @@ exports.listarPastas = async (req, res) => {
       FROM pastas_documentos p
       LEFT JOIN documentos d ON p.id = d.pasta_id
       ${where}
-      GROUP BY p.id
+      GROUP BY p.id, p.titulo, p.descricao, p.organizacao, p.criado_por, p.created_at, p.updated_at
       ORDER BY p.titulo ASC
     `, params);
     
