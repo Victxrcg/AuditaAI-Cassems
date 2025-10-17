@@ -28,7 +28,7 @@ const loadPdfParse = async () => {
     try {
       const imported = require('pdf-parse');
       // A função principal está em PDFParse (com P maiúsculo)
-      pdfParse = imported.PDFParse || imported.default || imported;
+      pdfParse = imported.PDFParse;
     } catch (error) {
       console.error('❌ Erro ao carregar pdf-parse:', error);
       throw new Error('pdf-parse não está disponível');
@@ -568,7 +568,13 @@ async function extrairDadosArquivo(caminhoArquivo, nomeArquivo) {
       try {
         const PDFParseClass = await loadPdfParse();
         const pdfData = await new PDFParseClass(buffer);
-        conteudo = pdfData.text;
+        // O texto pode estar em diferentes propriedades dependendo da versão
+        conteudo = pdfData.text || pdfData.doc?.text || pdfData.toString();
+        
+        if (!conteudo || conteudo === '[object Object]') {
+          console.warn(`⚠️ Nenhum conteúdo extraído de: ${nomeArquivo}`);
+          return { status: 'sem_conteudo', conteudo: 'PDF processado mas sem conteúdo de texto extraível' };
+        }
       } catch (pdfError) {
         console.error(`Erro ao processar PDF ${nomeArquivo}:`, pdfError.message);
         return { status: 'erro_processamento', conteudo: 'Erro ao processar PDF - arquivo pode estar corrompido' };
@@ -957,7 +963,13 @@ async function analisarDocumentosAnexados(pool, complianceId) {
           try {
             const PDFParseClass = await loadPdfParse();
             const pdfData = await new PDFParseClass(buffer);
-            conteudo = pdfData.text;
+            // O texto pode estar em diferentes propriedades dependendo da versão
+            conteudo = pdfData.text || pdfData.doc?.text || pdfData.toString();
+            
+            if (!conteudo || conteudo === '[object Object]') {
+              console.warn(`⚠️ Nenhum conteúdo extraído de: ${anexo.nome_arquivo}`);
+              conteudo = 'PDF processado mas sem conteúdo de texto extraível';
+            }
           } catch (pdfError) {
             console.error(`Erro ao processar PDF ${anexo.nome_arquivo}:`, pdfError.message);
             conteudo = 'Erro ao processar PDF - arquivo pode estar corrompido';
@@ -1550,7 +1562,13 @@ const extrairConteudoArquivos = async (pool, competenciaId) => {
             } else if (extensao === '.pdf') {
             const PDFParseClass = await loadPdfParse();
             const pdfData = await new PDFParseClass(buffer);
-            conteudo = pdfData.text;
+            // O texto pode estar em diferentes propriedades dependendo da versão
+            conteudo = pdfData.text || pdfData.doc?.text || pdfData.toString();
+            
+            if (!conteudo || conteudo === '[object Object]') {
+              console.warn(`⚠️ Nenhum conteúdo extraído de PDF`);
+              conteudo = 'PDF processado mas sem conteúdo de texto extraível';
+            }
           } else if (extensao === '.eml') {
             const email = await simpleParser(buffer);
             conteudo = `Email de: ${email.from?.text || 'N/A'}\nPara: ${email.to?.text || 'N/A'}\nAssunto: ${email.subject || 'N/A'}\n\nConteúdo:\n${email.text || email.html || 'Sem conteúdo'}`;
@@ -1589,7 +1607,13 @@ const extrairConteudoArquivos = async (pool, competenciaId) => {
             } else if (extensao === '.pdf') {
             const PDFParseClass = await loadPdfParse();
             const pdfData = await new PDFParseClass(buffer);
-            conteudo = pdfData.text;
+            // O texto pode estar em diferentes propriedades dependendo da versão
+            conteudo = pdfData.text || pdfData.doc?.text || pdfData.toString();
+            
+            if (!conteudo || conteudo === '[object Object]') {
+              console.warn(`⚠️ Nenhum conteúdo extraído de PDF`);
+              conteudo = 'PDF processado mas sem conteúdo de texto extraível';
+            }
           } else if (extensao === '.eml') {
             const email = await simpleParser(buffer);
             conteudo = `Email de: ${email.from?.text || 'N/A'}\nPara: ${email.to?.text || 'N/A'}\nAssunto: ${email.subject || 'N/A'}\n\nConteúdo:\n${email.text || email.html || 'Sem conteúdo'}`;
