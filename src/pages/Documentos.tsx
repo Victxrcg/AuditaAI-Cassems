@@ -5,6 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
+import FileUploadArea, { FileUploadState } from '@/components/FileUploadArea';
 import { 
   downloadDocumento, 
   listarDocumentos, 
@@ -36,8 +37,6 @@ import {
 export default function Documentos() {
   const [docs, setDocs] = useState<Documento[]>([]);
   const [pastas, setPastas] = useState<Pasta[]>([]);
-  const [uploading, setUploading] = useState(false);
-  const [file, setFile] = useState<File | null>(null);
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [selectedPasta, setSelectedPasta] = useState<number | null>(null);
   const [showCreatePasta, setShowCreatePasta] = useState(false);
@@ -45,6 +44,11 @@ export default function Documentos() {
   const [movingDoc, setMovingDoc] = useState<Documento | null>(null);
   const [deletingPasta, setDeletingPasta] = useState<Pasta | null>(null);
   const [deletingDoc, setDeletingDoc] = useState<Documento | null>(null);
+  const [uploadState, setUploadState] = useState<FileUploadState>({
+    file: null,
+    status: 'idle',
+    progress: 0
+  });
   
   // Estados para formulário de pasta
   const [pastaTitulo, setPastaTitulo] = useState('');
@@ -67,16 +71,66 @@ export default function Documentos() {
 
   useEffect(() => { if (currentUser) load(); }, [currentUser]);
 
-  const handleUpload = async () => {
-    if (!file) return;
-    setUploading(true);
+  const handleFileSelect = (file: File) => {
+    setUploadState({
+      file,
+      status: 'selected',
+      progress: 0
+    });
+  };
+
+  const handleFileUpload = async (file: File) => {
     try {
+      setUploadState(prev => ({ ...prev, status: 'uploading', progress: 0 }));
+      
+      // Simular progresso de upload
+      const progressInterval = setInterval(() => {
+        setUploadState(prev => {
+          if (prev.progress < 90) {
+            return { ...prev, progress: prev.progress + Math.random() * 10 };
+          }
+          return prev;
+        });
+      }, 200);
+
       await uploadDocumento(file, currentUser?.id, currentUser?.organizacao, selectedPasta || undefined);
-      setFile(null);
+      
+      clearInterval(progressInterval);
+      
+      setUploadState(prev => ({ ...prev, status: 'processing', progress: 95 }));
+      
+      // Simular processamento
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      setUploadState(prev => ({ ...prev, status: 'success', progress: 100 }));
+      
       await load();
-    } finally {
-      setUploading(false);
+      
+      // Reset após sucesso
+      setTimeout(() => {
+        setUploadState({
+          file: null,
+          status: 'idle',
+          progress: 0
+        });
+      }, 2000);
+      
+    } catch (error) {
+      console.error('Erro no upload:', error);
+      setUploadState(prev => ({
+        ...prev,
+        status: 'error',
+        error: 'Erro ao fazer upload do arquivo'
+      }));
     }
+  };
+
+  const handleFileRemove = () => {
+    setUploadState({
+      file: null,
+      status: 'idle',
+      progress: 0
+    });
   };
 
   // Funções para pastas
@@ -322,15 +376,15 @@ export default function Documentos() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="flex flex-col md:flex-row gap-3 items-start md:items-end">
-            <div className="flex-1">
-              <Label>Selecionar arquivo</Label>
-              <Input type="file" onChange={(e) => setFile(e.target.files?.[0] || null)} />
-            </div>
-            <Button onClick={handleUpload} disabled={!file || uploading}>
-              <Upload className="w-4 h-4 mr-2" /> Enviar
-            </Button>
-          </div>
+          <FileUploadArea
+            onFileSelect={handleFileSelect}
+            onFileUpload={handleFileUpload}
+            onFileRemove={handleFileRemove}
+            accept="*/*"
+            maxSize={50 * 1024 * 1024} // 50MB
+            uploadState={uploadState}
+            setUploadState={setUploadState}
+          />
         </CardContent>
       </Card>
 
