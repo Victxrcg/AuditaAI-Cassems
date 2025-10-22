@@ -36,6 +36,9 @@ exports.listarCronogramas = async (req, res) => {
     if (userOrganization && userOrganization !== 'portes') {
       query += ` WHERE c.organizacao = ?`;
       params.push(userOrganization);
+      console.log(`🔍 Filtro aplicado para organização: "${userOrganization}"`);
+    } else {
+      console.log(`🔍 Usuário Portes - sem filtro de organização`);
     }
     // Se for Portes, não aplica filtro - vê tudo
     
@@ -51,10 +54,15 @@ exports.listarCronogramas = async (req, res) => {
       console.log('🔍 Primeiro cronograma (exemplo):', {
         id: rows[0].id,
         titulo: rows[0].titulo,
+        organizacao: rows[0].organizacao,
         data_inicio: rows[0].data_inicio,
         data_fim: rows[0].data_fim,
         tipo_data_inicio: typeof rows[0].data_inicio
       });
+      
+      // Mostrar todas as organizações únicas encontradas
+      const organizacoesUnicas = [...new Set(rows.map(row => row.organizacao))];
+      console.log('🏢 Organizações encontradas:', organizacoesUnicas);
     }
     
     // Converter BigInt para Number se necessário
