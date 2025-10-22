@@ -578,11 +578,6 @@ const ComplianceItemCard = memo(({
                         </>
                       )}
                     </Button>
-                    {!canGenerateAI && (
-                      <p className="text-xs text-gray-500 text-center">
-                        🔒 Complete todas as etapas anteriores para desbloquear
-                      </p>
-                    )}
                   </div>
                 ) : (
                   // Se já há parecer gerado, mostrar apenas botão para baixar
