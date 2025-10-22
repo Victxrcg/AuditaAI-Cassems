@@ -65,19 +65,31 @@ app.use((req, res, next) => {
   next();
 });
 
-// Rotas
+// Rotas - ORDEM IMPORTANTE: rotas específicas antes das genéricas
 app.use('/api/compliance', complianceRoutes);
 app.use('/api/documentos', documentosRoutes);
 app.use('/api/usuarios', usuariosRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/cronograma', cronogramaRoutes);
+app.use('/api/email', emailRoutes); // ← MOVER PARA ANTES das rotas genéricas
 app.use('/api', checklistRoutes);
 app.use('/api', healthRoutes);
-app.use('/api/email', emailRoutes);
 
 // Rota de teste
 app.get('/api/health', (req, res) => {
   res.json({ message: 'API funcionando!', timestamp: new Date() });
+});
+
+// Rota de teste específica para email - DIRETA no app.js
+app.post('/api/email/enviar-notas-fiscais', async (req, res) => {
+  console.log('🔍 Rota direta chamada!');
+  console.log('🔍 Body:', req.body);
+  res.json({ 
+    success: true, 
+    message: 'Rota direta funcionando!',
+    body: req.body,
+    timestamp: new Date().toISOString()
+  });
 });
 
 // Rota de status do banco de dados
