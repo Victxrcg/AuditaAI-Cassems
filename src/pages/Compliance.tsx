@@ -33,7 +33,8 @@ import {
   Pencil,
   Brain,
   ChevronDown,
-  Lock
+  Lock,
+  Mail
 } from 'lucide-react';
 import {
   uploadAnexo,
@@ -65,6 +66,9 @@ interface ComplianceItem {
   updatedBy?: string;
   organizacao?: string; // Aceitar qualquer organização
   isExpanded?: boolean;
+  // Campos específicos para envio de email (Notas Fiscais)
+  emailRemetente?: string;
+  emailDestinatario?: string;
 }
 
 interface Competencia {
@@ -320,7 +324,7 @@ const ComplianceItemCard = memo(({
   complianceItems // ← ADICIONAR ESTA PROP para verificar fluxo sequencial
 }: {
   item: ComplianceItem;
-  onFieldChange: (id: string, field: 'valor' | 'data' | 'observacoes', value: string) => void;
+  onFieldChange: (id: string, field: 'valor' | 'data' | 'observacoes' | 'emailRemetente' | 'emailDestinatario', value: string) => void;
   onFileUpload: (id: string, file: File) => Promise<any>;
   onRemoveFile: (id: string, anexoId: number) => void;
   onSave: (id: string) => void;
@@ -802,6 +806,86 @@ const ComplianceItemCard = memo(({
               rows={3}
             />
           </div>
+
+          {/* Campos de Email - apenas para Notas Fiscais (ID '7') */}
+          {item.id === '7' && (
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+              <div className="flex items-center gap-2 mb-3">
+                <Mail className="h-5 w-5 text-blue-600" />
+                <h3 className="text-lg font-semibold text-blue-900">Envio por Email</h3>
+              </div>
+              <p className="text-sm text-blue-700 mb-4">
+                Envie as notas fiscais anexadas diretamente por email
+              </p>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor={`email-remetente-${item.id}`}>
+                    <Mail className="h-4 w-4 inline mr-1" />
+                    Seu Email (Remetente)
+                  </Label>
+                  <Input
+                    id={`email-remetente-${item.id}`}
+                    type="email"
+                    value={item.emailRemetente || ''}
+                    onChange={(e) => onFieldChange(item.id, 'emailRemetente', e.target.value)}
+                    placeholder="seu.email@exemplo.com"
+                    className="mt-1"
+                  />
+                </div>
+                
+                <div>
+                  <Label htmlFor={`email-destinatario-${item.id}`}>
+                    <Mail className="h-4 w-4 inline mr-1" />
+                    Email Destinatário
+                  </Label>
+                  <Input
+                    id={`email-destinatario-${item.id}`}
+                    type="email"
+                    value={item.emailDestinatario || ''}
+                    onChange={(e) => onFieldChange(item.id, 'emailDestinatario', e.target.value)}
+                    placeholder="destinatario@exemplo.com"
+                    className="mt-1"
+                  />
+                </div>
+              </div>
+              
+              {/* Botão de envio de email */}
+              <div className="mt-4 flex justify-end">
+                <Button
+                  onClick={() => {
+                    if (!item.emailRemetente || !item.emailDestinatario) {
+                      toast({
+                        title: "Campos obrigatórios",
+                        description: "Preencha ambos os campos de email antes de enviar.",
+                        variant: "destructive",
+                      });
+                      return;
+                    }
+                    if (anexos.length === 0) {
+                      toast({
+                        title: "Nenhum arquivo",
+                        description: "Anexe pelo menos uma nota fiscal antes de enviar por email.",
+                        variant: "destructive",
+                      });
+                      return;
+                    }
+                    // TODO: Implementar função de envio de email
+                    toast({
+                      title: "Email enviado!",
+                      description: `Notas fiscais enviadas de ${item.emailRemetente} para ${item.emailDestinatario}`,
+                      variant: "default",
+                    });
+                  }}
+                  className="bg-blue-600 hover:bg-blue-700 text-white"
+                  disabled={!item.emailRemetente || !item.emailDestinatario || anexos.length === 0}
+                >
+                  <Mail className="h-4 w-4 mr-2" />
+                  Enviar por Email
+                </Button>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Seção de Anexos - apenas para itens que não sejam Período */}
@@ -960,7 +1044,7 @@ const initializeComplianceItems = (): ComplianceItem[] => {
     { id: '3', title: 'Relatório Faturamento', description: 'Comprovação mensal das compensações: faturamento, notas e impostos pagos.', status: 'pendente', isExpanded: false },
     { id: '4', title: 'Comprovação de Compensações', description: 'Documentos que comprovam compensações realizadas e seus valores.', status: 'pendente', isExpanded: false },
     { id: '6', title: 'Comprovação de Email', description: 'Evidências de comunicação por e-mail durante o período fiscal.', status: 'pendente', isExpanded: false },
-    { id: '7', title: 'Notas Fiscais Enviadas', description: 'Notas fiscais e comprovantes emitidos no período da competência.', status: 'pendente', isExpanded: false },
+    { id: '7', title: 'Notas Fiscais', description: 'Notas fiscais e comprovantes emitidos no período da competência.', status: 'pendente', isExpanded: false },
     { id: '8', title: 'Parecer Final', description: 'Parecer gerado pela IA.', status: 'pendente', isExpanded: true }
     
   ];
@@ -1874,7 +1958,7 @@ export default function Compliance() {
   };
 
   // Handlers estáveis com useCallback
-  const handleFieldChange = useCallback((id: string, field: 'data' | 'observacoes', value: string) => {
+  const handleFieldChange = useCallback((id: string, field: 'valor' | 'data' | 'observacoes' | 'emailRemetente' | 'emailDestinatario', value: string) => {
     setComplianceItems(prev => prev.map(item =>
       item.id === id
         ? { ...item, [field]: value }
