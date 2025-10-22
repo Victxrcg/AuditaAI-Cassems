@@ -5,6 +5,8 @@ const { getDbPoolWithTunnel, executeQueryWithRetry } = require('../lib/db');
 const normalizeOrganization = (org) => {
   if (!org) return '';
   const s = String(org).toLowerCase().trim();
+  // Se já é "Marajó / Rede Frota", manter como está (organização existente)
+  if (org === 'Marajó / Rede Frota') return 'Marajó / Rede Frota';
   if (s.includes('maraj') || s.includes('rede frota') || s.includes('rede_frota')) return 'rede_frota';
   if (s.includes('cassems')) return 'cassems';
   if (s.includes('porte')) return 'portes';

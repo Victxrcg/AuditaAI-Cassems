@@ -1696,7 +1696,7 @@ const Cronograma = () => {
                             CASSEMS
                           </div>
                         </SelectItem>
-                        <SelectItem value="rede_frota">
+                        <SelectItem value="Marajó / Rede Frota">
                           <div className="flex items-center gap-2">
                             <Building className="h-4 w-4" />
                             MARAJÓ / REDE FROTA
