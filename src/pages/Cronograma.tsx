@@ -2006,7 +2006,7 @@ const Cronograma = () => {
               {/* Checklist */}
               <div className="flex-1 overflow-hidden flex flex-col">
                 <h3 className="text-sm font-medium text-gray-600 mb-3">Checklist da Demanda</h3>
-                <ScrollArea className="flex-1 pr-4">
+                <ScrollArea className="h-64 pr-4">
                   {checklistLoading ? (
                     <div className="flex justify-center py-4">
                       <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
