@@ -32,7 +32,8 @@ import {
   Eye,
   Pencil,
   Brain,
-  ChevronDown
+  ChevronDown,
+  Lock
 } from 'lucide-react';
 import {
   uploadAnexo,
@@ -131,6 +132,40 @@ const darkenColor = (hex: string) => {
   // Reduzir valores para escurecer
   const darken = (val: number) => Math.max(0, Math.floor(val * 0.6));
   return `rgb(${darken(r)}, ${darken(g)}, ${darken(b)})`;
+};
+
+// Função para verificar se todas as etapas anteriores ao Parecer Final estão completas
+const canGenerateAIParecer = async (complianceItems: ComplianceItem[], competenciaId: string | null): Promise<boolean> => {
+  const requiredSteps = ['1', '2', '3', '4', '6', '7']; // Etapas obrigatórias antes do Parecer Final
+  
+  for (const stepId of requiredSteps) {
+    const step = complianceItems.find(item => item.id === stepId);
+    if (!step) return false;
+    
+    // Verificar se a etapa tem dados OU anexos
+    const hasData = !!(step.valor || step.data || step.observacoes);
+    let hasAnexos = false;
+    
+    if (competenciaId) {
+      try {
+        const tipoAnexo = getTipoAnexoFromItemId(stepId);
+        const anexosData = await listAnexos(competenciaId);
+        const filteredAnexos = anexosData.filter(anexo => anexo.tipo_anexo === tipoAnexo);
+        hasAnexos = filteredAnexos.length > 0;
+      } catch (error) {
+        console.error('Erro ao verificar anexos:', error);
+      }
+    }
+    
+    // Se a etapa não está completa (sem dados E sem anexos), não pode gerar parecer
+    if (!hasData && !hasAnexos) {
+      console.log(`🔍 Etapa ${stepId} não está completa: hasData=${hasData}, hasAnexos=${hasAnexos}`);
+      return false;
+    }
+  }
+  
+  console.log('🔍 Todas as etapas estão completas, pode gerar parecer IA');
+  return true;
 };
 
 // Função para verificar se uma etapa pode ser acessada (fluxo sequencial)
@@ -300,6 +335,7 @@ const ComplianceItemCard = memo(({
   const [uploading, setUploading] = useState(false);
   const [anexos, setAnexos] = useState<Anexo[]>(item.anexos || []);
   const [canAccess, setCanAccess] = useState(true);
+  const [canGenerateAI, setCanGenerateAI] = useState(false);
   const [isDragOver, setIsDragOver] = useState(false); // Estado para controlar drag over
 
   // Verificar se esta etapa pode ser acessada
@@ -309,6 +345,17 @@ const ComplianceItemCard = memo(({
       setCanAccess(access);
     };
     checkAccess();
+  }, [item.id, complianceItems, currentCompetenciaId]);
+
+  // Verificar se pode gerar parecer IA (apenas para item '8')
+  useEffect(() => {
+    const checkAIGeneration = async () => {
+      if (item.id === '8') {
+        const canGenerate = await canGenerateAIParecer(complianceItems, currentCompetenciaId);
+        setCanGenerateAI(canGenerate);
+      }
+    };
+    checkAIGeneration();
   }, [item.id, complianceItems, currentCompetenciaId]);
 
   // Carregar anexos quando o componente monta e verificar acesso
@@ -504,24 +551,39 @@ const ComplianceItemCard = memo(({
               <div className="flex gap-2">
                 {!item.observacoes ? (
                   // Se não há parecer gerado, mostrar botão para gerar
-                  <Button
-                    onClick={() => gerarParecer(currentCompetenciaId || '')}
-                    size="lg"
-                    className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white"
-                    disabled={loading}
-                  >
-                    {loading ? (
-                      <>
-                        <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2"></div>
-                        Gerando...
-                      </>
-                    ) : (
-                      <>
-                        <MessageSquare className="h-5 w-5 mr-2" />
-                        Gerar Parecer IA
-                      </>
+                  <div className="flex flex-col gap-2">
+                    <Button
+                      onClick={() => gerarParecer(currentCompetenciaId || '')}
+                      size="lg"
+                      className={`${
+                        canGenerateAI 
+                          ? "bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white"
+                          : "bg-gradient-to-r from-gray-400 to-gray-500 hover:from-gray-500 hover:to-gray-600 text-white cursor-not-allowed opacity-60"
+                      }`}
+                      disabled={loading || !canGenerateAI}
+                    >
+                      {loading ? (
+                        <>
+                          <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2"></div>
+                          Gerando...
+                        </>
+                      ) : (
+                        <>
+                          {canGenerateAI ? (
+                            <MessageSquare className="h-5 w-5 mr-2" />
+                          ) : (
+                            <Lock className="h-5 w-5 mr-2" />
+                          )}
+                          Gerar Parecer IA
+                        </>
+                      )}
+                    </Button>
+                    {!canGenerateAI && (
+                      <p className="text-xs text-gray-500 text-center">
+                        🔒 Complete todas as etapas anteriores para desbloquear
+                      </p>
                     )}
-                  </Button>
+                  </div>
                 ) : (
                   // Se já há parecer gerado, mostrar apenas botão para baixar
                   <Button
