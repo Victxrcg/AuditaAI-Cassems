@@ -1,6 +1,17 @@
 // backend/src/controllers/cronogramaController.js
 const { getDbPoolWithTunnel, executeQueryWithRetry } = require('../lib/db');
 
+// Normaliza o nome da organização para um código canônico usado no banco
+const normalizeOrganization = (org) => {
+  if (!org) return '';
+  const s = String(org).toLowerCase().trim();
+  if (s.includes('maraj') || s.includes('rede frota') || s.includes('rede_frota')) return 'rede_frota';
+  if (s.includes('cassems')) return 'cassems';
+  if (s.includes('porte')) return 'portes';
+  // fallback: trocar espaços por underscore
+  return s.replace(/\s+/g, '_');
+};
+
 // Listar cronogramas filtrados por organização
 exports.listarCronogramas = async (req, res) => {
   try {
@@ -90,6 +101,10 @@ exports.criarCronograma = async (req, res) => {
       });
     }
     
+    // Normalizar organização para garantir consistência
+    const organizacaoNormalizada = normalizeOrganization(organizacao);
+    console.log(`🔍 Organização original: "${organizacao}" -> Normalizada: "${organizacaoNormalizada}"`);
+    
     // Tratar datas vazias como NULL
     const dataInicio = (data_inicio && data_inicio !== '') ? data_inicio : null;
     const dataFim = (data_fim && data_fim !== '') ? data_fim : null;
@@ -102,7 +117,7 @@ exports.criarCronograma = async (req, res) => {
     `, [
       titulo,
       descricao,
-      organizacao,
+      organizacaoNormalizada,
       fase_atual,
       dataInicio,
       dataFim,
