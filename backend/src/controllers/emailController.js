@@ -78,9 +78,12 @@ exports.enviarNotasFiscais = async (req, res) => {
       WHERE competencia_id = ? AND tipo_anexo = 'notas_fiscais'
     `;
 
+    console.log('🔍 Executando query para buscar anexos...');
     const anexos = await executeQueryWithRetry(anexosQuery, [competenciaId]);
+    console.log('🔍 Anexos encontrados:', anexos);
 
     if (!anexos || anexos.length === 0) {
+      console.log('❌ Nenhuma nota fiscal encontrada, retornando 404');
       return res.status(404).json({
         success: false,
         error: 'Nenhuma nota fiscal encontrada para esta competência'
@@ -140,12 +143,14 @@ exports.enviarNotasFiscais = async (req, res) => {
         // Não falha o envio por causa do log
       }
 
+      console.log('✅ Enviando resposta de sucesso...');
       res.json({
         success: true,
         message: 'Notas fiscais enviadas com sucesso',
         messageId: resultado.messageId,
         anexosEnviados: anexosValidos.length
       });
+      console.log('✅ Resposta de sucesso enviada!');
     } else {
       res.status(500).json({
         success: false,
@@ -156,11 +161,14 @@ exports.enviarNotasFiscais = async (req, res) => {
 
   } catch (error) {
     console.error('❌ Erro no controller de envio de email:', error);
+    console.error('❌ Stack trace:', error.stack);
+    console.log('❌ Enviando resposta de erro...');
     res.status(500).json({
       success: false,
       error: 'Erro interno do servidor',
       message: error.message
     });
+    console.log('❌ Resposta de erro enviada!');
   }
 };
 
