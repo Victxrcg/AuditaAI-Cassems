@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import { useToast } from '@/hooks/use-toast';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import { 
@@ -1876,7 +1877,7 @@ const Cronograma = () => {
 
       {/* Modal de Visualização */}
       <Dialog open={isViewDialogOpen} onOpenChange={setIsViewDialogOpen}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
           <DialogHeader className="relative">
             {viewingCronograma && currentUser?.organizacao === 'portes' && (
               <Button
@@ -1903,7 +1904,7 @@ const Cronograma = () => {
           </DialogHeader>
           
           {viewingCronograma && (
-            <div className="space-y-6">
+            <div className="flex-1 overflow-hidden flex flex-col space-y-6">
               {/* Status e Prioridade */}
               <div className="flex items-center gap-4">
                 <div className="flex items-center gap-2">
@@ -2003,51 +2004,53 @@ const Cronograma = () => {
               )}
 
               {/* Checklist */}
-              <div>
+              <div className="flex-1 overflow-hidden flex flex-col">
                 <h3 className="text-sm font-medium text-gray-600 mb-3">Checklist da Demanda</h3>
-                {checklistLoading ? (
-                  <div className="flex justify-center py-4">
-                    <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
-                  </div>
-                ) : checklistItems.length > 0 ? (
-                  <div className="space-y-2">
-                    {checklistItems.map((item) => (
-                      <div
-                        key={item.id}
-                        className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors"
-                      >
-                        <button
-                          onClick={() => toggleChecklistItemStatus(item.id, !item.concluido)}
-                          className={`flex-shrink-0 w-5 h-5 rounded border-2 flex items-center justify-center transition-colors ${
-                            item.concluido
-                              ? 'bg-green-500 border-green-500 text-white'
-                              : 'border-gray-300 hover:border-green-400'
-                          }`}
+                <ScrollArea className="flex-1 pr-4">
+                  {checklistLoading ? (
+                    <div className="flex justify-center py-4">
+                      <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
+                    </div>
+                  ) : checklistItems.length > 0 ? (
+                    <div className="space-y-2">
+                      {checklistItems.map((item) => (
+                        <div
+                          key={item.id}
+                          className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors"
                         >
-                          {item.concluido && <CheckCircle className="h-3 w-3" />}
-                        </button>
-                        <div className="flex-1 min-w-0">
-                          <p className={`text-sm font-medium ${item.concluido ? 'line-through text-gray-500' : 'text-gray-700'}`}>
-                            {item.titulo}
-                          </p>
-                          {item.descricao && (
-                            <p className={`text-xs ${item.concluido ? 'text-gray-400' : 'text-gray-500'}`}>
-                              {item.descricao}
+                          <button
+                            onClick={() => toggleChecklistItemStatus(item.id, !item.concluido)}
+                            className={`flex-shrink-0 w-5 h-5 rounded border-2 flex items-center justify-center transition-colors ${
+                              item.concluido
+                                ? 'bg-green-500 border-green-500 text-white'
+                                : 'border-gray-300 hover:border-green-400'
+                            }`}
+                          >
+                            {item.concluido && <CheckCircle className="h-3 w-3" />}
+                          </button>
+                          <div className="flex-1 min-w-0">
+                            <p className={`text-sm font-medium ${item.concluido ? 'line-through text-gray-500' : 'text-gray-700'}`}>
+                              {item.titulo}
                             </p>
-                          )}
+                            {item.descricao && (
+                              <p className={`text-xs ${item.concluido ? 'text-gray-400' : 'text-gray-500'}`}>
+                                {item.descricao}
+                              </p>
+                            )}
+                          </div>
                         </div>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="text-center py-6 text-gray-500">
-                    <CheckSquare className="h-8 w-8 mx-auto mb-2 text-gray-300" />
-                    <p className="text-sm">Nenhum item no checklist</p>
-                    <p className="text-xs text-gray-400 mt-1">
-                      Clique no botão "Checklist" abaixo para adicionar itens
-                    </p>
-                  </div>
-                )}
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-center py-6 text-gray-500">
+                      <CheckSquare className="h-8 w-8 mx-auto mb-2 text-gray-300" />
+                      <p className="text-sm">Nenhum item no checklist</p>
+                      <p className="text-xs text-gray-400 mt-1">
+                        Clique no botão "Checklist" abaixo para adicionar itens
+                      </p>
+                    </div>
+                  )}
+                </ScrollArea>
               </div>
 
               {/* Observações */}
@@ -2061,7 +2064,7 @@ const Cronograma = () => {
               )}
 
               {/* Ações */}
-              <div className="flex items-center pt-4 border-t">
+              <div className="flex items-center pt-4 border-t flex-shrink-0">
                 {currentUser?.organizacao === 'portes' && (
                   <Button
                     variant="outline"
