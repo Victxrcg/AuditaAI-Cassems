@@ -335,6 +335,7 @@ const ComplianceItemCard = memo(({
   onToggleExpanded: (id: string) => void;
   downloadParecerPDF: (parecerText: string) => void;
   complianceItems: ComplianceItem[]; // ← ADICIONAR ESTA PROP
+  apiBase: string; // ← ADICIONAR API_BASE
 }) => {
   const [uploading, setUploading] = useState(false);
   const [anexos, setAnexos] = useState<Anexo[]>(item.anexos || []);
@@ -853,7 +854,7 @@ const ComplianceItemCard = memo(({
               {/* Botão de envio de email */}
               <div className="mt-4 flex justify-end">
                 <Button
-                  onClick={() => {
+                  onClick={async () => {
                     if (!item.emailRemetente || !item.emailDestinatario) {
                       toast({
                         title: "Campos obrigatórios",
@@ -870,18 +871,60 @@ const ComplianceItemCard = memo(({
                       });
                       return;
                     }
-                    // TODO: Implementar função de envio de email
-                    toast({
-                      title: "Email enviado!",
-                      description: `Notas fiscais enviadas de ${item.emailRemetente} para ${item.emailDestinatario}`,
-                      variant: "default",
-                    });
+                    if (!currentCompetenciaId) {
+                      toast({
+                        title: "Competência não encontrada",
+                        description: "Salve a competência antes de enviar por email.",
+                        variant: "destructive",
+                      });
+                      return;
+                    }
+
+                    try {
+                      // Usar o estado de loading do componente pai
+                      // setLoading(true);
+                      
+                      const response = await fetch(`${apiBase}/api/email/enviar-notas-fiscais`, {
+                        method: 'POST',
+                        headers: {
+                          'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                          emailRemetente: item.emailRemetente,
+                          emailDestinatario: item.emailDestinatario,
+                          competenciaId: currentCompetenciaId
+                        })
+                      });
+
+                      const data = await response.json();
+
+                      if (data.success) {
+                        toast({
+                          title: "Email enviado!",
+                          description: `Notas fiscais enviadas de ${item.emailRemetente} para ${item.emailDestinatario}`,
+                          variant: "default",
+                        });
+                      } else {
+                        toast({
+                          title: "Erro ao enviar email",
+                          description: data.error || "Erro desconhecido",
+                          variant: "destructive",
+                        });
+                      }
+                    } catch (error) {
+                      console.error('Erro ao enviar email:', error);
+                      toast({
+                        title: "Erro de conexão",
+                        description: "Erro ao conectar com o servidor",
+                        variant: "destructive",
+                      });
+                    }
                   }}
                   className="bg-blue-600 hover:bg-blue-700 text-white"
-                  disabled={!item.emailRemetente || !item.emailDestinatario || anexos.length === 0}
+                  disabled={!item.emailRemetente || !item.emailDestinatario || anexos.length === 0 || loading}
                 >
                   <Mail className="h-4 w-4 mr-2" />
-                  Enviar por Email
+                  {loading ? 'Enviando...' : 'Enviar por Email'}
                 </Button>
               </div>
             </div>
@@ -2600,6 +2643,7 @@ export default function Compliance() {
             onToggleExpanded={handleToggleExpanded}
             downloadParecerPDF={downloadParecerPDF}
             complianceItems={complianceItems}
+            apiBase={API_BASE}
           />
         ))}
       </div>
@@ -2672,6 +2716,7 @@ export default function Compliance() {
             onToggleExpanded={handleToggleExpanded}
             downloadParecerPDF={downloadParecerPDF}
             complianceItems={complianceItems}
+            apiBase={API_BASE}
           />
         ))}
         </div>
