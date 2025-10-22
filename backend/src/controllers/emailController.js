@@ -29,6 +29,10 @@ async function ensureEmailLogsTable() {
 // Função para enviar notas fiscais por email
 exports.enviarNotasFiscais = async (req, res) => {
   try {
+    console.log('📧 Controller enviarNotasFiscais chamado');
+    console.log('📧 Headers:', req.headers);
+    console.log('📧 Body:', req.body);
+    
     // Garantir que a tabela de logs existe
     await ensureEmailLogsTable();
 
@@ -176,7 +180,7 @@ exports.testarEmail = async (req, res) => {
 
     const resultado = await enviarEmailComAnexos(
       emailDestinatario,
-      process.env.EMAIL_USER || 'conciliacaoportes.306@gmail.com',
+      process.env.SMTP_FROM || 'no-reply@portes.com.br',
       'Teste de Email - AuditaAI',
       `
         <div style="font-family: Arial, sans-serif;">

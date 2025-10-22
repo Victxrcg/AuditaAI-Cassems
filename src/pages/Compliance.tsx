@@ -885,9 +885,7 @@ const ComplianceItemCard = memo(({
                       // Usar o estado de loading do componente pai
                       // setLoading(true);
                       
-                      // Construir URL corretamente, evitando duplicação de /api
-                      const baseUrl = apiBase.endsWith('/api') ? apiBase : `${apiBase}/api`;
-                      const response = await fetch(`${baseUrl}/email/enviar-notas-fiscais`, {
+                      const response = await fetch(`${apiBase}/api/email/enviar-notas-fiscais`, {
                         method: 'POST',
                         headers: {
                           'Content-Type': 'application/json',
