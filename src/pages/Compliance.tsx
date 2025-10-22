@@ -321,7 +321,8 @@ const ComplianceItemCard = memo(({
   currentCompetenciaId,
   onToggleExpanded,
   downloadParecerPDF,
-  complianceItems // ← ADICIONAR ESTA PROP para verificar fluxo sequencial
+  complianceItems,
+  apiBase
 }: {
   item: ComplianceItem;
   onFieldChange: (id: string, field: 'valor' | 'data' | 'observacoes' | 'emailRemetente' | 'emailDestinatario', value: string) => void;
@@ -334,8 +335,8 @@ const ComplianceItemCard = memo(({
   currentCompetenciaId: string | null;
   onToggleExpanded: (id: string) => void;
   downloadParecerPDF: (parecerText: string) => void;
-  complianceItems: ComplianceItem[]; // ← ADICIONAR ESTA PROP
-  apiBase: string; // ← ADICIONAR API_BASE
+  complianceItems: ComplianceItem[];
+  apiBase: string;
 }) => {
   const [uploading, setUploading] = useState(false);
   const [anexos, setAnexos] = useState<Anexo[]>(item.anexos || []);
