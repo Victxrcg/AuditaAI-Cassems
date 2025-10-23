@@ -69,6 +69,7 @@ interface ComplianceItem {
   // Campos específicos para envio de email (Notas Fiscais)
   emailRemetente?: string;
   emailDestinatario?: string;
+  emailEnviado?: boolean;
 }
 
 interface Competencia {
@@ -852,6 +853,19 @@ const ComplianceItemCard = memo(({
                 </div>
               </div>
               
+              {/* Status de envio */}
+              {item.emailEnviado && (
+                <div className="mt-4 p-3 bg-green-50 border border-green-200 rounded-lg">
+                  <div className="flex items-center gap-2">
+                    <Mail className="h-5 w-5 text-green-600" />
+                    <span className="text-green-800 font-medium">Email enviado com sucesso!</span>
+                  </div>
+                  <p className="text-sm text-green-700 mt-1">
+                    De: {item.emailRemetente} → Para: {item.emailDestinatario}
+                  </p>
+                </div>
+              )}
+
               {/* Botão de envio de email */}
               <div className="mt-4 flex justify-end">
                 <Button
@@ -907,6 +921,9 @@ const ComplianceItemCard = memo(({
                       const data = await response.json();
 
                       if (data.success) {
+                        // Marcar email como enviado
+                        onFieldChange(item.id, 'emailEnviado', true);
+                        
                         toast({
                           title: "Email enviado!",
                           description: `Notas fiscais enviadas de ${item.emailRemetente} para ${item.emailDestinatario}`,
@@ -928,11 +945,11 @@ const ComplianceItemCard = memo(({
                       });
                     }
                   }}
-                  className="bg-blue-600 hover:bg-blue-700 text-white"
-                  disabled={!item.emailRemetente || !item.emailDestinatario || anexos.length === 0 || loading}
+                  className={item.emailEnviado ? "bg-green-600 hover:bg-green-700 text-white" : "bg-blue-600 hover:bg-blue-700 text-white"}
+                  disabled={!item.emailRemetente || !item.emailDestinatario || anexos.length === 0 || loading || item.emailEnviado}
                 >
                   <Mail className="h-4 w-4 mr-2" />
-                  {loading ? 'Enviando...' : 'Enviar por Email'}
+                  {loading ? 'Enviando...' : item.emailEnviado ? 'Email Enviado ✓' : 'Enviar por Email'}
                 </Button>
               </div>
             </div>
@@ -2009,7 +2026,7 @@ export default function Compliance() {
   };
 
   // Handlers estáveis com useCallback
-  const handleFieldChange = useCallback((id: string, field: 'valor' | 'data' | 'observacoes' | 'emailRemetente' | 'emailDestinatario', value: string) => {
+  const handleFieldChange = useCallback((id: string, field: 'valor' | 'data' | 'observacoes' | 'emailRemetente' | 'emailDestinatario' | 'emailEnviado', value: string | boolean) => {
     setComplianceItems(prev => prev.map(item =>
       item.id === id
         ? { ...item, [field]: value }
