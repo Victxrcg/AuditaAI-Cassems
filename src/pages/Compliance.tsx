@@ -566,12 +566,8 @@ const ComplianceItemCard = memo(({
                     <Button
                       onClick={() => gerarParecer(currentCompetenciaId || '')}
                       size="lg"
-                      className={`${
-                        canGenerateAI 
-                          ? "bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white"
-                          : "bg-gradient-to-r from-gray-400 to-gray-500 hover:from-gray-500 hover:to-gray-600 text-white cursor-not-allowed opacity-60"
-                      }`}
-                      disabled={loading || !canGenerateAI}
+                      className="bg-gradient-to-r from-gray-400 to-gray-500 hover:from-gray-500 hover:to-gray-600 text-white cursor-not-allowed opacity-60"
+                      disabled={true}
                     >
                       {loading ? (
                         <>
@@ -580,11 +576,7 @@ const ComplianceItemCard = memo(({
                         </>
                       ) : (
                         <>
-                          {canGenerateAI ? (
-                            <MessageSquare className="h-5 w-5 mr-2" />
-                          ) : (
-                            <Lock className="h-5 w-5 mr-2" />
-                          )}
+                          <Lock className="h-5 w-5 mr-2" />
                           Gerar Parecer IA
                         </>
                       )}
@@ -1537,8 +1529,8 @@ export default function Compliance() {
               }
               break;
             case '4': // Comprovação de Compensações
-              if (competencia.imposto_compensado_observacoes) {
-                updatedItem.observacoes = competencia.imposto_compensado_observacoes;
+              if (competencia.imposto_compensado_texto) {
+                updatedItem.observacoes = competencia.imposto_compensado_texto;
               }
               break;
             case '6': // Comprovação de Email

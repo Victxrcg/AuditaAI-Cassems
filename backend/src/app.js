@@ -9,6 +9,7 @@ const cronogramaRoutes = require('./routes/cronogramaRoutes');
 const checklistRoutes = require('./routes/checklistRoutes');
 const healthRoutes = require('./routes/healthRoutes');
 const emailRoutes = require('./routes/emailRoutes');
+const pdfRoutes = require('./routes/pdfRoutes');
 const { getPoolStatus, getDbPool } = require('./lib/db');
 const app = express();
 
@@ -72,6 +73,7 @@ app.use('/api/usuarios', usuariosRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/cronograma', cronogramaRoutes);
 app.use('/api/email', emailRoutes); // ← MOVER PARA ANTES das rotas genéricas
+app.use('/api/pdf', pdfRoutes);
 app.use('/api', checklistRoutes);
 app.use('/api', healthRoutes);
 

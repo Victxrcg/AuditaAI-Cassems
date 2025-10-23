@@ -11,6 +11,20 @@ const normalizeOrganization = (org) => {
   return s.replace(/\s+/g, '_');
 };
 
+// Função para limpar títulos removendo símbolos estranhos
+const limparTitulo = (titulo) => {
+  if (!titulo) return '';
+  
+  return titulo
+    .replace(/^[#ó'Ø=Ý\s]+/, '') // Remove símbolos estranhos do início
+    .replace(/[#ó'Ø=Ý%Ë]/g, '') // Remove símbolos estranhos específicos dos checklists
+    .replace(/^\d+\.\s*/, '') // Remove numeração existente (ex: "1. ")
+    .replace(/\s+/g, ' ') // Remove espaços múltiplos
+    .replace(/^[^\w\u00C0-\u017F]/, '') // Remove qualquer caractere não-alfabético do início (incluindo acentos)
+    .replace(/\s+/g, ' ') // Remove espaços múltiplos novamente
+    .trim(); // Remove espaços no início e fim
+};
+
 // Helper para tratar retorno do query
 const safeQuery = async (pool, sql, params = []) => {
   const result = await pool.query(sql, params);
@@ -128,11 +142,19 @@ const createChecklistItem = async (req, res) => {
     const nextOrder = orderRows.length > 0 ? Number(orderRows[0].next_order) : 1;
     console.log("🔍 createChecklistItem - nextOrder:", nextOrder);
 
+    // Limpar título e descrição removendo símbolos estranhos
+    const tituloLimpo = limparTitulo(titulo);
+    const descricaoLimpa = descricao ? limparTitulo(descricao) : descricao;
+    console.log(`🔍 Checklist - Título original: "${titulo}" -> Limpo: "${tituloLimpo}"`);
+    if (descricao) {
+      console.log(`🔍 Checklist - Descrição original: "${descricao}" -> Limpa: "${descricaoLimpa}"`);
+    }
+
     const insertResult = await safeQuery(pool, `
       INSERT INTO cronograma_checklist (
         cronograma_id, titulo, descricao, ordem, created_by, organizacao
       ) VALUES (?, ?, ?, ?, ?, ?)
-    `, [cronogramaId, titulo, descricao, nextOrder, userId, normalizedOrg]);
+    `, [cronogramaId, tituloLimpo, descricaoLimpa, nextOrder, userId, normalizedOrg]);
 
     const insertId = insertResult.insertId || (insertResult[0]?.insertId);
     if (!insertId) {
@@ -182,8 +204,18 @@ const updateChecklistItem = async (req, res) => {
     const updateFields = [];
     const updateValues = [];
 
-    if (titulo !== undefined) { updateFields.push('titulo = ?'); updateValues.push(titulo); }
-    if (descricao !== undefined) { updateFields.push('descricao = ?'); updateValues.push(descricao); }
+    if (titulo !== undefined) { 
+      const tituloLimpo = limparTitulo(titulo);
+      console.log(`🔍 Atualização Checklist - Título original: "${titulo}" -> Limpo: "${tituloLimpo}"`);
+      updateFields.push('titulo = ?'); 
+      updateValues.push(tituloLimpo); 
+    }
+    if (descricao !== undefined) { 
+      const descricaoLimpa = limparTitulo(descricao);
+      console.log(`🔍 Atualização Checklist - Descrição original: "${descricao}" -> Limpa: "${descricaoLimpa}"`);
+      updateFields.push('descricao = ?'); 
+      updateValues.push(descricaoLimpa); 
+    }
     if (concluido !== undefined) { updateFields.push('concluido = ?'); updateValues.push(concluido); }
     if (ordem !== undefined) { updateFields.push('ordem = ?'); updateValues.push(ordem); }
 

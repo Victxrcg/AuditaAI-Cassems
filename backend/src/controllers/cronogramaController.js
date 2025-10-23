@@ -14,6 +14,20 @@ const normalizeOrganization = (org) => {
   return s.replace(/\s+/g, '_');
 };
 
+// Função para limpar títulos removendo símbolos estranhos
+const limparTitulo = (titulo) => {
+  if (!titulo) return '';
+  
+  return titulo
+    .replace(/^[#ó'Ø=Ý\s]+/, '') // Remove símbolos estranhos do início
+    .replace(/[#ó'Ø=Ý]/g, '') // Remove símbolos estranhos em qualquer lugar
+    .replace(/^\d+\.\s*/, '') // Remove numeração existente (ex: "1. ")
+    .replace(/\s+/g, ' ') // Remove espaços múltiplos
+    .replace(/^[^\w\u00C0-\u017F]/, '') // Remove qualquer caractere não-alfabético do início (incluindo acentos)
+    .replace(/\s+/g, ' ') // Remove espaços múltiplos novamente
+    .trim(); // Remove espaços no início e fim
+};
+
 // Listar cronogramas filtrados por organização
 exports.listarCronogramas = async (req, res) => {
   try {
@@ -115,6 +129,10 @@ exports.criarCronograma = async (req, res) => {
     const organizacaoNormalizada = normalizeOrganization(organizacao);
     console.log(`🔍 Organização original: "${organizacao}" -> Normalizada: "${organizacaoNormalizada}"`);
     
+    // Limpar título removendo símbolos estranhos
+    const tituloLimpo = limparTitulo(titulo);
+    console.log(`🔍 Título original: "${titulo}" -> Limpo: "${tituloLimpo}"`);
+    
     // Tratar datas vazias como NULL
     const dataInicio = (data_inicio && data_inicio !== '') ? data_inicio : null;
     const dataFim = (data_fim && data_fim !== '') ? data_fim : null;
@@ -125,7 +143,7 @@ exports.criarCronograma = async (req, res) => {
         responsavel_id, prioridade, observacoes, status, motivo_atraso
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `, [
-      titulo,
+      tituloLimpo,
       descricao,
       organizacaoNormalizada,
       fase_atual,
@@ -198,7 +216,12 @@ exports.atualizarCronograma = async (req, res) => {
     const updates = [];
     const params = [];
     
-    if (titulo !== undefined) { updates.push('titulo = ?'); params.push(titulo); }
+    if (titulo !== undefined) { 
+      const tituloLimpo = limparTitulo(titulo);
+      console.log(`🔍 Atualização - Título original: "${titulo}" -> Limpo: "${tituloLimpo}"`);
+      updates.push('titulo = ?'); 
+      params.push(tituloLimpo); 
+    }
     if (descricao !== undefined) { updates.push('descricao = ?'); params.push(descricao); }
     if (fase_atual !== undefined) { updates.push('fase_atual = ?'); params.push(fase_atual); }
     if (data_inicio !== undefined && data_inicio !== '') { updates.push('data_inicio = ?'); params.push(data_inicio); }

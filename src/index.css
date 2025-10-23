@@ -2,6 +2,24 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Ocultar indicador circular do item Marajó */
+.marajo-item > div > div:first-child,
+.marajo-item div[class*="w-3"][class*="h-3"][class*="rounded-full"],
+.marajo-item div[class*="bg-gray-400"] {
+  display: none !important;
+  visibility: hidden !important;
+  opacity: 0 !important;
+  width: 0 !important;
+  height: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+}
+
+/* CSS mais específico para o componente SelectItem */
+[data-radix-select-item][class*="marajo"] > div > div:first-child {
+  display: none !important;
+}
+
 /* Professional Design System for Business Application */
 
 @layer base {

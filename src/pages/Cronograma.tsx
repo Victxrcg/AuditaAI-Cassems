@@ -1,4 +1,6 @@
 ﻿import { useState, useEffect } from 'react';
+import jsPDF from 'jspdf';
+import html2canvas from 'html2canvas';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -55,7 +57,8 @@ import {
   List,
   User,
   GripVertical,
-  CheckSquare
+  CheckSquare,
+  Download
 } from 'lucide-react';
 
 interface CronogramaItem {
@@ -103,6 +106,8 @@ const Cronograma = () => {
   const [isChecklistOpen, setIsChecklistOpen] = useState(false);
   const [checklistItems, setChecklistItems] = useState<ChecklistItem[]>([]);
   const [checklistLoading, setChecklistLoading] = useState(false);
+  const [isOrganizationModalOpen, setIsOrganizationModalOpen] = useState(false);
+  const [selectedOrganizationForPDF, setSelectedOrganizationForPDF] = useState<string>('todos');
   const initialFormData = () => ({
     titulo: '',
     descricao: '',
@@ -209,6 +214,177 @@ const Cronograma = () => {
     } catch (error) {
       console.error('Erro ao carregar estatísticas:', error);
     }
+  };
+
+
+  // Função para gerar PDF do overview das demandas
+  const gerarOverviewPDF = async (organizacaoSelecionada?: string) => {
+    try {
+      // Usar organização passada como parâmetro ou o filtro atual
+      const orgParaFiltrar = organizacaoSelecionada || filtroOrganizacao;
+      
+      console.log('📄 Gerando PDF para organização:', orgParaFiltrar);
+      
+      // Buscar dados formatados da API
+      const response = await fetch(`${API_BASE}/api/pdf/dados-cronograma?organizacao=${orgParaFiltrar}`, {
+        headers: {
+          'x-user-organization': currentUser?.organizacao || 'cassems',
+          'x-user-id': currentUser?.id || '',
+        },
+      });
+      
+      if (!response.ok) {
+        throw new Error('Erro ao buscar dados para PDF');
+      }
+      
+      const data = await response.json();
+      
+      if (!data.success) {
+        throw new Error(data.error || 'Erro ao processar dados');
+      }
+      
+      const { resumo, organizacoes, metadata } = data.data;
+      
+      // Se não há demandas para a organização selecionada
+      if (resumo.totalDemandas === 0) {
+        alert('Não há demandas para a organização selecionada.');
+        return;
+      }
+      
+      // Criar um novo documento PDF
+      const pdf = new jsPDF('p', 'mm', 'a4');
+      
+      // Configurações do PDF
+      const pageWidth = pdf.internal.pageSize.getWidth();
+      const margin = 20;
+      const contentWidth = pageWidth - (margin * 2);
+      
+      let yPosition = margin;
+      
+      // Função para adicionar texto com quebra de linha
+      const addText = (text: string, fontSize: number = 12, isBold: boolean = false) => {
+        pdf.setFontSize(fontSize);
+        if (isBold) {
+          pdf.setFont('helvetica', 'bold');
+        } else {
+          pdf.setFont('helvetica', 'normal');
+        }
+        
+        const lines = pdf.splitTextToSize(text, contentWidth);
+        pdf.text(lines, margin, yPosition);
+        yPosition += lines.length * (fontSize * 0.4) + 5;
+        
+        // Verificar se precisa de nova página
+        if (yPosition > pdf.internal.pageSize.getHeight() - margin) {
+          pdf.addPage();
+          yPosition = margin;
+        }
+      };
+      
+      // Cabeçalho
+      addText('OVERVIEW DO CRONOGRAMA DE DEMANDAS', 22, true);
+      addText(`Gerado em: ${new Date().toLocaleDateString('pt-BR')} às ${new Date().toLocaleTimeString('pt-BR')}`, 12);
+      addText(`Organização: ${currentUser?.nome_empresa || currentUser?.organizacao_nome || 'Sistema'}`, 14, true);
+      
+      // Mostrar escopo do relatório
+      if (orgParaFiltrar === 'todos') {
+        addText('Escopo: Todas as organizações', 14, true);
+      } else {
+        addText(`Escopo: ${orgParaFiltrar.toUpperCase()}`, 14, true);
+      }
+      addText('', 5); // Espaço
+      
+      // Estatísticas gerais
+      addText('RESUMO GERAL', 16, true);
+      addText(`Total de Demandas: ${resumo.totalDemandas}`, 14);
+      addText(`Demandas Concluídas: ${resumo.demandasConcluidas}`, 14);
+      addText(`Demandas em Andamento: ${resumo.demandasEmAndamento}`, 14);
+      addText(`Demandas Pendentes: ${resumo.demandasPendentes}`, 14);
+      addText(`Demandas Atrasadas: ${resumo.demandasAtrasadas}`, 14);
+      addText(`Percentual de Conclusão: ${resumo.percentualConclusao}%`, 14, true);
+      addText('', 5); // Espaço
+      
+      // Detalhes por organização
+      Object.keys(organizacoes).forEach(organizacao => {
+        const demandasOrg = organizacoes[organizacao];
+        
+        addText(`ORGANIZAÇÃO: ${organizacao.toUpperCase()}`, 16, true);
+        
+        const concluidasOrg = demandasOrg.filter(c => c.status === 'concluido').length;
+        const emAndamentoOrg = demandasOrg.filter(c => c.status === 'em_andamento').length;
+        const pendentesOrg = demandasOrg.filter(c => c.status === 'pendente').length;
+        const atrasadasOrg = demandasOrg.filter(c => c.status === 'atrasado').length;
+        
+        addText(`Total: ${demandasOrg.length} | Concluídas: ${concluidasOrg} | Em Andamento: ${emAndamentoOrg} | Pendentes: ${pendentesOrg} | Atrasadas: ${atrasadasOrg}`, 12);
+        
+        // Listar demandas da organização
+        demandasOrg.forEach((demanda, index) => {
+          const statusEmoji = {
+            'concluido': '✅',
+            'em_andamento': '🔄',
+            'pendente': '⏳',
+            'atrasado': '❌'
+          }[demanda.status] || '❓';
+          
+          addText(`${statusEmoji} ${index + 1}. ${demanda.titulo}`, 14);
+          if (demanda.descricao) {
+            addText(`   Descrição: ${demanda.descricao}`, 12);
+          }
+          addText(`   Responsável: ${demanda.responsavel_nome || 'Não definido'}`, 12);
+          addText(`   Prazo: ${demanda.data_fim ? new Date(demanda.data_fim).toLocaleDateString('pt-BR') : 'Não definido'}`, 12);
+          
+          // Incluir checklists (já formatados pela API)
+          if (demanda.checklists && demanda.checklists.length > 0) {
+            addText(`   Checklist (${demanda.checklists.length} itens):`, 12);
+            demanda.checklists.forEach((item, itemIndex) => {
+              const itemStatus = item.concluido ? '✓' : '○';
+              addText(`     ${itemIndex + 1}. ${itemStatus} ${item.titulo}`, 11);
+              if (item.descricao) {
+                addText(`        ${item.descricao}`, 10);
+              }
+            });
+          }
+          
+          addText('', 3); // Espaço pequeno
+        });
+        
+        addText('', 5); // Espaço entre organizações
+      });
+      
+      // Rodapé
+      const totalPages = pdf.internal.pages.length - 1; // jsPDF usa array 0-indexed
+      for (let i = 1; i <= totalPages; i++) {
+        pdf.setPage(i);
+        pdf.setFontSize(10);
+        pdf.text(`Página ${i} de ${totalPages}`, pageWidth - 30, pdf.internal.pageSize.getHeight() - 10);
+      }
+      
+      // Salvar o PDF
+      const escopoNome = orgParaFiltrar === 'todos' ? 'todas-organizacoes' : orgParaFiltrar.toLowerCase().replace(/\s+/g, '-');
+      const fileName = `overview-cronograma-${escopoNome}-${new Date().toISOString().split('T')[0]}.pdf`;
+      pdf.save(fileName);
+      
+    } catch (error) {
+      console.error('Erro ao gerar PDF:', error);
+      alert('Erro ao gerar o PDF. Tente novamente.');
+    }
+  };
+
+  // Função para lidar com o clique no botão de overview PDF
+  const handleOverviewPDFClick = () => {
+    if (currentUser?.organizacao === 'portes') {
+      // Usuário Portes: abrir modal de seleção
+      setIsOrganizationModalOpen(true);
+    } else {
+      // Outros usuários: baixar diretamente
+      gerarOverviewPDF();
+    }
+  };
+
+  // Função para confirmar e baixar PDF após seleção no modal
+  const confirmarDownloadPDF = () => {
+    setIsOrganizationModalOpen(false);
+    gerarOverviewPDF(selectedOrganizationForPDF);
   };
 
   // Função para carregar itens do checklist
@@ -1482,6 +1658,10 @@ const Cronograma = () => {
               <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
               Recarregar
             </Button>
+            <Button variant="outline" onClick={handleOverviewPDFClick} disabled={loading}>
+              <Download className="h-4 w-4 mr-2" />
+              {filtroOrganizacao === 'todos' ? 'Baixar Overview' : `Overview PDF (${filtroOrganizacao})`}
+            </Button>
             <Button onClick={() => {
               setEditingCronograma(null);
               // Garantir formulário limpo ao abrir nova demanda
@@ -1696,7 +1876,13 @@ const Cronograma = () => {
                             CASSEMS
                           </div>
                         </SelectItem>
-                        <SelectItem value="Marajó / Rede Frota">
+                        <SelectItem 
+                          value="Marajó / Rede Frota" 
+                          className="marajo-item"
+                          style={{
+                            ['--marajo-hide-indicator' as any]: 'none'
+                          }}
+                        >
                           <div className="flex items-center gap-2">
                             <Building className="h-4 w-4" />
                             MARAJÓ / REDE FROTA
@@ -2199,6 +2385,93 @@ const Cronograma = () => {
           }}
         />
       )}
+
+      {/* Modal de Seleção de Organização para PDF */}
+      <Dialog open={isOrganizationModalOpen} onOpenChange={setIsOrganizationModalOpen}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader className="pb-4">
+            <DialogTitle className="flex items-center gap-3 text-lg">
+              <Download className="h-6 w-6" />
+              Selecionar Organização para Overview
+            </DialogTitle>
+            <DialogDescription className="text-base">
+              Escolha qual organização deseja incluir no overview PDF.
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-6">
+            <div className="space-y-3">
+              <Label htmlFor="org-pdf-select" className="text-base font-medium">Organização</Label>
+              <Select value={selectedOrganizationForPDF} onValueChange={setSelectedOrganizationForPDF}>
+                <SelectTrigger className="h-12">
+                  <SelectValue placeholder="Selecione uma organização" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="todos">Todas as organizações</SelectItem>
+                  {organizacoesUnicas.map(org => (
+                    <SelectItem key={org} value={org}>
+                      {org.toUpperCase()}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            
+            {selectedOrganizationForPDF !== 'todos' && (
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                <div className="flex items-start gap-3">
+                  <div className="flex-shrink-0">
+                    <Building className="h-5 w-5 text-blue-600 mt-0.5" />
+                  </div>
+                  <div>
+                    <p className="text-base font-medium text-blue-800">
+                      Overview específico para: {selectedOrganizationForPDF.toUpperCase()}
+                    </p>
+                    <p className="text-sm text-blue-600 mt-2">
+                      Será gerado um PDF contendo apenas as demandas desta organização.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+            
+            {selectedOrganizationForPDF === 'todos' && (
+              <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                <div className="flex items-start gap-3">
+                  <div className="flex-shrink-0">
+                    <Building className="h-5 w-5 text-green-600 mt-0.5" />
+                  </div>
+                  <div>
+                    <p className="text-base font-medium text-green-800">
+                      Overview completo de todas as organizações
+                    </p>
+                    <p className="text-sm text-green-600 mt-2">
+                      Será gerado um PDF contendo todas as demandas de todas as organizações.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div className="flex justify-end gap-4 pt-6 border-t">
+            <Button 
+              variant="outline" 
+              onClick={() => setIsOrganizationModalOpen(false)}
+              className="px-6"
+            >
+              Cancelar
+            </Button>
+            <Button 
+              onClick={confirmarDownloadPDF}
+              className="bg-blue-600 hover:bg-blue-700 px-6"
+            >
+              <Download className="h-4 w-4 mr-2" />
+              Baixar Overview
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
       </div>
     </ErrorBoundary>
   );
