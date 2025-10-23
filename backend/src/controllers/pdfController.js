@@ -1,7 +1,7 @@
 // backend/src/controllers/pdfController.js
 const { getDbPoolWithTunnel } = require('../lib/db');
 
-// Função para limpar títulos removendo símbolos estranhos
+// Função para limpar títulos removendo símbolos estranhos e normalizando caracteres
 const limparTitulo = (titulo) => {
   if (!titulo) return '';
   
@@ -12,6 +12,7 @@ const limparTitulo = (titulo) => {
     .replace(/\s+/g, ' ') // Remove espaços múltiplos
     .replace(/^[^\w\u00C0-\u017F]/, '') // Remove qualquer caractere não-alfabético do início (incluindo acentos)
     .replace(/\s+/g, ' ') // Remove espaços múltiplos novamente
+    .normalize('NFC') // Normalizar caracteres Unicode
     .trim(); // Remove espaços no início e fim
 };
 
@@ -22,6 +23,7 @@ const limparTituloChecklist = (titulo) => {
   return titulo
     .replace(/[#ó'Ø=Ý%Ë]/g, '') // Remove símbolos estranhos específicos dos checklists
     .replace(/\s+/g, ' ') // Remove espaços múltiplos
+    .normalize('NFC') // Normalizar caracteres Unicode
     .trim(); // Remove espaços no início e fim
 };
 
@@ -147,6 +149,9 @@ exports.obterDadosParaPDF = async (req, res) => {
     };
     
     console.log('✅ Dados para PDF gerados com sucesso');
+    
+    // Garantir encoding UTF-8 na resposta
+    res.setHeader('Content-Type', 'application/json; charset=utf-8');
     res.json(resposta);
     
   } catch (error) {

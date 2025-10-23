@@ -252,8 +252,16 @@ const Cronograma = () => {
         return;
       }
       
-      // Criar um novo documento PDF
-      const pdf = new jsPDF('p', 'mm', 'a4');
+      // Criar um novo documento PDF com configurações otimizadas para Unicode
+      const pdf = new jsPDF({
+        orientation: 'p',
+        unit: 'mm',
+        format: 'a4',
+        compress: true
+      });
+      
+      // Configurar fonte que suporta melhor os caracteres especiais
+      pdf.setFont('helvetica');
       
       // Configurações do PDF
       const pageWidth = pdf.internal.pageSize.getWidth();
@@ -262,8 +270,14 @@ const Cronograma = () => {
       
       let yPosition = margin;
       
-      // Função para adicionar texto com quebra de linha
+      // Função para adicionar texto com quebra de linha e suporte melhorado para Unicode
       const addText = (text: string, fontSize: number = 12, isBold: boolean = false) => {
+        // Limpar e normalizar texto para evitar caracteres problemáticos
+        const cleanText = text
+          .replace(/[^\x00-\x7F\u00C0-\u017F\u0100-\u017F\u0180-\u024F\u1E00-\u1EFF\u2000-\u206F\u20A0-\u20CF\u2190-\u21FF]/g, '') // Manter apenas caracteres latinos e símbolos comuns
+          .replace(/\s+/g, ' ') // Normalizar espaços
+          .trim();
+        
         pdf.setFontSize(fontSize);
         if (isBold) {
           pdf.setFont('helvetica', 'bold');
@@ -271,9 +285,40 @@ const Cronograma = () => {
           pdf.setFont('helvetica', 'normal');
         }
         
-        const lines = pdf.splitTextToSize(text, contentWidth);
-        pdf.text(lines, margin, yPosition);
-        yPosition += lines.length * (fontSize * 0.4) + 5;
+        // Usar splitTextToSize para quebra de linha automática
+        const lines = pdf.splitTextToSize(cleanText, contentWidth);
+        
+        // Adicionar cada linha ao PDF
+        lines.forEach((line: string) => {
+          pdf.text(line, margin, yPosition);
+          yPosition += fontSize * 0.4 + 2; // Espaçamento entre linhas
+          
+          // Verificar se precisa de nova página
+          if (yPosition > pdf.internal.pageSize.getHeight() - margin) {
+            pdf.addPage();
+            yPosition = margin;
+          }
+        });
+        
+        yPosition += 3; // Espaço adicional após o texto
+      };
+      
+      // Função para adicionar uma linha de tabela simples
+      const addTableRow = (items: string[], fontSize: number = 10) => {
+        const colWidth = contentWidth / items.length;
+        
+        items.forEach((item, index) => {
+          const x = margin + (index * colWidth);
+          const cleanItem = item
+            .replace(/[^\x00-\x7F\u00C0-\u017F\u0100-\u017F\u0180-\u024F\u1E00-\u1EFF\u2000-\u206F\u20A0-\u20CF\u2190-\u21FF]/g, '')
+            .replace(/\s+/g, ' ')
+            .trim();
+          
+          pdf.setFontSize(fontSize);
+          pdf.text(cleanItem, x, yPosition);
+        });
+        
+        yPosition += fontSize * 0.4 + 5;
         
         // Verificar se precisa de nova página
         if (yPosition > pdf.internal.pageSize.getHeight() - margin) {
@@ -297,11 +342,13 @@ const Cronograma = () => {
       
       // Estatísticas gerais
       addText('RESUMO GERAL', 16, true);
-      addText(`Total de Demandas: ${resumo.totalDemandas}`, 14);
-      addText(`Demandas Concluídas: ${resumo.demandasConcluidas}`, 14);
-      addText(`Demandas em Andamento: ${resumo.demandasEmAndamento}`, 14);
-      addText(`Demandas Pendentes: ${resumo.demandasPendentes}`, 14);
-      addText(`Demandas Atrasadas: ${resumo.demandasAtrasadas}`, 14);
+      addTableRow([
+        `Total: ${resumo.totalDemandas}`,
+        `Concluídas: ${resumo.demandasConcluidas}`,
+        `Em Andamento: ${resumo.demandasEmAndamento}`,
+        `Pendentes: ${resumo.demandasPendentes}`,
+        `Atrasadas: ${resumo.demandasAtrasadas}`
+      ], 12);
       addText(`Percentual de Conclusão: ${resumo.percentualConclusao}%`, 14, true);
       addText('', 5); // Espaço
       
@@ -316,7 +363,13 @@ const Cronograma = () => {
         const pendentesOrg = demandasOrg.filter(c => c.status === 'pendente').length;
         const atrasadasOrg = demandasOrg.filter(c => c.status === 'atrasado').length;
         
-        addText(`Total: ${demandasOrg.length} | Concluídas: ${concluidasOrg} | Em Andamento: ${emAndamentoOrg} | Pendentes: ${pendentesOrg} | Atrasadas: ${atrasadasOrg}`, 12);
+        addTableRow([
+          `Total: ${demandasOrg.length}`,
+          `Concluídas: ${concluidasOrg}`,
+          `Em Andamento: ${emAndamentoOrg}`,
+          `Pendentes: ${pendentesOrg}`,
+          `Atrasadas: ${atrasadasOrg}`
+        ], 10);
         
         // Listar demandas da organização (usando dados da API já limpos)
         demandasOrg.forEach((demanda, index) => {
