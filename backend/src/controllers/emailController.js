@@ -65,7 +65,7 @@ exports.enviarNotasFiscais = async (req, res) => {
       competenciaId
     });
 
-    // Buscar anexos da competência (tipo 'notas_fiscais')
+    // Buscar anexos da competência (tipo 'estabelecimento' para item 7 - Notas Fiscais)
     const anexosQuery = `
       SELECT 
         id,
@@ -75,7 +75,7 @@ exports.enviarNotasFiscais = async (req, res) => {
         mimetype,
         tipo_anexo
       FROM anexos 
-      WHERE competencia_id = ? AND tipo_anexo = 'notas_fiscais'
+      WHERE competencia_id = ? AND tipo_anexo = 'estabelecimento'
     `;
 
     console.log('🔍 Executando query para buscar anexos...');
