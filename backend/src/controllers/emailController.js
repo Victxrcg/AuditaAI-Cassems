@@ -66,21 +66,28 @@ exports.enviarNotasFiscais = async (req, res) => {
     });
 
     // Buscar anexos da competência (tipo 'estabelecimento' para item 7 - Notas Fiscais)
+    // CORREÇÃO: Usar tabela compliance_anexos, não anexos
     const anexosQuery = `
       SELECT 
         id,
         nome_arquivo,
         caminho_arquivo,
         tamanho_arquivo,
-        mimetype,
+        tipo_mime as mimetype,
         tipo_anexo
-      FROM anexos 
-      WHERE competencia_id = ? AND tipo_anexo = 'estabelecimento'
+      FROM compliance_anexos 
+      WHERE compliance_id = ? AND tipo_anexo = 'estabelecimento'
     `;
 
-    console.log('🔍 Executando query para buscar anexos...');
+    // Debug: buscar TODOS os anexos da competência primeiro
+    console.log('🔍 DEBUG: Buscando TODOS os anexos da competência...');
+    const debugQuery = `SELECT id, nome_arquivo, tipo_anexo FROM compliance_anexos WHERE compliance_id = ?`;
+    const todosAnexos = await executeQueryWithRetry(debugQuery, [competenciaId]);
+    console.log('🔍 DEBUG: Todos os anexos da competência:', todosAnexos);
+
+    console.log('🔍 Executando query para buscar anexos do tipo estabelecimento...');
     const anexos = await executeQueryWithRetry(anexosQuery, [competenciaId]);
-    console.log('🔍 Anexos encontrados:', anexos);
+    console.log('🔍 Anexos encontrados (tipo estabelecimento):', anexos);
 
     if (!anexos || anexos.length === 0) {
       console.log('❌ Nenhuma nota fiscal encontrada, retornando 404');
