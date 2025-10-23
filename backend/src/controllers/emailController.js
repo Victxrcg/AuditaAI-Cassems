@@ -109,6 +109,8 @@ exports.enviarNotasFiscais = async (req, res) => {
     for (const anexo of anexos) {
       console.log(`🔍 Processando anexo: ${anexo.nome_arquivo}`);
       console.log(`🔍 Tamanho dos dados binários: ${anexo.file_data ? anexo.file_data.length : 0} bytes`);
+      console.log(`🔍 Tipo dos dados: ${typeof anexo.file_data}`);
+      console.log(`🔍 É Buffer: ${Buffer.isBuffer(anexo.file_data)}`);
       
       if (anexo.file_data && anexo.file_data.length > 0) {
         // Criar um arquivo temporário com os dados binários
@@ -123,13 +125,28 @@ exports.enviarNotasFiscais = async (req, res) => {
           // Escrever dados binários para arquivo temporário
           fs.writeFileSync(tempFilePath, anexo.file_data);
           
+          // Verificar se o arquivo foi criado corretamente
+          const stats = fs.statSync(tempFilePath);
+          console.log(`🔍 Arquivo temporário criado: ${tempFilePath}`);
+          console.log(`🔍 Tamanho do arquivo temporário: ${stats.size} bytes`);
+          console.log(`🔍 Tamanho esperado: ${anexo.file_data.length} bytes`);
+          
+          if (stats.size === 0) {
+            console.error(`❌ Arquivo temporário está vazio!`);
+            continue;
+          }
+          
+          if (stats.size !== anexo.file_data.length) {
+            console.warn(`⚠️ Tamanho do arquivo temporário (${stats.size}) diferente do esperado (${anexo.file_data.length})`);
+          }
+          
           anexosValidos.push({
             filename: anexo.nome_arquivo,
             path: tempFilePath,
             contentType: anexo.mimetype
           });
           
-          console.log(`✅ Arquivo temporário criado: ${tempFilePath}`);
+          console.log(`✅ Arquivo temporário válido: ${anexo.nome_arquivo}`);
         } catch (error) {
           console.error(`❌ Erro ao criar arquivo temporário para ${anexo.nome_arquivo}:`, error.message);
         }
