@@ -240,17 +240,11 @@ const Cronograma = () => {
       
       const data = await response.json();
       
-      console.log('📄 Dados recebidos da API:', data);
-      
       if (!data.success) {
         throw new Error(data.error || 'Erro ao processar dados');
       }
       
       const { resumo, organizacoes, metadata } = data.data;
-      
-      console.log('📄 Resumo:', resumo);
-      console.log('📄 Organizações:', organizacoes);
-      console.log('📄 Primeira demanda (exemplo):', organizacoes[Object.keys(organizacoes)[0]]?.[0]);
       
       // Se não há demandas para a organização selecionada
       if (resumo.totalDemandas === 0) {
@@ -324,7 +318,7 @@ const Cronograma = () => {
         
         addText(`Total: ${demandasOrg.length} | Concluídas: ${concluidasOrg} | Em Andamento: ${emAndamentoOrg} | Pendentes: ${pendentesOrg} | Atrasadas: ${atrasadasOrg}`, 12);
         
-        // Listar demandas da organização
+        // Listar demandas da organização (usando dados da API já limpos)
         demandasOrg.forEach((demanda, index) => {
           const statusEmoji = {
             'concluido': '✅',
@@ -333,6 +327,7 @@ const Cronograma = () => {
             'atrasado': '❌'
           }[demanda.status] || '❓';
           
+          // Usar o título já limpo pela API
           addText(`${statusEmoji} ${index + 1}. ${demanda.titulo}`, 14);
           if (demanda.descricao) {
             addText(`   Descrição: ${demanda.descricao}`, 12);
@@ -345,6 +340,7 @@ const Cronograma = () => {
             addText(`   Checklist (${demanda.checklists.length} itens):`, 12);
             demanda.checklists.forEach((item, itemIndex) => {
               const itemStatus = item.concluido ? '✓' : '○';
+              // Usar títulos já limpos pela API
               addText(`     ${itemIndex + 1}. ${itemStatus} ${item.titulo}`, 11);
               if (item.descricao) {
                 addText(`        ${item.descricao}`, 10);

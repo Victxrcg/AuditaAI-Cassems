@@ -5,9 +5,7 @@ const { getDbPoolWithTunnel } = require('../lib/db');
 const limparTitulo = (titulo) => {
   if (!titulo) return '';
   
-  console.log('🧹 Limpando título original:', titulo);
-  
-  const tituloLimpo = titulo
+  return titulo
     .replace(/^[#ó'Ø=Ý\s]+/, '') // Remove símbolos estranhos do início
     .replace(/[#ó'Ø=Ý]/g, '') // Remove símbolos estranhos em qualquer lugar
     .replace(/^\d+\.\s*/, '') // Remove numeração existente (ex: "1. ")
@@ -15,26 +13,16 @@ const limparTitulo = (titulo) => {
     .replace(/^[^\w\u00C0-\u017F]/, '') // Remove qualquer caractere não-alfabético do início (incluindo acentos)
     .replace(/\s+/g, ' ') // Remove espaços múltiplos novamente
     .trim(); // Remove espaços no início e fim
-    
-  console.log('🧹 Título limpo:', tituloLimpo);
-  
-  return tituloLimpo;
 };
 
 // Função para limpar títulos de checklist
 const limparTituloChecklist = (titulo) => {
   if (!titulo) return '';
   
-  console.log('🧹 Limpando checklist original:', titulo);
-  
-  const tituloLimpo = titulo
+  return titulo
     .replace(/[#ó'Ø=Ý%Ë]/g, '') // Remove símbolos estranhos específicos dos checklists
     .replace(/\s+/g, ' ') // Remove espaços múltiplos
     .trim(); // Remove espaços no início e fim
-    
-  console.log('🧹 Checklist limpo:', tituloLimpo);
-  
-  return tituloLimpo;
 };
 
 // Endpoint para obter dados formatados para PDF
@@ -76,8 +64,6 @@ exports.obterDadosParaPDF = async (req, res) => {
     const cronogramasFormatados = [];
     
     for (const cronograma of cronogramas) {
-      console.log('📋 Processando cronograma:', cronograma.titulo);
-      
       // Limpar título
       const tituloLimpo = limparTitulo(cronograma.titulo);
       
@@ -88,8 +74,6 @@ exports.obterDadosParaPDF = async (req, res) => {
         WHERE cronograma_id = ?
         ORDER BY ordem ASC
       `, [cronograma.id]);
-      
-      console.log(`📋 Encontrados ${checklists.length} checklists para cronograma ${cronograma.id}`);
       
       // Processar checklists
       const checklistsFormatados = checklists.map(item => ({
@@ -121,16 +105,7 @@ exports.obterDadosParaPDF = async (req, res) => {
       };
       
       cronogramasFormatados.push(cronogramaFormatado);
-      
-      console.log('📋 Cronograma formatado:', {
-        id: cronogramaFormatado.id,
-        tituloOriginal: cronograma.titulo,
-        tituloLimpo: cronogramaFormatado.titulo,
-        checklistsCount: cronogramaFormatado.checklists.length
-      });
     }
-    
-    console.log(`📋 Total de cronogramas formatados: ${cronogramasFormatados.length}`);
     
     // Calcular estatísticas
     const totalDemandas = cronogramasFormatados.length;
@@ -172,8 +147,6 @@ exports.obterDadosParaPDF = async (req, res) => {
     };
     
     console.log('✅ Dados para PDF gerados com sucesso');
-    console.log('📄 Resposta final:', JSON.stringify(resposta, null, 2));
-    
     res.json(resposta);
     
   } catch (error) {
