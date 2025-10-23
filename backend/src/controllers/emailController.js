@@ -67,7 +67,7 @@ exports.enviarNotasFiscais = async (req, res) => {
     });
 
     // Buscar anexos da competência (tipo 'estabelecimento' para item 7 - Notas Fiscais)
-    // CORREÇÃO: Usar tabela compliance_anexos, não anexos
+    // CORREÇÃO: Usar tabela compliance_anexos e incluir file_data (dados binários)
     const anexosQuery = `
       SELECT 
         id,
@@ -75,7 +75,8 @@ exports.enviarNotasFiscais = async (req, res) => {
         caminho_arquivo,
         tamanho_arquivo,
         tipo_mime as mimetype,
-        tipo_anexo
+        tipo_anexo,
+        file_data
       FROM compliance_anexos 
       WHERE compliance_id = ? AND tipo_anexo = 'estabelecimento'
     `;
@@ -100,40 +101,40 @@ exports.enviarNotasFiscais = async (req, res) => {
 
     console.log(`📎 Encontrados ${anexos.length} anexos para envio`);
 
-    // Verificar se os arquivos existem fisicamente
+    // CORREÇÃO: Usar dados binários diretamente da tabela, não arquivos físicos
+    console.log('🔍 DEBUG: Usando dados binários da tabela compliance_anexos...');
+    
     const anexosValidos = [];
     
     for (const anexo of anexos) {
-      // Tentar diferentes caminhos possíveis
-      const caminhosPossiveis = [
-        anexo.caminho_arquivo, // Caminho direto do banco
-        path.join(__dirname, '../../', anexo.caminho_arquivo), // Caminho relativo
-        path.join(__dirname, '../../uploads', anexo.caminho_arquivo), // Com uploads/
-        path.join(__dirname, '../../backend/uploads', anexo.caminho_arquivo), // Com backend/uploads/
-        path.join(process.cwd(), anexo.caminho_arquivo), // Caminho absoluto
-        path.join(process.cwd(), 'uploads', anexo.caminho_arquivo) // Com uploads/
-      ];
+      console.log(`🔍 Processando anexo: ${anexo.nome_arquivo}`);
+      console.log(`🔍 Tamanho dos dados binários: ${anexo.file_data ? anexo.file_data.length : 0} bytes`);
       
-      let arquivoEncontrado = false;
-      
-      for (const caminhoCompleto of caminhosPossiveis) {
-        console.log(`🔍 Verificando arquivo: ${caminhoCompleto}`);
+      if (anexo.file_data && anexo.file_data.length > 0) {
+        // Criar um arquivo temporário com os dados binários
+        const tempDir = path.join(__dirname, '../../temp');
+        if (!fs.existsSync(tempDir)) {
+          fs.mkdirSync(tempDir, { recursive: true });
+        }
         
-        if (fs.existsSync(caminhoCompleto)) {
+        const tempFilePath = path.join(tempDir, `temp_${anexo.id}_${anexo.nome_arquivo}`);
+        
+        try {
+          // Escrever dados binários para arquivo temporário
+          fs.writeFileSync(tempFilePath, anexo.file_data);
+          
           anexosValidos.push({
             filename: anexo.nome_arquivo,
-            path: caminhoCompleto,
+            path: tempFilePath,
             contentType: anexo.mimetype
           });
-          console.log(`✅ Arquivo válido: ${anexo.nome_arquivo} em ${caminhoCompleto}`);
-          arquivoEncontrado = true;
-          break;
+          
+          console.log(`✅ Arquivo temporário criado: ${tempFilePath}`);
+        } catch (error) {
+          console.error(`❌ Erro ao criar arquivo temporário para ${anexo.nome_arquivo}:`, error.message);
         }
-      }
-      
-      if (!arquivoEncontrado) {
-        console.log(`⚠️ Arquivo não encontrado em nenhum caminho: ${anexo.nome_arquivo}`);
-        console.log(`⚠️ Caminhos testados:`, caminhosPossiveis);
+      } else {
+        console.log(`⚠️ Sem dados binários para ${anexo.nome_arquivo}`);
       }
     }
 
@@ -186,6 +187,19 @@ exports.enviarNotasFiscais = async (req, res) => {
         anexosEnviados: anexosValidos.length
       });
       console.log('✅ Resposta de sucesso enviada!');
+      
+      // Limpar arquivos temporários
+      console.log('🧹 Limpando arquivos temporários...');
+      for (const anexo of anexosValidos) {
+        try {
+          if (fs.existsSync(anexo.path)) {
+            fs.unlinkSync(anexo.path);
+            console.log(`🗑️ Arquivo temporário removido: ${anexo.path}`);
+          }
+        } catch (error) {
+          console.warn(`⚠️ Erro ao remover arquivo temporário ${anexo.path}:`, error.message);
+        }
+      }
     } else {
       res.status(500).json({
         success: false,
