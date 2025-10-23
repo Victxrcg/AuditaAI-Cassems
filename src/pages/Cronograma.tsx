@@ -240,11 +240,17 @@ const Cronograma = () => {
       
       const data = await response.json();
       
+      console.log('📄 Dados recebidos da API:', data);
+      
       if (!data.success) {
         throw new Error(data.error || 'Erro ao processar dados');
       }
       
       const { resumo, organizacoes, metadata } = data.data;
+      
+      console.log('📄 Resumo:', resumo);
+      console.log('📄 Organizações:', organizacoes);
+      console.log('📄 Primeira demanda (exemplo):', organizacoes[Object.keys(organizacoes)[0]]?.[0]);
       
       // Se não há demandas para a organização selecionada
       if (resumo.totalDemandas === 0) {
