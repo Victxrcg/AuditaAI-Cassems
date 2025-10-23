@@ -90,7 +90,7 @@ interface Estatisticas {
 }
 
 const Cronograma = () => {
-  const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+  const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:4011';
   const [cronogramas, setCronogramas] = useState<CronogramaItem[]>([]);
   const [estatisticas, setEstatisticas] = useState<Estatisticas | null>(null);
   const [loading, setLoading] = useState(false);

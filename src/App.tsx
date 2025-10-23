@@ -11,6 +11,7 @@ import Register from "./pages/Register";
 import Users from "./pages/Users";
 import Cronograma from "./pages/Cronograma";
 import Documentos from "./pages/Documentos";
+import Ajuda from "./pages/Ajuda";
 import Manutencao from "./pages/Manutencao";
 import { useServerStatus } from "./hooks/useServerStatus";
 
@@ -33,6 +34,7 @@ const AppContent = () => {
         <Route path="/cronograma" element={<Layout><Cronograma /></Layout>} />
         <Route path="/documentos" element={<Layout><Documentos /></Layout>} />
         <Route path="/usuarios" element={<Layout><Users /></Layout>} />
+        <Route path="/ajuda" element={<Layout><Ajuda /></Layout>} />
         {/* Redireciona / e /dashboard para /compliance */}
         <Route path="/" element={<Navigate to="/compliance" />} />
         <Route path="/dashboard" element={<Navigate to="/compliance" />} />

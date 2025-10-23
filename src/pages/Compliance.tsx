@@ -148,7 +148,11 @@ const canGenerateAIParecer = async (complianceItems: ComplianceItem[], competenc
     if (!step) return false;
     
     // Verificar se a etapa tem dados OU anexos
-    const hasData = !!(step.valor || step.data || step.observacoes);
+    const hasData = Boolean(
+      (step.valor && step.valor.trim()) ||
+      (step.data && step.data.trim()) ||
+      (step.observacoes && step.observacoes.trim())
+    );
     let hasAnexos = false;
     
     if (competenciaId) {
@@ -326,7 +330,7 @@ const ComplianceItemCard = memo(({
   apiBase
 }: {
   item: ComplianceItem;
-  onFieldChange: (id: string, field: 'valor' | 'data' | 'observacoes' | 'emailRemetente' | 'emailDestinatario', value: string) => void;
+  onFieldChange: (id: string, field: 'valor' | 'data' | 'observacoes' | 'emailRemetente' | 'emailDestinatario' | 'emailEnviado', value: string | boolean) => void;
   onFileUpload: (id: string, file: File) => Promise<any>;
   onRemoveFile: (id: string, anexoId: number) => void;
   onSave: (id: string) => void;
@@ -1262,7 +1266,11 @@ const HistoricoAlteracoes = ({ historico, loading }: { historico: HistoricoAlter
 
 // Mover as funções para dentro do componente principal Compliance
 export default function Compliance() {
-  const [currentView, setCurrentView] = useState<'list' | 'create' | 'view'>('list');
+  // Inicializar view e competenciaId do localStorage (se existir)
+  const [currentView, setCurrentView] = useState<'list' | 'create' | 'view'>(() => {
+    const savedView = localStorage.getItem('compliance-current-view');
+    return (savedView as 'list' | 'create' | 'view') || 'list';
+  });
   const [selectedCompetencia, setSelectedCompetencia] = useState<Competencia | null>(null);
   const [loading, setLoading] = useState(false);
   const [loadingCompetencia, setLoadingCompetencia] = useState(false);
@@ -1272,7 +1280,9 @@ export default function Compliance() {
   const [competencias, setCompetencias] = useState<Competencia[]>([]);
   // Inicializar complianceItems com estado salvo
   const [complianceItems, setComplianceItems] = useState<ComplianceItem[]>(() => initializeComplianceItems());
-  const [currentCompetenciaId, setCurrentCompetenciaId] = useState<string | null>(null);
+  const [currentCompetenciaId, setCurrentCompetenciaId] = useState<string | null>(() => {
+    return localStorage.getItem('compliance-current-id');
+  });
 
   // NOVO: Estado para data da competência no header
   const [competenciaData, setCompetenciaData] = useState<string>('');
@@ -1299,7 +1309,7 @@ export default function Compliance() {
   const [leisVigentesExpanded, setLeisVigentesExpanded] = useState(true);
 
   // API base URL
-  const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+  const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:4011';
 
   // Mapear IDs dos itens para campos do banco
   const itemFieldMapping: Record<string, Record<string, string>> = {
@@ -1908,19 +1918,38 @@ export default function Compliance() {
           return;
         }
       } else {
-        // Para outros itens, usar o mapeamento antigo
-        const itemFieldMapping: Record<string, string> = {
-          '2': 'relatorio_inicial',
-          '3': 'relatorio_faturamento',
-          '4': 'imposto_compensado',
-          '6': 'emails',
-          '7': 'estabelecimento',
-          '8': 'parecer'
+        // Para outros itens, usar o mapeamento específico por campo
+        const itemFieldMapping = {
+          '2': { 'observacoes': 'relatorio_inicial' },
+          '3': { 'observacoes': 'relatorio_faturamento' },
+          '4': { 'observacoes': 'imposto_compensado', 'valor': 'valor_compensado' },
+          '6': { 'observacoes': 'emails' },
+          '7': { 'observacoes': 'estabelecimento' },
+          '8': { 'observacoes': 'parecer' }
         };
 
-        dbField = itemFieldMapping[itemId];
+        const itemMapping = itemFieldMapping[itemId];
+        if (!itemMapping) {
+          console.error('🔍 Item não mapeado:', itemId);
+          return;
+        }
+
+        dbField = itemMapping[field];
         if (!dbField) {
-          console.error('🔍 Campo não mapeado:', itemId);
+          console.error('🔍 Campo não mapeado para item:', itemId, field);
+          return;
+        }
+        
+        // Se for um campo de data para itens que não são o item 1, não salvar no banco
+        if (field === 'data' && itemId !== '1') {
+          console.log('🔍 Campo de data para item', itemId, '- não salvo no banco (não suportado)');
+          return;
+        }
+        
+        // Se for um campo de email, não salvar no banco (não suportado pelo backend)
+        const unsupportedFields = ['emailRemetente', 'emailDestinatario', 'emailEnviado'];
+        if (unsupportedFields.includes(field as string)) {
+          console.log('🔍 Campo de email para item', itemId, '- não salvo no banco (não suportado)');
           return;
         }
       }
@@ -1933,6 +1962,10 @@ export default function Compliance() {
         itemId: itemId,
         originalField: field
       });
+      
+      console.log('🔍 DEBUG - Campo que será enviado para o backend:', dbField);
+      console.log('🔍 DEBUG - Valor que será enviado:', value);
+      console.log('🔍 DEBUG - Tipo do valor:', typeof value);
 
       const response = await fetch(`${API_BASE}/compliance/compliance/${currentCompetenciaId}/field`, {
         method: 'PUT',
@@ -2378,6 +2411,17 @@ export default function Compliance() {
     loadCurrentUser();
   }, []);
 
+  // Carregar dados da competência ao recarregar a página (se houver uma selecionada)
+  useEffect(() => {
+    const loadSavedCompetencia = async () => {
+      if (currentCompetenciaId && currentView === 'view' && currentUser) {
+        console.log('🔄 Recarregando competência salva:', currentCompetenciaId);
+        await loadComplianceData(currentCompetenciaId);
+      }
+    };
+    loadSavedCompetencia();
+  }, [currentUser]); // Executa apenas uma vez quando o usuário é carregado
+
   // Função para abrir modal de confirmação
   const handleDeleteClick = (competenciaId: string) => {
     setCompetenciaToDelete(competenciaId);
@@ -2614,6 +2658,11 @@ export default function Compliance() {
                     setSelectedCompetencia(competencia);
                     setCurrentCompetenciaId(competencia.id.toString());
                     setCurrentView('view');
+                    
+                    // Salvar estado atual no localStorage
+                    localStorage.setItem('compliance-current-id', competencia.id.toString());
+                    localStorage.setItem('compliance-current-view', 'view');
+                    
                     // Carregar dados de compliance da competência selecionada
                     loadComplianceData(competencia.id.toString());
                   }}
@@ -2698,7 +2747,12 @@ export default function Compliance() {
             Excluir
           </Button>
 
-          <Button onClick={() => setCurrentView('list')} variant="outline" disabled={loadingCompetencia}>
+          <Button onClick={() => {
+            setCurrentView('list');
+            setCurrentCompetenciaId(null);
+            localStorage.removeItem('compliance-current-id');
+            localStorage.removeItem('compliance-current-view');
+          }} variant="outline" disabled={loadingCompetencia}>
             <ArrowLeft className="h-4 w-4 mr-2" />
             Voltar
           </Button>

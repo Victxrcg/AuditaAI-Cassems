@@ -96,6 +96,12 @@ const Sidebar = ({ isOpen, onOpenChange }: SidebarProps) => {
       icon: Users,
       path: "/usuarios",
       badge: null
+    },
+    {
+      name: "Ajuda",
+      icon: HelpCircle,
+      path: "/ajuda",
+      badge: null
     }
   ];
 
