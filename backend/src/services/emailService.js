@@ -30,11 +30,30 @@ const enviarEmailComAnexos = async (destinatario, remetente, assunto, corpo, ane
     const transporter = createTransporter();
 
     // Preparar anexos
-    const attachments = anexos.map(anexo => ({
-      filename: anexo.nome_arquivo,
-      path: anexo.caminho_arquivo,
-      contentType: anexo.mimetype || 'application/pdf'
-    }));
+    console.log('🔍 DEBUG: Processando anexos no emailService...');
+    console.log('🔍 DEBUG: Anexos recebidos:', anexos);
+    
+    const attachments = anexos.map(anexo => {
+      console.log(`🔍 DEBUG: Processando anexo: ${anexo.filename}`);
+      console.log(`🔍 DEBUG: Caminho: ${anexo.path}`);
+      console.log(`🔍 DEBUG: Content-Type: ${anexo.contentType}`);
+      
+      // Verificar se o arquivo existe
+      if (fs.existsSync(anexo.path)) {
+        const stats = fs.statSync(anexo.path);
+        console.log(`🔍 DEBUG: Arquivo existe, tamanho: ${stats.size} bytes`);
+      } else {
+        console.error(`❌ DEBUG: Arquivo não existe: ${anexo.path}`);
+      }
+      
+      return {
+        filename: anexo.filename,
+        path: anexo.path,
+        contentType: anexo.contentType || 'application/pdf'
+      };
+    });
+
+    console.log('🔍 DEBUG: Attachments preparados:', attachments);
 
     const mailOptions = {
       from: remetente,
