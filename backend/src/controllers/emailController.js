@@ -101,11 +101,38 @@ exports.enviarNotasFiscais = async (req, res) => {
 
     // Verificar se os arquivos existem fisicamente
     const anexosValidos = [];
+    
     for (const anexo of anexos) {
-      if (fs.existsSync(anexo.caminho_arquivo)) {
-        anexosValidos.push(anexo);
-      } else {
-        console.warn(`⚠️ Arquivo não encontrado: ${anexo.caminho_arquivo}`);
+      // Tentar diferentes caminhos possíveis
+      const caminhosPossiveis = [
+        anexo.caminho_arquivo, // Caminho direto do banco
+        path.join(__dirname, '../../', anexo.caminho_arquivo), // Caminho relativo
+        path.join(__dirname, '../../uploads', anexo.caminho_arquivo), // Com uploads/
+        path.join(__dirname, '../../backend/uploads', anexo.caminho_arquivo), // Com backend/uploads/
+        path.join(process.cwd(), anexo.caminho_arquivo), // Caminho absoluto
+        path.join(process.cwd(), 'uploads', anexo.caminho_arquivo) // Com uploads/
+      ];
+      
+      let arquivoEncontrado = false;
+      
+      for (const caminhoCompleto of caminhosPossiveis) {
+        console.log(`🔍 Verificando arquivo: ${caminhoCompleto}`);
+        
+        if (fs.existsSync(caminhoCompleto)) {
+          anexosValidos.push({
+            filename: anexo.nome_arquivo,
+            path: caminhoCompleto,
+            contentType: anexo.mimetype
+          });
+          console.log(`✅ Arquivo válido: ${anexo.nome_arquivo} em ${caminhoCompleto}`);
+          arquivoEncontrado = true;
+          break;
+        }
+      }
+      
+      if (!arquivoEncontrado) {
+        console.log(`⚠️ Arquivo não encontrado em nenhum caminho: ${anexo.nome_arquivo}`);
+        console.log(`⚠️ Caminhos testados:`, caminhosPossiveis);
       }
     }
 
