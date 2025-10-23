@@ -226,7 +226,8 @@ const Cronograma = () => {
       console.log('📄 Gerando PDF para organização:', orgParaFiltrar);
       
       // Buscar dados formatados da API
-      const response = await fetch(`${API_BASE}/api/pdf/dados-cronograma?organizacao=${orgParaFiltrar}`, {
+      const baseUrl = API_BASE.endsWith('/api') ? API_BASE : `${API_BASE}/api`;
+      const response = await fetch(`${baseUrl}/pdf/dados-cronograma?organizacao=${orgParaFiltrar}`, {
         headers: {
           'x-user-organization': currentUser?.organizacao || 'cassems',
           'x-user-id': currentUser?.id || '',
