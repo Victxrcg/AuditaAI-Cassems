@@ -34,7 +34,10 @@ exports.obterDadosParaPDF = async (req, res) => {
     const { organizacao } = req.query;
     const userOrg = req.headers['x-user-organization'] || 'cassems';
     
-    console.log('📄 Gerando dados para PDF - Organização:', organizacao || 'todas');
+    console.log('📄 Gerando dados para PDF - Organização solicitada:', organizacao || 'todas');
+    console.log('📄 Organização do usuário:', userOrg);
+    console.log('📄 userOrg === "portes":', userOrg === 'portes');
+    console.log('📄 Tipo de userOrg:', typeof userOrg);
     
     ({ pool, server } = await getDbPoolWithTunnel());
     
@@ -51,16 +54,43 @@ exports.obterDadosParaPDF = async (req, res) => {
     
     const params = [];
     
-    // Filtrar por organização se especificada
-    if (organizacao && organizacao !== 'todos') {
+    // Filtrar por organização baseado no usuário
+    if (userOrg === 'portes') {
+      console.log('🔓 Usuário Portes - pode ver todas as organizações');
+      // Usuário Portes pode ver todas as organizações ou filtrar por uma específica
+      if (organizacao && organizacao !== 'todos') {
+        query += ` AND c.organizacao = ?`;
+        params.push(organizacao);
+        console.log(`🔓 Filtrando por organização específica: ${organizacao}`);
+      } else {
+        console.log('🔓 Sem filtro - retornando todas as organizações');
+      }
+    } else {
+      console.log('🔒 Usuário não-Portes - aplicando filtro de segurança');
+      // Usuários não-Portes só podem ver dados da sua própria organização
       query += ` AND c.organizacao = ?`;
-      params.push(organizacao);
+      params.push(userOrg);
+      console.log(`🔒 Usuário ${userOrg} - limitado aos dados da própria organização`);
     }
     
     query += ` ORDER BY c.prioridade DESC, c.data_inicio ASC, c.created_at DESC`;
     
+    console.log('📄 Query final:', query);
+    console.log('📄 Parâmetros:', params);
+    
     const cronogramas = await pool.query(query, params);
     console.log(`📋 Encontrados ${cronogramas.length} cronogramas`);
+    
+    // Debug: mostrar organizações dos primeiros cronogramas
+    if (cronogramas.length > 0) {
+      const organizacoesEncontradas = [...new Set(cronogramas.map(c => c.organizacao))];
+      console.log('📋 Organizações encontradas:', organizacoesEncontradas);
+      console.log('📋 Primeiro cronograma:', {
+        id: cronogramas[0].id,
+        titulo: cronogramas[0].titulo,
+        organizacao: cronogramas[0].organizacao
+      });
+    }
     
     // Processar cada cronograma
     const cronogramasFormatados = [];

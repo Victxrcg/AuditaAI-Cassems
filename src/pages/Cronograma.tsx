@@ -223,11 +223,22 @@ const Cronograma = () => {
       // Usar organização passada como parâmetro ou o filtro atual
       const orgParaFiltrar = organizacaoSelecionada || filtroOrganizacao;
       
-      console.log('📄 Gerando PDF para organização:', orgParaFiltrar);
-      
       // Buscar dados formatados da API
       const baseUrl = API_BASE.endsWith('/api') ? API_BASE : `${API_BASE}/api`;
-      const response = await fetch(`${baseUrl}/pdf/dados-cronograma?organizacao=${orgParaFiltrar}`, {
+      
+      // Construir URL baseada no tipo de usuário
+      let url = `${baseUrl}/pdf/dados-cronograma`;
+      if (currentUser?.organizacao === 'portes') {
+        // Usuário Portes pode especificar organização
+        url += `?organizacao=${orgParaFiltrar}`;
+      }
+      // Para usuários não-Portes, não enviar parâmetro organizacao - o backend usará x-user-organization
+      
+      console.log('📄 Gerando PDF para organização:', orgParaFiltrar);
+      console.log('📄 Tipo de usuário:', currentUser?.organizacao);
+      console.log('📄 URL da API:', url);
+      
+      const response = await fetch(url, {
         headers: {
           'x-user-organization': currentUser?.organizacao || 'cassems',
           'x-user-id': currentUser?.id || '',
