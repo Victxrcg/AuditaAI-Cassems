@@ -205,18 +205,21 @@ exports.enviarNotasFiscais = async (req, res) => {
       });
       console.log('✅ Resposta de sucesso enviada!');
       
-      // Limpar arquivos temporários
-      console.log('🧹 Limpando arquivos temporários...');
-      for (const anexo of anexosValidos) {
-        try {
-          if (fs.existsSync(anexo.path)) {
-            fs.unlinkSync(anexo.path);
-            console.log(`🗑️ Arquivo temporário removido: ${anexo.path}`);
+      // Limpar arquivos temporários após um delay para garantir que o nodemailer terminou
+      console.log('🧹 Aguardando antes de limpar arquivos temporários...');
+      setTimeout(() => {
+        console.log('🧹 Limpando arquivos temporários...');
+        for (const anexo of anexosValidos) {
+          try {
+            if (fs.existsSync(anexo.path)) {
+              fs.unlinkSync(anexo.path);
+              console.log(`🗑️ Arquivo temporário removido: ${anexo.path}`);
+            }
+          } catch (error) {
+            console.warn(`⚠️ Erro ao remover arquivo temporário ${anexo.path}:`, error.message);
           }
-        } catch (error) {
-          console.warn(`⚠️ Erro ao remover arquivo temporário ${anexo.path}:`, error.message);
         }
-      }
+      }, 2000); // Aguardar 2 segundos
     } else {
       res.status(500).json({
         success: false,

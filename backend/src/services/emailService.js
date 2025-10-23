@@ -42,16 +42,21 @@ const enviarEmailComAnexos = async (destinatario, remetente, assunto, corpo, ane
       if (fs.existsSync(anexo.path)) {
         const stats = fs.statSync(anexo.path);
         console.log(`🔍 DEBUG: Arquivo existe, tamanho: ${stats.size} bytes`);
+        
+        // Ler o arquivo como buffer para evitar problemas de timing
+        const fileBuffer = fs.readFileSync(anexo.path);
+        console.log(`🔍 DEBUG: Buffer lido, tamanho: ${fileBuffer.length} bytes`);
+        
+        return {
+          filename: anexo.filename,
+          content: fileBuffer,
+          contentType: anexo.contentType || 'application/pdf'
+        };
       } else {
         console.error(`❌ DEBUG: Arquivo não existe: ${anexo.path}`);
+        return null;
       }
-      
-      return {
-        filename: anexo.filename,
-        path: anexo.path,
-        contentType: anexo.contentType || 'application/pdf'
-      };
-    });
+    }).filter(attachment => attachment !== null);
 
     console.log('🔍 DEBUG: Attachments preparados:', attachments);
 
