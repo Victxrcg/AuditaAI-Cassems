@@ -1,6 +1,7 @@
 const { executeQueryWithRetry } = require('../lib/db');
 const { enviarNotasFiscais } = require('../services/emailService');
 const fs = require('fs');
+const path = require('path');
 
 // Função para garantir que a tabela de logs de email existe
 async function ensureEmailLogsTable() {
