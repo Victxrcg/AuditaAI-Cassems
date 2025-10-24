@@ -923,16 +923,41 @@ const Cronograma = () => {
   // Estado para controlar a ordem das demandas por organização (drag & drop)
   const [ordemDemandas, setOrdemDemandas] = useState<Record<string, number[]>>({});
   
+  // Função para normalizar organização (igual ao backend)
+  const normalizeOrganization = (org: string) => {
+    if (!org) return '';
+    const s = String(org).toLowerCase().trim();
+    if (s.includes('maraj') || s.includes('rede frota') || s.includes('rede_frota')) return 'rede_frota';
+    if (s.includes('cassems')) return 'cassems';
+    if (s.includes('porte')) return 'portes';
+    // fallback: trocar espaços por underscore
+    return s.replace(/\s+/g, '_');
+  };
+
   // Somente usuários da PORTES podem reordenar na timeline
   const podeReordenar = (currentUser?.organizacao || '').toLowerCase() === 'portes';
 
-  // Sensores para drag & drop
+  // Sensores para drag & drop com suporte melhorado para produção
   const sensors = useSensors(
-    useSensor(PointerSensor),
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 8,
+      },
+    }),
     useSensor(KeyboardSensor, {
       coordinateGetter: sortableKeyboardCoordinates,
     })
   );
+
+  // Debug para ambiente de produção
+  useEffect(() => {
+    console.log('🔍 Ambiente:', import.meta.env.MODE);
+    console.log('🔍 URL atual:', window.location.href);
+    console.log('🔍 User Agent:', navigator.userAgent);
+    console.log('🔍 Touch support:', 'ontouchstart' in window);
+    console.log('🔍 Pointer events:', 'onpointerdown' in window);
+    console.log('🔍 Pode reordenar:', podeReordenar);
+  }, [podeReordenar]);
 
   // Função para aplicar ordem personalizada aos cronogramas
   const aplicarOrdemPersonalizada = (cronogramas: CronogramaItem[], organizacao: string) => {
@@ -953,28 +978,58 @@ const Cronograma = () => {
 
   // Função para lidar com o fim do drag & drop
   const handleDragEnd = (event: DragEndEvent) => {
-    if (!podeReordenar) return; // Sem permissão para reordenar
+    console.log('🔍 handleDragEnd chamado');
+    console.log('🔍 podeReordenar:', podeReordenar);
+    console.log('🔍 currentUser:', currentUser);
+    console.log('🔍 organizacao do usuário:', currentUser?.organizacao);
+    
+    if (!podeReordenar) {
+      console.log('❌ Usuário não tem permissão para reordenar');
+      return; // Sem permissão para reordenar
+    }
+    
     const { active, over } = event;
+    console.log('🔍 active.id:', active.id);
+    console.log('🔍 over?.id:', over?.id);
 
     if (active.id !== over?.id) {
       // Encontrar a organização do item sendo arrastado
       const activeItem = cronogramas.find(c => c.id === active.id);
-      if (!activeItem) return;
+      if (!activeItem) {
+        console.log('❌ Item ativo não encontrado');
+        return;
+      }
 
-      const organizacao = activeItem.organizacao || 'outros';
+      const organizacao = normalizeOrganization(activeItem.organizacao || 'outros');
+      console.log('🔍 organizacao do item:', organizacao);
+      console.log('🔍 organizacao original:', activeItem.organizacao);
+      console.log('🔍 nome da empresa do item:', activeItem.responsavel_empresa);
+      console.log('🔍 organizacao normalizada:', organizacao);
+      
+      // Verificar se é MARAJÓ / REDE FROTA
+      if (organizacao === 'rede_frota') {
+        console.log('🔍 Item é da MARAJÓ / REDE FROTA');
+        console.log('🔍 Verificando se há problemas específicos...');
+      }
       
       // Obter a ordem atual para esta organização
       const currentOrder = ordemDemandas[organizacao] || cronogramas
         .filter(c => c.organizacao === organizacao)
         .map(c => c.id);
 
+      console.log('🔍 ordem atual:', currentOrder);
+      console.log('🔍 cronogramas da organização:', cronogramas.filter(c => c.organizacao === organizacao));
+
       // Encontrar os índices
       const oldIndex = currentOrder.indexOf(active.id as number);
       const newIndex = currentOrder.indexOf(over?.id as number);
 
+      console.log('🔍 oldIndex:', oldIndex, 'newIndex:', newIndex);
+
       if (oldIndex !== -1 && newIndex !== -1) {
         // Reordenar usando arrayMove
         const newOrder = arrayMove(currentOrder, oldIndex, newIndex);
+        console.log('🔍 nova ordem:', newOrder);
         
         // Atualizar o estado
         setOrdemDemandas(prev => ({
@@ -985,6 +1040,11 @@ const Cronograma = () => {
         // Salvar no localStorage para persistir a ordem
         const savedOrder = { ...ordemDemandas, [organizacao]: newOrder };
         localStorage.setItem('cronograma-order', JSON.stringify(savedOrder));
+        
+        console.log('✅ Ordem atualizada com sucesso');
+        console.log('🔍 Estado salvo no localStorage:', savedOrder);
+      } else {
+        console.log('❌ Índices inválidos - oldIndex:', oldIndex, 'newIndex:', newIndex);
       }
     }
   };
