@@ -65,7 +65,7 @@ const listChecklistItems = async (req, res) => {
     let rows;
     if (normalizedOrg === 'portes') {
       rows = await safeQuery(pool, `
-        SELECT id, titulo, descricao, concluido, ordem, created_at, updated_at
+        SELECT id, titulo, descricao, concluido, ordem, data_inicio, data_fim, created_at, updated_at
         FROM cronograma_checklist 
         WHERE cronograma_id = ?
         ORDER BY ordem ASC, id ASC
@@ -73,7 +73,7 @@ const listChecklistItems = async (req, res) => {
     } else {
       // Visível se o item foi criado pela mesma org OU se o cronograma pertence à org do usuário
       rows = await safeQuery(pool, `
-        SELECT id, titulo, descricao, concluido, ordem, created_at, updated_at
+        SELECT id, titulo, descricao, concluido, ordem, data_inicio, data_fim, created_at, updated_at
         FROM cronograma_checklist cc
         WHERE cc.cronograma_id = ?
           AND (
@@ -121,7 +121,7 @@ const createChecklistItem = async (req, res) => {
   let pool, server;
   try {
     const { cronogramaId } = req.params;
-    const { titulo, descricao } = req.body;
+    const { titulo, descricao, data_inicio, data_fim } = req.body;
     const userOrg = req.headers['x-user-organization'] || 'cassems';
     const normalizedOrg = normalizeOrganization(userOrg);
     const userId = req.headers['x-user-id'];
@@ -152,9 +152,9 @@ const createChecklistItem = async (req, res) => {
 
     const insertResult = await safeQuery(pool, `
       INSERT INTO cronograma_checklist (
-        cronograma_id, titulo, descricao, ordem, created_by, organizacao
-      ) VALUES (?, ?, ?, ?, ?, ?)
-    `, [cronogramaId, tituloLimpo, descricaoLimpa, nextOrder, userId, normalizedOrg]);
+        cronograma_id, titulo, descricao, ordem, data_inicio, data_fim, created_by, organizacao
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `, [cronogramaId, tituloLimpo, descricaoLimpa, nextOrder, data_inicio, data_fim, userId, normalizedOrg]);
 
     const insertId = insertResult.insertId || (insertResult[0]?.insertId);
     if (!insertId) {
@@ -162,7 +162,7 @@ const createChecklistItem = async (req, res) => {
     }
 
     const newItemRows = await safeQuery(pool, `
-      SELECT id, titulo, descricao, concluido, ordem, created_at, updated_at
+      SELECT id, titulo, descricao, concluido, ordem, data_inicio, data_fim, created_at, updated_at
       FROM cronograma_checklist 
       WHERE id = ?
     `, [insertId]);
@@ -192,7 +192,7 @@ const updateChecklistItem = async (req, res) => {
   let pool, server;
   try {
     const { cronogramaId, itemId } = req.params;
-    const { titulo, descricao, concluido, ordem } = req.body;
+    const { titulo, descricao, concluido, ordem, data_inicio, data_fim } = req.body;
     const userOrg = req.headers['x-user-organization'] || 'cassems';
     const normalizedOrg = normalizeOrganization(userOrg);
 
@@ -218,6 +218,8 @@ const updateChecklistItem = async (req, res) => {
     }
     if (concluido !== undefined) { updateFields.push('concluido = ?'); updateValues.push(concluido); }
     if (ordem !== undefined) { updateFields.push('ordem = ?'); updateValues.push(ordem); }
+    if (data_inicio !== undefined) { updateFields.push('data_inicio = ?'); updateValues.push(data_inicio); }
+    if (data_fim !== undefined) { updateFields.push('data_fim = ?'); updateValues.push(data_fim); }
 
     if (updateFields.length === 0) {
       return res.status(400).json({ success: false, error: 'Nenhum campo para atualizar' });
@@ -233,7 +235,7 @@ const updateChecklistItem = async (req, res) => {
     `, updateValues);
 
     const updatedRows = await safeQuery(pool, `
-      SELECT id, titulo, descricao, concluido, ordem, created_at, updated_at
+      SELECT id, titulo, descricao, concluido, ordem, data_inicio, data_fim, created_at, updated_at
       FROM cronograma_checklist 
       WHERE id = ?
     `, [itemId]);
