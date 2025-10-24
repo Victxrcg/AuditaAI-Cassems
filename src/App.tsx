@@ -35,9 +35,9 @@ const AppContent = () => {
         <Route path="/documentos" element={<Layout><Documentos /></Layout>} />
         <Route path="/usuarios" element={<Layout><Users /></Layout>} />
         <Route path="/ajuda" element={<Layout><Ajuda /></Layout>} />
-        {/* Redireciona / e /dashboard para /compliance */}
-        <Route path="/" element={<Navigate to="/compliance" />} />
-        <Route path="/dashboard" element={<Navigate to="/compliance" />} />
+        {/* Redireciona / e /dashboard para /cronograma */}
+        <Route path="/" element={<Navigate to="/cronograma" />} />
+        <Route path="/dashboard" element={<Navigate to="/cronograma" />} />
         <Route path="*" element={<NotFound />} />
       </Routes>
     </BrowserRouter>

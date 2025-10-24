@@ -270,7 +270,7 @@ const Users = () => {
           </p>
           {currentUser?.organizacao !== 'portes' && (
             <p className="text-sm text-blue-600 mt-1">
-              ℹ️ Você está visualizando apenas os usuários da sua organização
+              Visualizando usuários da sua organização
             </p>
           )}
         </div>

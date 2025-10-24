@@ -2438,25 +2438,35 @@ export default function Compliance() {
 
   // Renderizar tela de lista
   const renderListCompetencias = () => (
-    <div className="p-6 space-y-6">
-      <div className="flex justify-between items-center">
-          <h1 className="text-3xl font-bold">
+    <div className="p-3 sm:p-4 lg:p-6 space-y-4 lg:space-y-6">
+      <div className="flex flex-col lg:flex-row lg:justify-between lg:items-center space-y-4 lg:space-y-0">
+        <div className="flex-1">
+          <h1 className="text-2xl lg:text-3xl font-bold">
             Compliance Fiscal
           </h1>
           {currentUser?.organizacao === 'portes' ? (
-            <p className="text-sm text-green-600 mt-1">
+            <p className="text-xs lg:text-sm text-green-600 mt-1">
               Acesso completo a todas as competências do sistema.
             </p>
           ) : (
-            <p className="text-sm text-blue-600 mt-1">
+            <p className="text-xs lg:text-sm text-blue-600 mt-1">
               Visualizando as competências da sua organização ({currentUser?.organizacao || 'carregando...'}).
             </p>
           )}
-        <div className="flex gap-2">
-          <Button onClick={testConnection} variant="outline">
+        </div>
+        <div className="flex flex-col sm:flex-row gap-2">
+          <Button 
+            onClick={testConnection} 
+            variant="outline"
+            className="text-xs lg:text-sm font-medium"
+          >
             Testar Conexão
           </Button>
-          <Button onClick={createCompetencia} className="bg-blue-600 hover:bg-blue-700" disabled={loading}>
+          <Button 
+            onClick={createCompetencia} 
+            className="bg-blue-600 hover:bg-blue-700 text-xs lg:text-sm font-medium" 
+            disabled={loading}
+          >
             <Plus className="h-4 w-4 mr-2" />
             {loading ? 'Criando...' : 'Nova Competência'}
           </Button>
@@ -2464,49 +2474,49 @@ export default function Compliance() {
       </div>
 
       {/* Seção de Leis Vigentes - Colapsável */}
-      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+      <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 lg:p-4">
         <div 
           className="flex items-center justify-between cursor-pointer hover:bg-blue-100 rounded-lg p-2 -m-2 transition-colors"
           onClick={() => setLeisVigentesExpanded(!leisVigentesExpanded)}
         >
-          <h2 className="text-lg font-semibold text-blue-900 flex items-center gap-2">
-            <AlertCircle className="h-5 w-5" />
+          <h2 className="text-base lg:text-lg font-semibold text-blue-900 flex items-center gap-2">
+            <AlertCircle className="h-4 w-4 lg:h-5 lg:w-5" />
             Leis Vigentes
           </h2>
           <ChevronDown 
-            className={`h-5 w-5 text-blue-600 transition-transform duration-200 ${
+            className={`h-4 w-4 lg:h-5 lg:w-5 text-blue-600 transition-transform duration-200 ${
               leisVigentesExpanded ? 'rotate-180' : ''
             }`} 
           />
         </div>
         
         {leisVigentesExpanded && (
-          <div className="mt-4 space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="bg-white p-4 rounded-lg border border-blue-100">
-                <h3 className="font-medium text-blue-800 mb-2">Decreto 3.048/1999</h3>
-                <p className="text-sm text-blue-700 mb-3">
+          <div className="mt-3 lg:mt-4 space-y-3 lg:space-y-4">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 lg:gap-4">
+              <div className="bg-white p-3 lg:p-4 rounded-lg border border-blue-100">
+                <h3 className="font-medium text-blue-800 mb-2 text-sm lg:text-base">Decreto 3.048/1999</h3>
+                <p className="text-xs lg:text-sm text-blue-700 mb-3">
                   Regulamenta a Previdência Social e estabelece normas para o regime geral de previdência social.
                 </p>
                 <a 
                   href="https://www.planalto.gov.br/ccivil_03/decreto/d3048.htm" 
                   target="_blank" 
                   rel="noopener noreferrer"
-                  className="text-blue-600 hover:text-blue-800 text-sm font-medium underline"
+                  className="text-blue-600 hover:text-blue-800 text-xs lg:text-sm font-medium underline"
                 >
                   Ver Decreto Completo →
                 </a>
               </div>
-              <div className="bg-white p-4 rounded-lg border border-blue-100">
-                <h3 className="font-medium text-blue-800 mb-2">Solução de Consulta COSIT 79/2023</h3>
-                <p className="text-sm text-blue-700 mb-3">
+              <div className="bg-white p-3 lg:p-4 rounded-lg border border-blue-100">
+                <h3 className="font-medium text-blue-800 mb-2 text-sm lg:text-base">Solução de Consulta COSIT 79/2023</h3>
+                <p className="text-xs lg:text-sm text-blue-700 mb-3">
                   Orientações sobre consulta de CNPJ e procedimentos fiscais vigentes.
                 </p>
                 <a 
                   href="http://normas.receita.fazenda.gov.br/sijut2consulta/consulta.action?facetsExistentes=&orgaosSelecionados=&tiposAtosSelecionados=&lblTiposAtosSelecionados=&ordemColuna=&ordemDirecao=&tipoConsulta=formulario&tipoAtoFacet=&siglaOrgaoFacet=&anoAtoFacet=&termoBusca=consulta+cnpj&numero_ato=79&tipoData=1&dt_inicio=&dt_fim=&ano_ato=&p=1&optOrdem=relevancia&p=1" 
                   target="_blank" 
                   rel="noopener noreferrer"
-                  className="text-blue-600 hover:text-blue-800 text-sm font-medium underline"
+                  className="text-blue-600 hover:text-blue-800 text-xs lg:text-sm font-medium underline"
                 >
                   Ver Consulta Completa →
                 </a>
@@ -2531,14 +2541,14 @@ export default function Compliance() {
         {loading ? (
           <div className="space-y-3">
             {[1, 2, 3].map((i) => (
-              <div key={i} className="flex items-center justify-between p-4 border border-gray-200 rounded-lg bg-white">
+              <div key={i} className="flex flex-col sm:flex-row sm:items-center sm:justify-between p-3 lg:p-4 border border-gray-200 rounded-lg bg-white gap-3">
                 <div className="flex-1 space-y-2">
-                  <Skeleton className="h-6 w-64" />
-                  <Skeleton className="h-4 w-32" />
+                  <Skeleton className="h-5 lg:h-6 w-48 lg:w-64" />
+                  <Skeleton className="h-3 lg:h-4 w-24 lg:w-32" />
                 </div>
                 <div className="flex gap-2">
-                  <Skeleton className="h-10 w-20" />
-                  <Skeleton className="h-10 w-16" />
+                  <Skeleton className="h-8 lg:h-10 w-16 lg:w-20" />
+                  <Skeleton className="h-8 lg:h-10 w-12 lg:w-16" />
                 </div>
               </div>
             ))}
@@ -2547,11 +2557,11 @@ export default function Compliance() {
           competencias.map((competencia) => (
             <div
               key={competencia.id}
-              className="flex items-center justify-between p-4 border border-gray-200 rounded-lg bg-white hover:bg-gray-50 transition-colors"
+              className="flex flex-col sm:flex-row sm:items-center sm:justify-between p-3 lg:p-4 border border-gray-200 rounded-lg bg-white hover:bg-gray-50 transition-colors gap-3"
             >
-              <div className="flex-1">
-                <div className="flex items-center gap-3">
-                  <h3 className="text-lg font-semibold text-gray-900">
+              <div className="flex-1 min-w-0">
+                <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
+                  <h3 className="text-base lg:text-lg font-semibold text-gray-900 truncate">
                     {(() => {
                       // Priorizar os novos campos separados
                       if (competencia.competencia_inicio || competencia.competencia_fim) {
@@ -2630,17 +2640,18 @@ export default function Compliance() {
                 </div>
               </div>
 
-              <div className="flex gap-2">
+              <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
                 {/* Botão de download do parecer se existir */}
                 {competencia.parecer_texto && (
                   <Button
                     variant="outline"
                     size="sm"
                     onClick={() => downloadParecerPDF(competencia.parecer_texto)}
-                    className="border-green-600 text-green-600 hover:bg-green-50"
+                    className="border-green-600 text-green-600 hover:bg-green-50 text-xs lg:text-sm font-medium"
                   >
-                    <Download className="h-4 w-4 mr-1" />
-                    Baixar Parecer
+                    <Download className="h-3 w-3 lg:h-4 lg:w-4 mr-1" />
+                    <span className="hidden sm:inline">Baixar Parecer</span>
+                    <span className="sm:hidden">Baixar</span>
                   </Button>
                 )}
                 
@@ -2659,9 +2670,11 @@ export default function Compliance() {
                     // Carregar dados de compliance da competência selecionada
                     loadComplianceData(competencia.id.toString());
                   }}
+                  className="text-xs lg:text-sm font-medium"
                 >
-                  <Eye className="h-4 w-4 mr-1" />
-                  Visualizar
+                  <Eye className="h-3 w-3 lg:h-4 lg:w-4 mr-1" />
+                  <span className="hidden sm:inline">Visualizar</span>
+                  <span className="sm:hidden">Ver</span>
                 </Button>
               </div>
             </div>
@@ -2719,35 +2732,43 @@ export default function Compliance() {
 
   // Renderizar tela de visualização
   const renderViewCompetencia = () => (
-    <div className="p-6 space-y-6">
-      <div className="flex justify-between items-center mb-6">
-        <div>
-          <h2 className="text-2xl font-bold text-gray-900">
+    <div className="p-3 sm:p-4 lg:p-6 space-y-4 lg:space-y-6">
+      <div className="flex flex-col lg:flex-row lg:justify-between lg:items-center space-y-4 lg:space-y-0 mb-4 lg:mb-6">
+        <div className="flex-1">
+          <h2 className="text-xl lg:text-2xl font-bold text-gray-900">
             Competência
           </h2>
-          <p className="text-gray-600">
+          <p className="text-sm lg:text-base text-gray-600 mt-1">
             Preencha os campos abaixo para gerar o parecer de compliance
           </p>
         </div>
 
-        <div className="flex gap-2">
+        <div className="flex flex-col sm:flex-row gap-2">
           <Button 
             onClick={() => handleDeleteClick(selectedCompetencia?.id || '')}
             variant="destructive"
             disabled={loading || loadingCompetencia}
+            className="text-xs lg:text-sm font-medium"
           >
-            <Trash2 className="h-4 w-4 mr-2" />
-            Excluir
+            <Trash2 className="h-3 w-3 lg:h-4 lg:w-4 mr-1 lg:mr-2" />
+            <span className="hidden sm:inline">Excluir</span>
+            <span className="sm:hidden">Excluir</span>
           </Button>
 
-          <Button onClick={() => {
-            setCurrentView('list');
-            setCurrentCompetenciaId(null);
-            localStorage.removeItem('compliance-current-id');
-            localStorage.removeItem('compliance-current-view');
-          }} variant="outline" disabled={loadingCompetencia}>
-            <ArrowLeft className="h-4 w-4 mr-2" />
-            Voltar
+          <Button 
+            onClick={() => {
+              setCurrentView('list');
+              setCurrentCompetenciaId(null);
+              localStorage.removeItem('compliance-current-id');
+              localStorage.removeItem('compliance-current-view');
+            }} 
+            variant="outline" 
+            disabled={loadingCompetencia}
+            className="text-xs lg:text-sm font-medium"
+          >
+            <ArrowLeft className="h-3 w-3 lg:h-4 lg:w-4 mr-1 lg:mr-2" />
+            <span className="hidden sm:inline">Voltar</span>
+            <span className="sm:hidden">Voltar</span>
           </Button>
         </div>
       </div>
@@ -2811,17 +2832,17 @@ export default function Compliance() {
 
       {/* Modal de confirmação de exclusão */}
       <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
-        <AlertDialogContent>
+        <AlertDialogContent className="mx-4 sm:mx-0">
           <AlertDialogHeader>
-            <AlertDialogTitle className="flex items-center gap-2">
-              <Trash2 className="h-5 w-5 text-red-600" />
+            <AlertDialogTitle className="flex items-center gap-2 text-base lg:text-lg">
+              <Trash2 className="h-4 w-4 lg:h-5 lg:w-5 text-red-600" />
               Confirmar Exclusão
             </AlertDialogTitle>
-            <AlertDialogDescription className="text-base">
+            <AlertDialogDescription className="text-sm lg:text-base">
               Tem certeza que deseja excluir esta competência? Esta ação não pode ser desfeita.
               <br /><br />
               <strong className="text-red-600">⚠️ ATENÇÃO:</strong> Todos os dados relacionados serão excluídos permanentemente:
-              <ul className="list-disc list-inside mt-2 space-y-1">
+              <ul className="list-disc list-inside mt-2 space-y-1 text-sm">
                 <li>Dados da competência</li>
                 <li>Histórico de alterações</li>
                 <li>Arquivos anexados</li>
@@ -2829,13 +2850,13 @@ export default function Compliance() {
               </ul>
             </AlertDialogDescription>
           </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel onClick={cancelDelete}>
+          <AlertDialogFooter className="flex-col sm:flex-row gap-2">
+            <AlertDialogCancel onClick={cancelDelete} className="text-xs lg:text-sm">
               Cancelar
             </AlertDialogCancel>
             <AlertDialogAction 
               onClick={confirmDelete}
-              className="bg-red-600 hover:bg-red-700"
+              className="bg-red-600 hover:bg-red-700 text-xs lg:text-sm"
               disabled={loading}
             >
               {loading ? 'Excluindo...' : 'Sim, Excluir'}

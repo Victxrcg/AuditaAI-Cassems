@@ -107,8 +107,10 @@ const Cronograma = () => {
   const [checklistItems, setChecklistItems] = useState<ChecklistItem[]>([]);
   const [checklistLoading, setChecklistLoading] = useState(false);
   const [isOrganizationModalOpen, setIsOrganizationModalOpen] = useState(false);
+  const [isStatusModalOpen, setIsStatusModalOpen] = useState(false);
   const [selectedOrganizationForPDF, setSelectedOrganizationForPDF] = useState<string>('todos');
   const [selectedStatusForPDF, setSelectedStatusForPDF] = useState<string>('todos');
+  const [selectedStatusForNonPortesPDF, setSelectedStatusForNonPortesPDF] = useState<string>('todos');
   const initialFormData = () => ({
     titulo: '',
     descricao: '',
@@ -333,7 +335,7 @@ const Cronograma = () => {
         // Adicionar cada linha ao PDF
         lines.forEach((line: string) => {
           pdf.text(line, margin, yPosition);
-          yPosition += fontSize * 0.4 + 2; // Espaçamento entre linhas
+          yPosition += fontSize * 0.5 + 3; // Aumentar espaçamento entre linhas
           
           // Verificar se precisa de nova página
           if (yPosition > pdf.internal.pageSize.getHeight() - margin) {
@@ -342,25 +344,55 @@ const Cronograma = () => {
           }
         });
         
-        yPosition += 3; // Espaço adicional após o texto
+        yPosition += 5; // Aumentar espaço adicional após o texto
       };
       
-      // Função para adicionar uma linha de tabela simples
+      // Função para adicionar uma linha de tabela simples com larguras dinâmicas
       const addTableRow = (items: string[], fontSize: number = 10) => {
-        const colWidth = contentWidth / items.length;
+        pdf.setFontSize(fontSize);
         
+        // Calcular larguras dinâmicas baseadas no conteúdo
+        const textWidths = items.map(item => {
+          const cleanItem = item
+            .replace(/[^\x00-\x7F\u00C0-\u017F\u0100-\u017F\u0180-\u024F\u1E00-\u1EFF\u2000-\u206F\u20A0-\u20CF\u2190-\u21FF]/g, '')
+            .replace(/\s+/g, ' ')
+            .trim();
+          return pdf.getTextWidth(cleanItem);
+        });
+        
+        // Calcular larguras proporcionais
+        const totalTextWidth = textWidths.reduce((sum, width) => sum + width, 0);
+        const availableWidth = contentWidth - (items.length - 1) * 10; // 10mm de espaçamento entre colunas
+        
+        const colWidths = textWidths.map(width => (width / totalTextWidth) * availableWidth);
+        
+        // Adicionar cada item com sua largura calculada
+        let currentX = margin;
         items.forEach((item, index) => {
-          const x = margin + (index * colWidth);
           const cleanItem = item
             .replace(/[^\x00-\x7F\u00C0-\u017F\u0100-\u017F\u0180-\u024F\u1E00-\u1EFF\u2000-\u206F\u20A0-\u20CF\u2190-\u21FF]/g, '')
             .replace(/\s+/g, ' ')
             .trim();
           
-          pdf.setFontSize(fontSize);
-          pdf.text(cleanItem, x, yPosition);
+          // Verificar se o texto cabe na coluna, se não, truncar
+          const maxWidth = colWidths[index];
+          const textWidth = pdf.getTextWidth(cleanItem);
+          
+          let displayText = cleanItem;
+          if (textWidth > maxWidth) {
+            // Truncar texto para caber na coluna
+            let truncatedText = cleanItem;
+            while (pdf.getTextWidth(truncatedText + '...') > maxWidth && truncatedText.length > 0) {
+              truncatedText = truncatedText.slice(0, -1);
+            }
+            displayText = truncatedText + '...';
+          }
+          
+          pdf.text(displayText, currentX, yPosition);
+          currentX += colWidths[index] + 10; // 10mm de espaçamento entre colunas
         });
         
-        yPosition += fontSize * 0.4 + 5;
+        yPosition += fontSize * 0.6 + 8; // Aumentar espaçamento vertical
         
         // Verificar se precisa de nova página
         if (yPosition > pdf.internal.pageSize.getHeight() - margin) {
@@ -409,7 +441,9 @@ const Cronograma = () => {
         `Em Andamento: ${resumo.demandasEmAndamento}`,
         `Pendentes: ${resumo.demandasPendentes}`,
         `Atrasadas: ${resumo.demandasAtrasadas}`
-      ], 12);
+      ], 14); // Aumentar tamanho da fonte
+      
+      addText('', 5); // Espaço adicional após estatísticas
       
       if (statusParaFiltrar !== 'todos') {
         addText(`Todas as ${resumo.totalDemandas} demandas são ${statusParaFiltrar === 'concluido' ? 'concluídas' : 
@@ -439,7 +473,9 @@ const Cronograma = () => {
           `Em Andamento: ${emAndamentoOrg}`,
           `Pendentes: ${pendentesOrg}`,
           `Atrasadas: ${atrasadasOrg}`
-        ], 10);
+        ], 12); // Aumentar tamanho da fonte
+        
+        addText('', 3); // Espaço adicional após estatísticas
         
         // Listar demandas da organização (usando dados da API já limpos)
         demandasOrg.forEach((demanda, index) => {
@@ -500,11 +536,11 @@ const Cronograma = () => {
   // Função para lidar com o clique no botão de overview PDF
   const handleOverviewPDFClick = () => {
     if (currentUser?.organizacao === 'portes') {
-      // Usuário Portes: abrir modal de seleção
+      // Usuário Portes: abrir modal de seleção de organização e status
       setIsOrganizationModalOpen(true);
     } else {
-      // Outros usuários: baixar diretamente
-      gerarOverviewPDF();
+      // Usuários não-Portes: abrir modal apenas para seleção de status
+      setIsStatusModalOpen(true);
     }
   };
 
@@ -512,6 +548,12 @@ const Cronograma = () => {
   const confirmarDownloadPDF = () => {
     setIsOrganizationModalOpen(false);
     gerarOverviewPDF(selectedOrganizationForPDF, selectedStatusForPDF);
+  };
+
+  // Função para confirmar e baixar PDF para usuários não-Portes (apenas status)
+  const confirmarDownloadPDFNonPortes = () => {
+    setIsStatusModalOpen(false);
+    gerarOverviewPDF(undefined, selectedStatusForNonPortesPDF);
   };
 
   // Função para carregar itens do checklist
@@ -1295,22 +1337,22 @@ const Cronograma = () => {
               <div key={mesAno} className="border border-gray-200 rounded-lg overflow-hidden">
                 {/* Cabeçalho do grupo */}
                 <div 
-                  className="bg-gray-50 px-6 py-4 cursor-pointer hover:bg-gray-100 transition-colors"
+                  className="bg-gray-50 px-4 lg:px-6 py-3 lg:py-4 cursor-pointer hover:bg-gray-100 transition-colors"
                   onClick={() => toggleGrupo(mesAno)}
                 >
                   <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-2 lg:gap-3">
                       <div className={`w-2 h-2 rounded-full ${isExpanded ? 'bg-blue-500' : 'bg-gray-400'}`}></div>
-                      <h3 className="text-lg font-semibold text-gray-900">
+                      <h3 className="text-base lg:text-lg font-semibold text-gray-900">
                         {mesAno}
                       </h3>
-                      <span className="text-sm text-gray-500">
+                      <span className="text-xs lg:text-sm text-gray-500">
                         {cronogramasDoMes.length} atividade{cronogramasDoMes.length !== 1 ? 's' : ''}
                       </span>
                     </div>
                     <div className="flex items-center gap-2">
                       <svg 
-                        className={`h-5 w-5 text-gray-500 transition-transform ${isExpanded ? 'rotate-90' : ''}`} 
+                        className={`h-4 w-4 lg:h-5 lg:w-5 text-gray-500 transition-transform ${isExpanded ? 'rotate-90' : ''}`} 
                         fill="none" 
                         stroke="currentColor" 
                         viewBox="0 0 24 24"
@@ -1332,30 +1374,30 @@ const Cronograma = () => {
                       return (
                         <div 
                           key={cronograma.id} 
-                          className="p-6 hover:bg-gray-50 transition-colors cursor-pointer"
+                          className="p-4 lg:p-6 hover:bg-gray-50 transition-colors cursor-pointer"
                           onClick={() => {
                             setViewingCronograma(cronograma);
                             setIsViewDialogOpen(true);
                           }}
                           title="Clique para visualizar detalhes"
                         >
-                          <div className="flex items-start gap-4">
+                          <div className="flex items-start gap-3 lg:gap-4">
                             {/* Indicador visual */}
                             <div className="flex-shrink-0 mt-1">
-                              <div className={`w-3 h-3 rounded-full ${statusColor.icon}`}></div>
+                              <div className={`w-2 h-2 lg:w-3 lg:h-3 rounded-full ${statusColor.icon}`}></div>
                             </div>
 
                             {/* Conteúdo da atividade */}
                             <div className="flex-1 min-w-0">
-                              <div className="flex items-start justify-between gap-4">
+                              <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-2 lg:gap-4">
                                 <div className="flex-1 min-w-0">
-                                  <div className="flex items-center gap-2 mb-1 min-w-0">
-                                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-gray-100 text-gray-700 flex-shrink-0">
+                                  <div className="flex flex-col sm:flex-row sm:items-center gap-2 mb-2 min-w-0">
+                                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] lg:text-[11px] font-medium bg-gray-100 text-gray-700 flex-shrink-0 w-fit">
                                       <Building className="h-3 w-3 mr-1" />
                                       {(cronograma.organizacao || '').replace(/_/g, ' ').toUpperCase()}
                                     </span>
                                     <h4 
-                                      className="text-lg font-medium text-gray-900 cursor-pointer hover:text-blue-600 transition-colors truncate"
+                                      className="text-base lg:text-lg font-medium text-gray-900 cursor-pointer hover:text-blue-600 transition-colors truncate"
                                       onClick={() => {
                                         setViewingCronograma(cronograma);
                                         setIsViewDialogOpen(true);
@@ -1367,25 +1409,25 @@ const Cronograma = () => {
                                   </div>
                                   
                                   {/* Status badges */}
-                                  <div className="flex items-center gap-2 mb-3">
-                                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${statusColor.bg} ${statusColor.text}`}>
+                                  <div className="flex flex-wrap items-center gap-2 mb-3">
+                                    <span className={`inline-flex items-center px-2 lg:px-2.5 py-0.5 rounded-full text-[10px] lg:text-xs font-medium ${statusColor.bg} ${statusColor.text}`}>
                                       {cronograma.status === 'concluido' && (
-                                        <svg className="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                                        <svg className="w-2.5 h-2.5 lg:w-3 lg:h-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
                                           <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                                         </svg>
                                       )}
                                       {cronograma.status === 'em_andamento' && (
-                                        <svg className="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                                        <svg className="w-2.5 h-2.5 lg:w-3 lg:h-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
                                           <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clipRule="evenodd" />
                                         </svg>
                                       )}
                                       {cronograma.status === 'atrasado' && (
-                                        <svg className="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                                        <svg className="w-2.5 h-2.5 lg:w-3 lg:h-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
                                           <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
                                         </svg>
                                       )}
                                       {cronograma.status === 'pendente' && (
-                                        <svg className="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                                        <svg className="w-2.5 h-2.5 lg:w-3 lg:h-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
                                           <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clipRule="evenodd" />
                                         </svg>
                                       )}
@@ -1393,8 +1435,8 @@ const Cronograma = () => {
                                     </span>
                                     
                                     {(cronograma.status === 'em_andamento' || cronograma.status === 'pendente') && (
-                                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-800">
-                                        <svg className="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                                      <span className="inline-flex items-center px-2 lg:px-2.5 py-0.5 rounded-full text-[10px] lg:text-xs font-medium bg-orange-100 text-orange-800">
+                                        <svg className="w-2.5 h-2.5 lg:w-3 lg:h-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
                                           <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
                                         </svg>
                                         Aguardando ação
@@ -1403,7 +1445,7 @@ const Cronograma = () => {
                                   </div>
 
                                   {/* Datas */}
-                                  <div className="text-sm text-gray-600">
+                                  <div className="text-xs lg:text-sm text-gray-600">
                                     {dataInicio && dataFim ? (
                                       <span>
                                         {dataInicio.toLocaleDateString('pt-BR')} — {dataFim.toLocaleDateString('pt-BR')}
@@ -1564,14 +1606,14 @@ const Cronograma = () => {
       <div className="space-y-6">
         {/* Cabeçalho da Timeline */}
         <Card>
-          <CardHeader>
-            <div className="flex items-center justify-between">
+          <CardHeader className="pb-4">
+            <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
               <div>
-                <CardTitle className="flex items-center gap-2">
+                <CardTitle className="flex items-center gap-2 text-lg lg:text-xl">
                   <BarChart3 className="h-5 w-5" />
                   Timeline de Demandas
                 </CardTitle>
-                <CardDescription>
+                <CardDescription className="text-sm lg:text-base mt-1">
                   {filtroStatus === 'apenas_concluidas' 
                     ? `Visualização temporal das tarefas concluídas (${cronogramasConcluidos.length} tarefas)`
                     : `Visualização temporal das demandas por organização${podeReordenar ? ' - Arraste para reordenar' : ''}`
@@ -1579,20 +1621,31 @@ const Cronograma = () => {
                 </CardDescription>
               </div>
               
+              {/* Controles da timeline */}
+              <div className="flex items-center gap-2">
+                <div className="text-xs text-gray-500">
+                  {Object.keys(cronogramasOrdenadosPorOrganizacao).length} organizações
+                </div>
+                <div className="text-xs text-gray-500">
+                  {cronogramasParaTimeline.length} demandas
+                </div>
+              </div>
             </div>
           </CardHeader>
-          <CardContent>
+          <CardContent className="p-0">
         {/* Timeline Header */}
         <div className="w-full">
           <div className="w-full">
                 {/* Header dos meses */}
-                <div className="flex border-b-2 border-gray-200">
-                  <div className="w-80 px-4 py-4 font-semibold text-gray-700 bg-gray-100 border-r">
-                    Organização / Demanda
+                <div className="flex border-b-2 border-gray-200 overflow-x-auto">
+                  <div className="w-64 lg:w-80 px-3 lg:px-4 py-3 lg:py-4 font-semibold text-gray-700 bg-gray-100 border-r flex-shrink-0">
+                    <span className="text-sm lg:text-base">Organização / Demanda</span>
                   </div>
                   {timeUnits.map((timeUnit, index) => (
-                    <div key={index} className="px-2 py-4 text-center font-semibold text-gray-700 bg-gray-50 border-r flex-1">
-                      {timeUnit.toLocaleDateString('pt-BR', { month: 'short', year: '2-digit' })}
+                    <div key={index} className="px-1 lg:px-2 py-3 lg:py-4 text-center font-semibold text-gray-700 bg-gray-50 border-r flex-1 min-w-[60px] lg:min-w-[80px]">
+                      <span className="text-xs lg:text-sm">
+                        {timeUnit.toLocaleDateString('pt-BR', { month: 'short', year: '2-digit' })}
+                      </span>
                     </div>
                   ))}
                 </div>
@@ -1607,15 +1660,17 @@ const Cronograma = () => {
                     {Object.entries(cronogramasOrdenadosPorOrganizacao).map(([organizacao, cronogramasOrg]) => (
                   <div key={organizacao} className="border-b border-gray-100">
                     {/* Header da organização */}
-                    <div className="flex items-center h-16 bg-gray-100">
-                      <div className="w-80 px-4 py-4 font-semibold text-gray-900 border-r">
+                    <div className="flex items-center h-12 lg:h-16 bg-gray-100 hover:bg-gray-50 transition-colors">
+                      <div className="w-64 lg:w-80 px-3 lg:px-4 py-3 lg:py-4 font-semibold text-gray-900 border-r flex-shrink-0">
                         <div className="flex items-center gap-2">
-                          <div className={`w-3 h-3 rounded-full ${coresOrganizacao[organizacao] || 'bg-gray-400'}`}></div>
-                          <span className="truncate">{organizacao.toUpperCase()}</span>
+                          <div className={`w-2 h-2 lg:w-3 lg:h-3 rounded-full ${coresOrganizacao[organizacao] || 'bg-gray-400'}`}></div>
+                          <span className="truncate text-sm lg:text-base font-medium">
+                            {organizacao.toUpperCase()}
+                          </span>
                         </div>
                       </div>
                       {timeUnits.map((_, index) => (
-                        <div key={index} className="border-r flex-1"></div>
+                        <div key={index} className="border-r flex-1 min-w-[60px] lg:min-w-[80px]"></div>
                       ))}
                     </div>
 
@@ -1649,15 +1704,17 @@ const Cronograma = () => {
                   Object.entries(cronogramasOrdenadosPorOrganizacao).map(([organizacao, cronogramasOrg]) => (
                     <div key={organizacao} className="border-b border-gray-100">
                       {/* Header da organização */}
-                      <div className="flex items-center h-16 bg-gray-100">
-                        <div className="w-80 px-4 py-4 font-semibold text-gray-900 border-r">
+                      <div className="flex items-center h-12 lg:h-16 bg-gray-100 hover:bg-gray-50 transition-colors">
+                        <div className="w-64 lg:w-80 px-3 lg:px-4 py-3 lg:py-4 font-semibold text-gray-900 border-r flex-shrink-0">
                           <div className="flex items-center gap-2">
-                            <div className={`w-3 h-3 rounded-full ${coresOrganizacao[organizacao] || 'bg-gray-400'}`}></div>
-                            <span className="truncate">{organizacao.toUpperCase()}</span>
+                            <div className={`w-2 h-2 lg:w-3 lg:h-3 rounded-full ${coresOrganizacao[organizacao] || 'bg-gray-400'}`}></div>
+                            <span className="truncate text-sm lg:text-base font-medium">
+                              {organizacao.toUpperCase()}
+                            </span>
                           </div>
                         </div>
                         {timeUnits.map((_, index) => (
-                          <div key={index} className="border-r flex-1"></div>
+                          <div key={index} className="border-r flex-1 min-w-[60px] lg:min-w-[80px]"></div>
                         ))}
                       </div>
 
@@ -1735,68 +1792,112 @@ const Cronograma = () => {
 
   return (
     <ErrorBoundary>
-      <div className="p-6 space-y-6">
+      <div className="p-3 sm:p-4 lg:p-6 space-y-4 lg:space-y-6">
       {/* Header */}
-      <div className="flex justify-between items-center">
-        <div>
-          <h1 className="text-3xl font-bold">Cronograma de Demandas</h1>
-          <p className="text-gray-600">
+      <div className="flex flex-col lg:flex-row lg:justify-between lg:items-center space-y-4 lg:space-y-0">
+        <div className="flex-1">
+          <h1 className="text-2xl lg:text-3xl font-bold">Cronograma de Demandas</h1>
+          <p className="text-sm lg:text-base text-gray-600 mt-1">
             {currentUser?.organizacao === 'portes' 
               ? 'Gerencie todas as demandas de todas as organizações' 
               : `Demandas da ${currentUser?.nome_empresa || currentUser?.organizacao_nome || 'sua organização'}`
             }
           </p>
           {currentUser?.organizacao === 'portes' ? (
-            <p className="text-sm text-green-600 mt-1">
+            <p className="text-xs lg:text-sm text-green-600 mt-1">
               Acesso completo a todos os cronogramas do sistema.
             </p>
           ) : (
-            <p className="text-sm text-blue-600 mt-1">
+            <p className="text-xs lg:text-sm text-blue-600 mt-1">
               Visualizando as demandas.
             </p>
           )}
         </div>
-        <div className="flex gap-2 items-center">
+        <div className="flex flex-col sm:flex-row gap-2 items-stretch sm:items-center">
           {/* Botões de alternância de visualização */}
-          <div className="flex bg-gray-100 rounded-lg p-1 mr-2">
+          <div className="flex bg-gray-100 rounded-lg p-1 shadow-sm border border-gray-200">
             <Button
               variant="ghost"
               size="sm"
               onClick={() => setViewMode('list')}
-              className={`flex items-center ${viewMode === 'list' ? 'bg-blue-500 text-white' : 'hover:bg-gray-200 text-gray-800'} rounded-md px-3`}
+              className={`flex items-center transition-all duration-300 ${
+                viewMode === 'list' 
+                  ? 'bg-blue-500 text-white shadow-md hover:bg-blue-600 transform scale-105 ring-2 ring-blue-200' 
+                  : 'hover:bg-gray-200 text-gray-700 hover:text-gray-900 hover:scale-105'
+              } rounded-md px-3 lg:px-4 py-2 text-xs lg:text-sm font-medium relative group`}
+              title="Visualização em lista - Organizada por grupos de mês"
+              aria-pressed={viewMode === 'list'}
             >
-              <List className="h-4 w-4 mr-2" />
-              Lista
+              <List className={`h-4 w-4 lg:h-5 lg:w-5 mr-1.5 lg:mr-2 transition-transform duration-200 ${
+                viewMode === 'list' ? 'scale-110' : ''
+              }`} />
+              <span className="hidden sm:inline">Lista</span>
+              
+              {/* Tooltip */}
+              <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 bg-gray-900 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap z-50">
+                Visualização em lista
+                <div className="absolute top-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-900"></div>
+              </div>
             </Button>
             <Button
               variant="ghost"
               size="sm"
               onClick={() => setViewMode('timeline')}
-              className={`flex items-center ${viewMode === 'timeline' ? 'bg-blue-500 text-white' : 'hover:bg-gray-200 text-gray-800'} rounded-md px-3 relative`}
+              className={`flex items-center transition-all duration-300 ${
+                viewMode === 'timeline' 
+                  ? 'bg-blue-500 text-white shadow-md hover:bg-blue-600 transform scale-105 ring-2 ring-blue-200' 
+                  : 'hover:bg-gray-200 text-gray-700 hover:text-gray-900 hover:scale-105'
+              } rounded-md px-3 lg:px-4 py-2 text-xs lg:text-sm font-medium relative group`}
+              title="Visualização em timeline - Cronograma visual por organização"
+              aria-pressed={viewMode === 'timeline'}
             >
-              <BarChart3 className="h-4 w-4 mr-2" />
-              Timeline
+              <BarChart3 className={`h-4 w-4 lg:h-5 lg:w-5 mr-1.5 lg:mr-2 transition-transform duration-200 ${
+                viewMode === 'timeline' ? 'scale-110' : ''
+              }`} />
+              <span className="hidden sm:inline">Timeline</span>
+              
+              {/* Tooltip */}
+              <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 bg-gray-900 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap z-50">
+                Visualização em timeline
+                <div className="absolute top-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-900"></div>
+              </div>
             </Button>
           </div>
           
           {/* Controles adicionais */}
-          <div className="flex gap-2">
-            <Button variant="outline" onClick={fetchCronogramas} disabled={loading}>
-              <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
-              Recarregar
+          <div className="flex flex-col sm:flex-row gap-2">
+            <Button 
+              variant="outline" 
+              onClick={fetchCronogramas} 
+              disabled={loading} 
+              className="text-xs lg:text-sm font-medium border-gray-300 hover:bg-gray-50 hover:border-gray-400 transition-all duration-200"
+            >
+              <RefreshCw className={`h-4 w-4 lg:h-5 lg:w-5 mr-1.5 lg:mr-2 ${loading ? 'animate-spin' : ''}`} />
+              <span className="hidden sm:inline">Recarregar</span>
             </Button>
-            <Button variant="outline" onClick={handleOverviewPDFClick} disabled={loading}>
-              <Download className="h-4 w-4 mr-2" />
-              {filtroOrganizacao === 'todos' ? 'Baixar Overview' : `Overview PDF (${filtroOrganizacao})`}
+            <Button 
+              variant="outline" 
+              onClick={handleOverviewPDFClick} 
+              disabled={loading} 
+              className="text-xs lg:text-sm font-medium border-gray-300 hover:bg-gray-50 hover:border-gray-400 transition-all duration-200"
+            >
+              <Download className="h-4 w-4 lg:h-5 lg:w-5 mr-1.5 lg:mr-2" />
+              <span className="hidden sm:inline">
+                {filtroOrganizacao === 'todos' ? 'Baixar Overview' : `Overview PDF (${filtroOrganizacao})`}
+              </span>
+              <span className="sm:hidden">PDF</span>
             </Button>
-            <Button onClick={() => {
-              setEditingCronograma(null);
-              // Garantir formulário limpo ao abrir nova demanda
-              setFormData(initialFormData());
-              setIsEditDialogOpen(true);
-            }}>
-              <Plus className="h-4 w-4 mr-2" />
-              Nova Demanda
+            <Button 
+              onClick={() => {
+                setEditingCronograma(null);
+                setFormData(initialFormData());
+                setIsEditDialogOpen(true);
+              }} 
+              className="text-xs lg:text-sm font-medium bg-blue-600 hover:bg-blue-700 text-white shadow-md hover:shadow-lg transition-all duration-200"
+            >
+              <Plus className="h-4 w-4 lg:h-5 lg:w-5 mr-1.5 lg:mr-2" />
+              <span className="hidden sm:inline">Nova Demanda</span>
+              <span className="sm:hidden">Nova</span>
             </Button>
           </div>
         </div>
@@ -1853,11 +1954,11 @@ const Cronograma = () => {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="flex gap-4">
-            <div className="flex-1">
-              <Label htmlFor="status-filter">Status</Label>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div>
+              <Label htmlFor="status-filter" className="text-sm font-medium">Status</Label>
               <Select key={`status-${viewMode}-${filtroStatus}`} value={filtroStatus} onValueChange={setFiltroStatus}>
-                <SelectTrigger>
+                <SelectTrigger className="mt-1">
                   <SelectValue placeholder="Todos os status" />
                 </SelectTrigger>
                 <SelectContent>
@@ -1869,10 +1970,10 @@ const Cronograma = () => {
                 </SelectContent>
               </Select>
             </div>
-            <div className="flex-1">
-              <Label htmlFor="prioridade-filter">Prioridade</Label>
+            <div>
+              <Label htmlFor="prioridade-filter" className="text-sm font-medium">Prioridade</Label>
               <Select key={`prioridade-${viewMode}-${filtroPrioridade}`} value={filtroPrioridade} onValueChange={setFiltroPrioridade}>
-                <SelectTrigger>
+                <SelectTrigger className="mt-1">
                   <SelectValue placeholder="Todas as prioridades" />
                 </SelectTrigger>
                 <SelectContent>
@@ -1885,10 +1986,10 @@ const Cronograma = () => {
               </Select>
             </div>
             {currentUser?.organizacao === 'portes' && (
-              <div className="flex-1">
-                <Label htmlFor="organizacao-filter">Organização</Label>
+              <div>
+                <Label htmlFor="organizacao-filter" className="text-sm font-medium">Organização</Label>
                 <Select key={`org-${viewMode}-${filtroOrganizacao}`} value={filtroOrganizacao} onValueChange={setFiltroOrganizacao}>
-                  <SelectTrigger>
+                  <SelectTrigger className="mt-1">
                     <SelectValue placeholder="Todas as organizações" />
                   </SelectTrigger>
                   <SelectContent>
@@ -1928,20 +2029,20 @@ const Cronograma = () => {
 
       {/* Dialog de Edição/Criação */}
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto mx-4 sm:mx-0">
           <DialogHeader>
-            <DialogTitle>
+            <DialogTitle className="text-lg lg:text-xl">
               {editingCronograma ? 'Editar Demanda' : 'Nova Demanda'}
             </DialogTitle>
-            <DialogDescription>
+            <DialogDescription className="text-sm lg:text-base">
               {editingCronograma ? 'Modifique os dados da demanda abaixo.' : 'Preencha os dados para criar uma nova demanda.'}
             </DialogDescription>
           </DialogHeader>
           
-          <div className="space-y-6">
+          <div className="space-y-4 lg:space-y-6">
             {/* Informações Básicas */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="md:col-span-2">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              <div className="lg:col-span-2">
                 <Label htmlFor="titulo">Título *</Label>
                 <Input
                   id="titulo"
@@ -2515,22 +2616,22 @@ const Cronograma = () => {
 
       {/* Modal de Seleção de Organização para PDF */}
       <Dialog open={isOrganizationModalOpen} onOpenChange={setIsOrganizationModalOpen}>
-        <DialogContent className="sm:max-w-lg">
+        <DialogContent className="sm:max-w-lg mx-4 sm:mx-0">
           <DialogHeader className="pb-4">
-            <DialogTitle className="flex items-center gap-3 text-lg">
-              <Download className="h-6 w-6" />
+            <DialogTitle className="flex items-center gap-2 lg:gap-3 text-base lg:text-lg">
+              <Download className="h-5 w-5 lg:h-6 lg:w-6" />
               Configurar Overview PDF
             </DialogTitle>
-            <DialogDescription className="text-base">
+            <DialogDescription className="text-sm lg:text-base">
               Escolha a organização e o status das demandas para incluir no overview PDF.
             </DialogDescription>
           </DialogHeader>
           
-          <div className="space-y-6">
-            <div className="space-y-3">
-              <Label htmlFor="org-pdf-select" className="text-base font-medium">Organização</Label>
+          <div className="space-y-4 lg:space-y-6">
+            <div className="space-y-2 lg:space-y-3">
+              <Label htmlFor="org-pdf-select" className="text-sm lg:text-base font-medium">Organização</Label>
               <Select value={selectedOrganizationForPDF} onValueChange={setSelectedOrganizationForPDF}>
-                <SelectTrigger className="h-12">
+                <SelectTrigger className="h-10 lg:h-12">
                   <SelectValue placeholder="Selecione uma organização" />
                 </SelectTrigger>
                 <SelectContent>
@@ -2623,6 +2724,80 @@ const Cronograma = () => {
             </Button>
             <Button 
               onClick={confirmarDownloadPDF}
+              className="bg-blue-600 hover:bg-blue-700 px-6"
+            >
+              <Download className="h-4 w-4 mr-2" />
+              Baixar Overview
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal de Seleção de Status para PDF (Usuários não-Portes) */}
+      <Dialog open={isStatusModalOpen} onOpenChange={setIsStatusModalOpen}>
+        <DialogContent className="sm:max-w-lg mx-4 sm:mx-0">
+          <DialogHeader className="pb-4">
+            <DialogTitle className="flex items-center gap-2 lg:gap-3 text-base lg:text-lg">
+              <Download className="h-5 w-5 lg:h-6 lg:w-6" />
+              Configurar Overview PDF
+            </DialogTitle>
+            <DialogDescription className="text-sm lg:text-base">
+              Escolha o status das demandas para incluir no overview PDF da sua organização.
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4 lg:space-y-6">
+            <div className="space-y-2 lg:space-y-3">
+              <Label htmlFor="status-non-portes-pdf-select" className="text-sm lg:text-base font-medium">Status das Demandas</Label>
+              <Select value={selectedStatusForNonPortesPDF} onValueChange={setSelectedStatusForNonPortesPDF}>
+                <SelectTrigger className="h-10 lg:h-12">
+                  <SelectValue placeholder="Selecione um status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="todos">Todas as demandas</SelectItem>
+                  <SelectItem value="concluido">Concluídas</SelectItem>
+                  <SelectItem value="em_andamento">Em andamento</SelectItem>
+                  <SelectItem value="pendente">Pendentes</SelectItem>
+                  <SelectItem value="atrasado">Atrasadas</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+              <div className="flex items-start gap-3">
+                <div className="flex-shrink-0">
+                  <Building className="h-5 w-5 text-blue-600 mt-0.5" />
+                </div>
+                <div>
+                  <p className="text-base font-medium text-blue-800">
+                    Overview da sua organização: {(currentUser?.nome_empresa || currentUser?.organizacao_nome || currentUser?.organizacao || 'Sistema').toUpperCase()}
+                  </p>
+                  <p className="text-sm text-blue-600 mt-2">
+                    Será gerado um PDF contendo as demandas da sua organização.
+                    {selectedStatusForNonPortesPDF !== 'todos' && (
+                      <span className="block mt-1">
+                        <strong>Status filtrado:</strong> {selectedStatusForNonPortesPDF === 'concluido' ? 'Concluídas' : 
+                                                        selectedStatusForNonPortesPDF === 'em_andamento' ? 'Em Andamento' :
+                                                        selectedStatusForNonPortesPDF === 'pendente' ? 'Pendentes' :
+                                                        selectedStatusForNonPortesPDF === 'atrasado' ? 'Atrasadas' : selectedStatusForNonPortesPDF}
+                      </span>
+                    )}
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex justify-end gap-4 pt-6 border-t">
+            <Button 
+              variant="outline" 
+              onClick={() => setIsStatusModalOpen(false)}
+              className="px-6"
+            >
+              Cancelar
+            </Button>
+            <Button 
+              onClick={confirmarDownloadPDFNonPortes}
               className="bg-blue-600 hover:bg-blue-700 px-6"
             >
               <Download className="h-4 w-4 mr-2" />
