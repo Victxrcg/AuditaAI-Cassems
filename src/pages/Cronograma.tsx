@@ -620,7 +620,7 @@ const Cronograma = () => {
     }
   }, [isViewDialogOpen, viewingCronograma]);
 
-  // Função para converter data para formato YYYY-MM-DD
+  // Função para converter data para formato YYYY-MM-DD preservando timezone local
   const formatDateForInput = (dateString: string | Date | null) => {
     if (!dateString) return '';
     try {
@@ -640,9 +640,14 @@ const Cronograma = () => {
         return '';
       }
       
-      const formatted = date.toISOString().split('T')[0];
-      return formatted;
+      // Usar métodos locais para evitar problemas de timezone
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const day = String(date.getDate()).padStart(2, '0');
+      
+      return `${year}-${month}-${day}`;
     } catch (error) {
+      console.error('Erro ao formatar data:', error);
       return '';
     }
   };
@@ -650,14 +655,23 @@ const Cronograma = () => {
   // Atualizar formData quando editingCronograma muda
   useEffect(() => {
     if (editingCronograma) {
+      console.log('🔍 Debug - editingCronograma recebido:', editingCronograma);
+      console.log('🔍 Debug - data_inicio original:', editingCronograma.data_inicio);
+      console.log('🔍 Debug - data_fim original:', editingCronograma.data_fim);
+      
+      const dataInicioFormatada = formatDateForInput(editingCronograma.data_inicio || '');
+      const dataFimFormatada = formatDateForInput(editingCronograma.data_fim || '');
+      
+      console.log('🔍 Debug - data_inicio formatada:', dataInicioFormatada);
+      console.log('🔍 Debug - data_fim formatada:', dataFimFormatada);
       
       setFormData({
         titulo: editingCronograma.titulo,
         descricao: editingCronograma.descricao || '',
         organizacao: editingCronograma.organizacao,
         fase_atual: editingCronograma.fase_atual,
-        data_inicio: formatDateForInput(editingCronograma.data_inicio || ''),
-        data_fim: formatDateForInput(editingCronograma.data_fim || ''),
+        data_inicio: dataInicioFormatada,
+        data_fim: dataFimFormatada,
         status: editingCronograma.status,
         prioridade: editingCronograma.prioridade,
         observacoes: editingCronograma.observacoes || '',
@@ -2390,16 +2404,6 @@ const Cronograma = () => {
                 </div>
               )}
 
-              {/* Organização */}
-              <div>
-                <h3 className="text-sm font-medium text-gray-600 mb-2">Organização</h3>
-                <div className="flex items-center gap-2">
-                  <Building className="h-4 w-4 text-gray-400" />
-                  <span className="text-gray-700 capitalize">
-                    {viewingCronograma.organizacao?.replace('_', ' ')}
-                  </span>
-                </div>
-              </div>
 
               {/* Motivo do Atraso */}
               {viewingCronograma.motivo_atraso && (
