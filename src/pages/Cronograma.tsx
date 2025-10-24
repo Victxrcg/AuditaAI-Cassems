@@ -1014,11 +1014,23 @@ const Cronograma = () => {
       
       // Obter a ordem atual para esta organização
       const currentOrder = ordemDemandas[organizacao] || cronogramas
-        .filter(c => c.organizacao === organizacao)
+        .filter(c => {
+          const cronogramaOrg = normalizeOrganization(c.organizacao || '');
+          console.log('🔍 Comparando:', cronogramaOrg, 'com', organizacao);
+          return cronogramaOrg === organizacao;
+        })
         .map(c => c.id);
 
       console.log('🔍 ordem atual:', currentOrder);
-      console.log('🔍 cronogramas da organização:', cronogramas.filter(c => c.organizacao === organizacao));
+      console.log('🔍 cronogramas da organização:', cronogramas.filter(c => {
+        const cronogramaOrg = normalizeOrganization(c.organizacao || '');
+        return cronogramaOrg === organizacao;
+      }));
+      console.log('🔍 Todos os cronogramas:', cronogramas.map(c => ({
+        id: c.id,
+        organizacao: c.organizacao,
+        organizacao_normalizada: normalizeOrganization(c.organizacao || '')
+      })));
 
       // Encontrar os índices
       const oldIndex = currentOrder.indexOf(active.id as number);
@@ -1625,7 +1637,7 @@ const Cronograma = () => {
     
     // Agrupar cronogramas por organização
     const cronogramasPorOrganizacao = cronogramasParaTimeline.reduce((acc, cronograma) => {
-      const org = cronograma.organizacao || 'outros';
+      const org = normalizeOrganization(cronograma.organizacao || 'outros');
       if (!acc[org]) acc[org] = [];
       acc[org].push(cronograma);
       return acc;
