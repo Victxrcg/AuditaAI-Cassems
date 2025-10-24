@@ -1468,6 +1468,40 @@ exports.updateCompetenciaReferencia = async (req, res) => {
   }
 };
 
+// Mapeamento de campos técnicos para títulos amigáveis
+const mapearCampoParaTitulo = (campo) => {
+  const mapeamento = {
+    'competencia_referencia': 'Período',
+    'competencia_inicio': 'Data de Início',
+    'competencia_fim': 'Data de Fim',
+    'competencia_referencia_texto': 'Período',
+    'relatorio_inicial_texto': 'Relatório Técnico',
+    'relatorio_faturamento_texto': 'Relatório Faturamento',
+    'imposto_compensado_texto': 'Comprovação de Compensações',
+    'valor_compensado_texto': 'Valor Compensado',
+    'emails_texto': 'Comprovação de Email',
+    'estabelecimento_texto': 'Notas Fiscais',
+    'resumo_folha_pagamento_texto': 'Resumo Folha de Pagamento',
+    'planilha_quantidade_empregados_texto': 'Planilha Quantidade Empregados',
+    'decreto_3048_1999_vigente_texto': 'Decreto 3048/1999 Vigente',
+    'solucao_consulta_cosit_79_2023_vigente_texto': 'Solução Consulta COSIT 79/2023 Vigente',
+    'parecer_texto': 'Parecer Final',
+    'status': 'Status',
+    'observacoes': 'Observações',
+    'anexo_relatorio_inicial': 'Anexo - Relatório Técnico',
+    'anexo_relatorio_faturamento': 'Anexo - Relatório Faturamento',
+    'anexo_imposto_compensado': 'Anexo - Comprovação de Compensações',
+    'anexo_emails': 'Anexo - Comprovação de Email',
+    'anexo_estabelecimento': 'Anexo - Notas Fiscais',
+    'anexo_resumo_folha_pagamento': 'Anexo - Resumo Folha de Pagamento',
+    'anexo_planilha_quantidade_empregados': 'Anexo - Planilha Quantidade Empregados',
+    'anexo_decreto_3048_1999_vigente': 'Anexo - Decreto 3048/1999 Vigente',
+    'anexo_solucao_consulta_cosit_79_2023_vigente': 'Anexo - Solução Consulta COSIT 79/2023 Vigente'
+  };
+  
+  return mapeamento[campo] || campo;
+};
+
 // Obter histórico de alterações
 exports.getHistorico = async (req, res) => {
   let pool, server;
@@ -1487,9 +1521,15 @@ exports.getHistorico = async (req, res) => {
       ORDER BY h.alterado_em DESC
     `, [id]);
 
+    // Mapear os campos para títulos amigáveis
+    const historicoComTitulos = rows.map(row => ({
+      ...row,
+      campo_alterado_titulo: mapearCampoParaTitulo(row.campo_alterado)
+    }));
+
     res.json({
       success: true,
-      data: rows
+      data: historicoComTitulos
     });
   } catch (error) {
     console.error('❌ Erro ao obter histórico:', error);

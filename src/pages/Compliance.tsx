@@ -98,6 +98,7 @@ interface Competencia {
 interface HistoricoAlteracao {
   id: number;
   campo_alterado: string;
+  campo_alterado_titulo?: string; // Novo campo com título amigável
   valor_anterior: string;
   valor_novo: string;
   alterado_por_nome: string;
@@ -1211,7 +1212,7 @@ const HistoricoAlteracoes = ({ historico, loading }: { historico: HistoricoAlter
                 </span>
               </div>
               <div className="text-sm">
-                <span className="font-medium">Campo:</span> {alteracao.campo_alterado}
+                <span className="font-medium">Campo:</span> {alteracao.campo_alterado_titulo || alteracao.campo_alterado}
               </div>
               
               {/* Exibir informações específicas para parecer_texto */}
