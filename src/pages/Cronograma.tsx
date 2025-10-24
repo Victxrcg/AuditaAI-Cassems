@@ -969,11 +969,27 @@ const Cronograma = () => {
     // Criar um mapa para ordenação eficiente
     const ordemMap = new Map(ordemCustomizada.map((id, index) => [id, index]));
     
-    return [...cronogramas].sort((a, b) => {
+    // Separar cronogramas que estão na ordem customizada dos que não estão
+    const cronogramasComOrdem: CronogramaItem[] = [];
+    const cronogramasSemOrdem: CronogramaItem[] = [];
+    
+    cronogramas.forEach(cronograma => {
+      if (ordemMap.has(cronograma.id)) {
+        cronogramasComOrdem.push(cronograma);
+      } else {
+        cronogramasSemOrdem.push(cronograma);
+      }
+    });
+    
+    // Ordenar os que têm ordem customizada
+    cronogramasComOrdem.sort((a, b) => {
       const ordemA = ordemMap.get(a.id) ?? 999;
       const ordemB = ordemMap.get(b.id) ?? 999;
       return ordemA - ordemB;
     });
+    
+    // Adicionar os que não têm ordem ao final
+    return [...cronogramasComOrdem, ...cronogramasSemOrdem];
   };
 
   // Função para lidar com o fim do drag & drop
@@ -995,8 +1011,10 @@ const Cronograma = () => {
     if (active.id !== over?.id) {
       // Encontrar a organização do item sendo arrastado
       const activeItem = cronogramas.find(c => c.id === active.id);
-      if (!activeItem) {
-        console.log('❌ Item ativo não encontrado');
+      const overItem = cronogramas.find(c => c.id === over?.id);
+      
+      if (!activeItem || !overItem) {
+        console.log('❌ Item ativo ou item de destino não encontrado');
         return;
       }
 
@@ -1012,35 +1030,53 @@ const Cronograma = () => {
         console.log('🔍 Verificando se há problemas específicos...');
       }
       
-      // Obter a ordem atual para esta organização
-      const currentOrder = ordemDemandas[organizacao] || cronogramas
+      // Obter todos os cronogramas da organização atual
+      const cronogramasDaOrganizacao = cronogramas
         .filter(c => {
           const cronogramaOrg = normalizeOrganization(c.organizacao || '');
-          console.log('🔍 Comparando:', cronogramaOrg, 'com', organizacao);
           return cronogramaOrg === organizacao;
-        })
-        .map(c => c.id);
+        });
 
-      console.log('🔍 ordem atual:', currentOrder);
-      console.log('🔍 cronogramas da organização:', cronogramas.filter(c => {
-        const cronogramaOrg = normalizeOrganization(c.organizacao || '');
-        return cronogramaOrg === organizacao;
-      }));
+      console.log('🔍 cronogramas da organização:', cronogramasDaOrganizacao);
       console.log('🔍 Todos os cronogramas:', cronogramas.map(c => ({
         id: c.id,
         organizacao: c.organizacao,
         organizacao_normalizada: normalizeOrganization(c.organizacao || '')
       })));
 
-      // Encontrar os índices
-      const oldIndex = currentOrder.indexOf(active.id as number);
-      const newIndex = currentOrder.indexOf(over?.id as number);
+      // Obter a ordem atual para esta organização (usando a ordem aplicada)
+      const cronogramasOrdenados = aplicarOrdemPersonalizada(cronogramasDaOrganizacao, organizacao);
+      const currentOrder = cronogramasOrdenados.map(c => c.id);
+
+      console.log('🔍 ordem atual:', currentOrder);
+      console.log('🔍 cronogramas ordenados:', cronogramasOrdenados.map(c => ({ id: c.id, titulo: c.titulo })));
+
+      // Verificar se os IDs estão presentes na ordem atual
+      const activeId = active.id as number;
+      const overId = over?.id as number;
+      
+      // Se algum ID não está na ordem atual, adicionar ao final
+      let updatedOrder = [...currentOrder];
+      if (!updatedOrder.includes(activeId)) {
+        updatedOrder.push(activeId);
+        console.log('🔍 Adicionando active.id à ordem:', activeId);
+      }
+      if (!updatedOrder.includes(overId)) {
+        updatedOrder.push(overId);
+        console.log('🔍 Adicionando over.id à ordem:', overId);
+      }
+
+      // Encontrar os índices na ordem atualizada
+      const oldIndex = updatedOrder.indexOf(activeId);
+      const newIndex = updatedOrder.indexOf(overId);
 
       console.log('🔍 oldIndex:', oldIndex, 'newIndex:', newIndex);
+      console.log('🔍 active.id:', activeId, 'over.id:', overId);
+      console.log('🔍 ordem atualizada:', updatedOrder);
 
-      if (oldIndex !== -1 && newIndex !== -1) {
+      if (oldIndex !== -1 && newIndex !== -1 && oldIndex !== newIndex) {
         // Reordenar usando arrayMove
-        const newOrder = arrayMove(currentOrder, oldIndex, newIndex);
+        const newOrder = arrayMove(updatedOrder, oldIndex, newIndex);
         console.log('🔍 nova ordem:', newOrder);
         
         // Atualizar o estado
@@ -1057,6 +1093,10 @@ const Cronograma = () => {
         console.log('🔍 Estado salvo no localStorage:', savedOrder);
       } else {
         console.log('❌ Índices inválidos - oldIndex:', oldIndex, 'newIndex:', newIndex);
+        console.log('❌ Verificando se os IDs estão na ordem atualizada...');
+        console.log('❌ active.id na ordem:', updatedOrder.includes(activeId));
+        console.log('❌ over.id na ordem:', updatedOrder.includes(overId));
+        console.log('❌ Ordem atualizada completa:', updatedOrder);
       }
     }
   };
