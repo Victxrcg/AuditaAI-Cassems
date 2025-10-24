@@ -923,6 +923,98 @@ const Cronograma = () => {
   // Estado para controlar a ordem das demandas por organização (drag & drop)
   const [ordemDemandas, setOrdemDemandas] = useState<Record<string, number[]>>({});
   
+  // Estado para controlar a largura da coluna de organização/demanda
+  const [colunaLargura, setColunaLargura] = useState(320); // Largura padrão em pixels
+  const [isResizing, setIsResizing] = useState(false);
+  const [isColumnWidthLoaded, setIsColumnWidthLoaded] = useState(false);
+  
+  // Funções para redimensionamento da coluna
+  const handleMouseDown = (e: React.MouseEvent) => {
+    setIsResizing(true);
+    e.preventDefault();
+  };
+
+  const handleMouseMove = (e: MouseEvent) => {
+    if (!isResizing) return;
+    
+    // Calcular a largura baseada na posição do mouse relativa ao início da página
+    const timelineContainer = document.querySelector('.timeline-container');
+    if (!timelineContainer) return;
+    
+    const containerRect = timelineContainer.getBoundingClientRect();
+    const mouseX = e.clientX - containerRect.left;
+    
+    // Limites: 200px a 600px, baseado na posição do mouse
+    const newWidth = Math.max(200, Math.min(600, mouseX));
+    setColunaLargura(newWidth);
+    
+    // Salvar em tempo real para garantir persistência
+    localStorage.setItem('cronograma-coluna-largura', newWidth.toString());
+  };
+
+  const handleMouseUp = () => {
+    setIsResizing(false);
+    // Salvar a largura final no localStorage com validação
+    const finalWidth = Math.max(200, Math.min(600, colunaLargura));
+    localStorage.setItem('cronograma-coluna-largura', finalWidth.toString());
+    console.log('🔍 Largura da coluna salva no localStorage:', finalWidth + 'px');
+  };
+
+  // Função para resetar a largura da coluna para o padrão
+  const resetColumnWidth = () => {
+    const defaultWidth = 320;
+    setColunaLargura(defaultWidth);
+    localStorage.setItem('cronograma-coluna-largura', defaultWidth.toString());
+    console.log('🔍 Largura da coluna resetada para o padrão:', defaultWidth + 'px');
+  };
+
+  // Carregar largura da coluna salva no localStorage
+  useEffect(() => {
+    const savedWidth = localStorage.getItem('cronograma-coluna-largura');
+    if (savedWidth) {
+      const width = parseInt(savedWidth);
+      // Validar se a largura está dentro dos limites permitidos
+      if (width >= 200 && width <= 600 && !isNaN(width)) {
+        setColunaLargura(width);
+        console.log('🔍 Largura da coluna carregada do localStorage:', width + 'px');
+      } else {
+        console.log('🔍 Largura inválida no localStorage, usando padrão:', width);
+        // Limpar valor inválido do localStorage
+        localStorage.removeItem('cronograma-coluna-largura');
+      }
+    } else {
+      console.log('🔍 Nenhuma largura salva encontrada, usando padrão: 320px');
+    }
+    setIsColumnWidthLoaded(true);
+  }, []);
+
+  // Adicionar event listeners para redimensionamento
+  useEffect(() => {
+    if (isResizing) {
+      document.addEventListener('mousemove', handleMouseMove);
+      document.addEventListener('mouseup', handleMouseUp);
+      document.body.style.cursor = 'col-resize';
+      document.body.style.userSelect = 'none';
+      // Adicionar classe para indicar que está redimensionando
+      document.body.classList.add('resizing-column');
+    } else {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+      // Remover classe de redimensionamento
+      document.body.classList.remove('resizing-column');
+    }
+
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+      document.body.classList.remove('resizing-column');
+    };
+  }, [isResizing]);
+  
   // Função para normalizar organização (igual ao backend)
   const normalizeOrganization = (org: string) => {
     if (!org) return '';
@@ -1142,7 +1234,10 @@ const Cronograma = () => {
         style={style}
         className={`flex items-center h-16 border-b border-gray-100 bg-gray-50 hover:bg-gray-100 transition-colors overflow-hidden ${isDragging ? 'z-50' : ''}`}
       >
-        <div className="w-80 px-4 py-3 text-sm text-gray-700 border-r overflow-hidden">
+        <div 
+          className="px-4 py-3 text-sm text-gray-700 border-r overflow-hidden"
+          style={{ width: `${colunaLargura}px` }}
+        >
           <div className="flex flex-col gap-2 min-w-0">
             <div className="flex items-center justify-between gap-2 flex-nowrap min-w-0">
               <div className="flex items-center gap-2 flex-1 min-w-0">
@@ -1243,7 +1338,10 @@ const Cronograma = () => {
   }) => {
     return (
       <div className={`flex items-center h-16 border-b border-gray-100 bg-gray-50 hover:bg-gray-100 transition-colors overflow-hidden`}>
-        <div className="w-80 px-4 py-3 text-sm text-gray-700 border-r">
+        <div 
+          className="px-4 py-3 text-sm text-gray-700 border-r"
+          style={{ width: `${colunaLargura}px` }}
+        >
           <div className="flex flex-col gap-2">
             <div className="flex items-center justify-between gap-2">
               <span 
@@ -1785,17 +1883,47 @@ const Cronograma = () => {
                 <div className="text-xs text-gray-500">
                   {cronogramasParaTimeline.length} demandas
                 </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={resetColumnWidth}
+                  className="text-xs h-6 px-2"
+                  title="Resetar largura da coluna para o padrão"
+                >
+                  Resetar Coluna
+                </Button>
               </div>
             </div>
           </CardHeader>
           <CardContent className="p-0">
         {/* Timeline Header */}
-        <div className="w-full">
+        <div className="w-full timeline-container">
           <div className="w-full">
                 {/* Header dos meses */}
                 <div className="flex border-b-2 border-gray-200 overflow-x-auto">
-                  <div className="w-64 lg:w-80 px-3 lg:px-4 py-3 lg:py-4 font-semibold text-gray-700 bg-gray-100 border-r flex-shrink-0">
-                    <span className="text-sm lg:text-base">Organização / Demanda</span>
+                  <div 
+                    className="px-3 lg:px-4 py-3 lg:py-4 font-semibold text-gray-700 bg-gray-100 border-r flex-shrink-0 relative"
+                    style={{ width: `${colunaLargura}px` }}
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm lg:text-base">Organização / Demanda</span>
+                    </div>
+                    {/* Handle de redimensionamento */}
+                    <div
+                      className={`absolute top-0 right-0 w-3 h-full cursor-col-resize transition-all group ${
+                        isResizing 
+                          ? 'bg-blue-500 opacity-100' 
+                          : 'bg-gray-300 hover:bg-blue-500 opacity-0 hover:opacity-100'
+                      }`}
+                      onMouseDown={handleMouseDown}
+                      title="Arraste para redimensionar a coluna"
+                    >
+                      <div className="w-full h-full flex items-center justify-center">
+                        <div className={`w-0.5 h-8 transition-colors ${
+                          isResizing ? 'bg-white' : 'bg-gray-400 group-hover:bg-white'
+                        }`}></div>
+                      </div>
+                    </div>
                   </div>
                   {timeUnits.map((timeUnit, index) => (
                     <div key={index} className="px-1 lg:px-2 py-3 lg:py-4 text-center font-semibold text-gray-700 bg-gray-50 border-r flex-1 min-w-[60px] lg:min-w-[80px]">
@@ -1817,7 +1945,10 @@ const Cronograma = () => {
                   <div key={organizacao} className="border-b border-gray-100">
                     {/* Header da organização */}
                     <div className="flex items-center h-12 lg:h-16 bg-gray-100 hover:bg-gray-50 transition-colors">
-                      <div className="w-64 lg:w-80 px-3 lg:px-4 py-3 lg:py-4 font-semibold text-gray-900 border-r flex-shrink-0">
+                      <div 
+                        className="px-3 lg:px-4 py-3 lg:py-4 font-semibold text-gray-900 border-r flex-shrink-0"
+                        style={{ width: `${colunaLargura}px` }}
+                      >
                         <div className="flex items-center gap-2">
                           <div className={`w-2 h-2 lg:w-3 lg:h-3 rounded-full ${coresOrganizacao[organizacao] || 'bg-gray-400'}`}></div>
                           <span className="truncate text-sm lg:text-base font-medium">
@@ -1861,7 +1992,10 @@ const Cronograma = () => {
                     <div key={organizacao} className="border-b border-gray-100">
                       {/* Header da organização */}
                       <div className="flex items-center h-12 lg:h-16 bg-gray-100 hover:bg-gray-50 transition-colors">
-                        <div className="w-64 lg:w-80 px-3 lg:px-4 py-3 lg:py-4 font-semibold text-gray-900 border-r flex-shrink-0">
+                        <div 
+                          className="px-3 lg:px-4 py-3 lg:py-4 font-semibold text-gray-900 border-r flex-shrink-0"
+                          style={{ width: `${colunaLargura}px` }}
+                        >
                           <div className="flex items-center gap-2">
                             <div className={`w-2 h-2 lg:w-3 lg:h-3 rounded-full ${coresOrganizacao[organizacao] || 'bg-gray-400'}`}></div>
                             <span className="truncate text-sm lg:text-base font-medium">
@@ -2030,7 +2164,7 @@ const Cronograma = () => {
             >
               <Download className="h-4 w-4 lg:h-5 lg:w-5 mr-1.5 lg:mr-2" />
               <span className="hidden sm:inline">
-                {filtroOrganizacao === 'todos' ? 'Baixar Overview' : `Overview PDF (${filtroOrganizacao})`}
+                {filtroOrganizacao === 'todos' ? 'Baixar Overview' : `Baixar Overview`}
               </span>
               <span className="sm:hidden">PDF</span>
             </Button>
