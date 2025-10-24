@@ -620,6 +620,28 @@ const Cronograma = () => {
     }
   }, [isViewDialogOpen, viewingCronograma]);
 
+  // Função para formatar data para exibição sem problemas de timezone
+  const formatDateForDisplay = (dateString: string | null) => {
+    if (!dateString) return 'Não definida';
+    try {
+      // Se é uma string ISO (termina com Z), extrair apenas a data
+      if (typeof dateString === 'string' && dateString.endsWith('Z')) {
+        const datePart = dateString.split('T')[0];
+        const [year, month, day] = datePart.split('-');
+        return `${day}/${month}/${year}`;
+      }
+      
+      // Para outras datas, usar conversão normal
+      const date = new Date(dateString);
+      if (isNaN(date.getTime())) return 'Não definida';
+      
+      return date.toLocaleDateString('pt-BR');
+    } catch (error) {
+      console.error('Erro ao formatar data para exibição:', error);
+      return 'Não definida';
+    }
+  };
+
   // Função para converter data para formato YYYY-MM-DD preservando timezone local
   const formatDateForInput = (dateString: string | Date | null) => {
     if (!dateString) return '';
@@ -632,6 +654,12 @@ const Cronograma = () => {
       } 
       // Se é string, criar Date object
       else {
+        // Se é uma string ISO (termina com Z), tratar como UTC mas preservar a data
+        if (typeof dateString === 'string' && dateString.endsWith('Z')) {
+          // Extrair apenas a parte da data (YYYY-MM-DD) antes do T
+          const datePart = dateString.split('T')[0];
+          return datePart; // Retornar diretamente sem conversão
+        }
         date = new Date(dateString);
       }
       
@@ -2365,17 +2393,14 @@ const Cronograma = () => {
                 </div>
               )}
 
-              {/* Informações do Período */}
-              <div className="grid grid-cols-2 gap-4">
+              {/* Informações do Período e Responsável */}
+              <div className="grid grid-cols-3 gap-4">
                 <div>
                   <h3 className="text-sm font-medium text-gray-600 mb-2">Data de Início</h3>
                   <div className="flex items-center gap-2">
                     <Calendar className="h-4 w-4 text-gray-400" />
                     <span className="text-gray-700">
-                      {viewingCronograma.data_inicio 
-                        ? new Date(viewingCronograma.data_inicio).toLocaleDateString('pt-BR')
-                        : 'Não definida'
-                      }
+                      {formatDateForDisplay(viewingCronograma.data_inicio)}
                     </span>
                   </div>
                 </div>
@@ -2384,25 +2409,20 @@ const Cronograma = () => {
                   <div className="flex items-center gap-2">
                     <Calendar className="h-4 w-4 text-gray-400" />
                     <span className="text-gray-700">
-                      {viewingCronograma.data_fim 
-                        ? new Date(viewingCronograma.data_fim).toLocaleDateString('pt-BR')
-                        : 'Não definida'
-                      }
+                      {formatDateForDisplay(viewingCronograma.data_fim)}
                     </span>
                   </div>
                 </div>
-              </div>
-
-              {/* Responsável */}
-              {viewingCronograma.responsavel_nome && (
                 <div>
                   <h3 className="text-sm font-medium text-gray-600 mb-2">Responsável</h3>
                   <div className="flex items-center gap-2">
                     <User className="h-4 w-4 text-gray-400" />
-                    <span className="text-gray-700">{viewingCronograma.responsavel_nome}</span>
+                    <span className="text-gray-700">
+                      {viewingCronograma.responsavel_nome || 'Não definido'}
+                    </span>
                   </div>
                 </div>
-              )}
+              </div>
 
 
               {/* Motivo do Atraso */}
