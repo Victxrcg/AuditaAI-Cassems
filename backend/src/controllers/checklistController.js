@@ -132,6 +132,68 @@ const createChecklistItem = async (req, res) => {
 
     ({ pool, server } = await getDbPoolWithTunnel());
 
+    // Buscar período da demanda principal para validação
+    const demandaRows = await safeQuery(pool, `
+      SELECT data_inicio, data_fim
+      FROM cronograma 
+      WHERE id = ?
+    `, [cronogramaId]);
+
+    if (demandaRows.length === 0) {
+      return res.status(404).json({ success: false, error: 'Demanda não encontrada' });
+    }
+
+    const demanda = demandaRows[0];
+    
+    // Validar datas do checklist se a demanda tem período definido
+    if (demanda.data_inicio && demanda.data_fim) {
+      const demandaInicio = new Date(demanda.data_inicio);
+      const demandaFim = new Date(demanda.data_fim);
+      
+      if (data_inicio) {
+        const checklistInicio = new Date(data_inicio);
+        if (checklistInicio < demandaInicio) {
+          return res.status(400).json({ 
+            success: false, 
+            error: `A data de início deve ser posterior a ${demandaInicio.toLocaleDateString('pt-BR')}` 
+          });
+        }
+        if (checklistInicio > demandaFim) {
+          return res.status(400).json({ 
+            success: false, 
+            error: `A data de início deve ser anterior a ${demandaFim.toLocaleDateString('pt-BR')}` 
+          });
+        }
+      }
+
+      if (data_fim) {
+        const checklistFim = new Date(data_fim);
+        if (checklistFim < demandaInicio) {
+          return res.status(400).json({ 
+            success: false, 
+            error: `A data de fim deve ser posterior a ${demandaInicio.toLocaleDateString('pt-BR')}` 
+          });
+        }
+        if (checklistFim > demandaFim) {
+          return res.status(400).json({ 
+            success: false, 
+            error: `A data de fim deve ser anterior a ${demandaFim.toLocaleDateString('pt-BR')}` 
+          });
+        }
+      }
+
+      if (data_inicio && data_fim) {
+        const checklistInicio = new Date(data_inicio);
+        const checklistFim = new Date(data_fim);
+        if (checklistFim < checklistInicio) {
+          return res.status(400).json({ 
+            success: false, 
+            error: 'A data de fim deve ser posterior à data de início' 
+          });
+        }
+      }
+    }
+
     // Verificar próxima ordem
     const orderRows = await safeQuery(pool, `
       SELECT COALESCE(MAX(ordem), 0) + 1 as next_order
