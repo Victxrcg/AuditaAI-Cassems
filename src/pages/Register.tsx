@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Eye, EyeOff } from "lucide-react";
+import { Eye, EyeOff, Building } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -21,6 +21,13 @@ const Register = () => {
   const navigate = useNavigate();
   const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:4011';
 
+  // Lista de empresas disponíveis para cadastro
+  const empresasDisponiveis = [
+    { value: 'cassems', label: 'CASSEMS' },
+    { value: 'portes', label: 'PORTES' },
+    { value: 'rede_frota', label: 'MARAJÓ / REDE FROTA' }
+  ];
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
@@ -40,7 +47,7 @@ const Register = () => {
 
     // Validação do nome da empresa
     if (!nomeEmpresa.trim()) {
-      toast({ title: 'Nome da empresa obrigatório', description: 'Digite o nome da sua empresa.', variant: 'destructive' });
+      toast({ title: 'Empresa obrigatória', description: 'Selecione uma empresa da lista.', variant: 'destructive' });
       setIsLoading(false);
       return;
     }
@@ -109,16 +116,24 @@ const Register = () => {
               />
             </div>
             <div>
-              <Label>Nome da Empresa</Label>
-              <Input 
-                placeholder="Digite o nome da sua empresa" 
-                value={nomeEmpresa} 
-                onChange={e => setNomeEmpresa(e.target.value)} 
-                required 
-                minLength={2}
-              />
+              <Label>Empresa</Label>
+              <Select value={nomeEmpresa} onValueChange={setNomeEmpresa} required>
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione sua empresa" />
+                </SelectTrigger>
+                <SelectContent>
+                  {empresasDisponiveis.map((empresa) => (
+                    <SelectItem key={empresa.value} value={empresa.value}>
+                      <div className="flex items-center gap-2">
+                        <Building className="h-4 w-4" />
+                        <span>{empresa.label}</span>
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
               <p className="text-xs text-gray-500 mt-1">
-                Este nome aparecerá no sistema
+                Selecione a empresa onde você trabalha
               </p>
             </div>
             <div>
