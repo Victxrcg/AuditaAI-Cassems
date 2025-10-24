@@ -1984,15 +1984,6 @@ const Cronograma = () => {
           <div className="flex flex-col sm:flex-row gap-2">
             <Button 
               variant="outline" 
-              onClick={fetchCronogramas} 
-              disabled={loading} 
-              className="text-xs lg:text-sm font-medium border-gray-300 hover:bg-gray-50 hover:border-gray-400 transition-all duration-200"
-            >
-              <RefreshCw className={`h-4 w-4 lg:h-5 lg:w-5 mr-1.5 lg:mr-2 ${loading ? 'animate-spin' : ''}`} />
-              <span className="hidden sm:inline">Recarregar</span>
-            </Button>
-            <Button 
-              variant="outline" 
               onClick={handleOverviewPDFClick} 
               disabled={loading} 
               className="text-xs lg:text-sm font-medium border-gray-300 hover:bg-gray-50 hover:border-gray-400 transition-all duration-200"

@@ -2456,13 +2456,6 @@ export default function Compliance() {
         </div>
         <div className="flex flex-col sm:flex-row gap-2">
           <Button 
-            onClick={testConnection} 
-            variant="outline"
-            className="text-xs lg:text-sm font-medium"
-          >
-            Testar Conexão
-          </Button>
-          <Button 
             onClick={createCompetencia} 
             className="bg-blue-600 hover:bg-blue-700 text-xs lg:text-sm font-medium" 
             disabled={loading}
