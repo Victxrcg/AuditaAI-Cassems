@@ -205,25 +205,6 @@ export const Checklist: React.FC<ChecklistProps> = ({ cronogramaId, isOpen, onCl
         </DialogHeader>
 
         <div className="flex-1 overflow-hidden flex flex-col space-y-4">
-          {/* Progresso */}
-          {itemsArray.length > 0 && (
-            <div className="bg-gray-50 p-4 rounded-lg">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-sm font-medium text-gray-700">
-                  Progresso: {completedCount}/{itemsArray.length} itens concluídos
-                </span>
-                <span className="text-sm font-bold text-gray-900">
-                  {Math.round(progress)}%
-                </span>
-              </div>
-              <div className="w-full bg-gray-200 rounded-full h-2">
-                <div 
-                  className="bg-green-500 h-2 rounded-full transition-all duration-300"
-                  style={{ width: `${progress}%` }}
-                />
-              </div>
-            </div>
-          )}
 
           {/* Controles */}
           <div className="flex items-center justify-between">

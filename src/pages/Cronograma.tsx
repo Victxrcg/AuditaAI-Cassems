@@ -58,7 +58,8 @@ import {
   User,
   GripVertical,
   CheckSquare,
-  Download
+  Download,
+  ChevronDown
 } from 'lucide-react';
 
 interface CronogramaItem {
@@ -106,6 +107,7 @@ const Cronograma = () => {
   const [isChecklistOpen, setIsChecklistOpen] = useState(false);
   const [checklistItems, setChecklistItems] = useState<ChecklistItem[]>([]);
   const [checklistLoading, setChecklistLoading] = useState(false);
+  const [isDelayExpanded, setIsDelayExpanded] = useState(false);
   const [isOrganizationModalOpen, setIsOrganizationModalOpen] = useState(false);
   const [isStatusModalOpen, setIsStatusModalOpen] = useState(false);
   const [selectedOrganizationForPDF, setSelectedOrganizationForPDF] = useState<string>('todos');
@@ -2428,21 +2430,52 @@ const Cronograma = () => {
               {/* Motivo do Atraso */}
               {viewingCronograma.motivo_atraso && (
                 <div>
-                  <h3 className="text-sm font-medium text-gray-600 mb-2">Motivo do Atraso</h3>
-                  <div className="bg-red-50 border border-red-200 p-3 rounded-lg">
-                    <div className="flex items-center gap-2 mb-2">
-                      <AlertTriangle className="h-4 w-4 text-red-500" />
-                      <span className="text-sm font-medium text-red-700">Atraso Identificado</span>
+                  <button
+                    onClick={() => setIsDelayExpanded(!isDelayExpanded)}
+                    className="flex items-center justify-between w-full text-left mb-2 hover:bg-red-50 p-2 rounded-lg transition-colors"
+                  >
+                    <h3 className="text-g font-medium text-red-600">Motivo do Atraso</h3>
+                    <ChevronDown 
+                      className={`h-5 w-5 text-red-500 transition-transform ${
+                        isDelayExpanded ? 'rotate-180' : ''
+                      }`} 
+                    />
+                  </button>
+                  
+                  {isDelayExpanded && (
+                    <div className="bg-red-50 border border-red-200 p-3 rounded-lg">
+                      <div className="flex items-center gap-2 mb-2">
+                        <AlertTriangle className="h-4 w-4 text-red-500" />
+                        <span className="text-sm font-medium text-red-700">Atraso Identificado</span>
+                      </div>
+                      <p className="text-red-700 text-sm leading-relaxed">
+                        {viewingCronograma.motivo_atraso}
+                      </p>
                     </div>
-                    <p className="text-red-700 text-sm leading-relaxed">
-                      {viewingCronograma.motivo_atraso}
-                    </p>
-                  </div>
+                  )}
                 </div>
               )}
 
               {/* Checklist */}
               <div className="flex-1 overflow-hidden flex flex-col">
+                {/* Barra de Progresso */}
+                {checklistItems.length > 0 && (
+                  <div className="mb-4">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-sm font-medium text-gray-600">
+                        Progresso: {checklistItems.filter(item => item.concluido).length}/{checklistItems.length} itens concluídos
+                      </span>
+                      <span className="text-sm font-medium text-gray-600">
+                        {Math.round((checklistItems.filter(item => item.concluido).length / checklistItems.length) * 100)}%
+                      </span>
+                    </div>
+                    <Progress 
+                      value={(checklistItems.filter(item => item.concluido).length / checklistItems.length) * 100} 
+                      className="h-2 [&>div]:bg-green-500"
+                    />
+                  </div>
+                )}
+                
                 <h3 className="text-sm font-medium text-gray-600 mb-3">Checklist da Demanda</h3>
                 <ScrollArea className="h-64 pr-4">
                   {checklistLoading ? (
