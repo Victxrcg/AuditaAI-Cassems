@@ -108,6 +108,7 @@ const Cronograma = () => {
   const [checklistLoading, setChecklistLoading] = useState(false);
   const [isOrganizationModalOpen, setIsOrganizationModalOpen] = useState(false);
   const [selectedOrganizationForPDF, setSelectedOrganizationForPDF] = useState<string>('todos');
+  const [selectedStatusForPDF, setSelectedStatusForPDF] = useState<string>('todos');
   const initialFormData = () => ({
     titulo: '',
     descricao: '',
@@ -218,23 +219,37 @@ const Cronograma = () => {
 
 
   // Função para gerar PDF do overview das demandas
-  const gerarOverviewPDF = async (organizacaoSelecionada?: string) => {
+  const gerarOverviewPDF = async (organizacaoSelecionada?: string, statusSelecionado?: string) => {
     try {
       // Usar organização passada como parâmetro ou o filtro atual
       const orgParaFiltrar = organizacaoSelecionada || filtroOrganizacao;
+      const statusParaFiltrar = statusSelecionado || 'todos';
       
       // Buscar dados formatados da API
       const baseUrl = API_BASE.endsWith('/api') ? API_BASE : `${API_BASE}/api`;
       
       // Construir URL baseada no tipo de usuário
       let url = `${baseUrl}/pdf/dados-cronograma`;
+      const params = new URLSearchParams();
+      
       if (currentUser?.organizacao === 'portes') {
         // Usuário Portes pode especificar organização
-        url += `?organizacao=${orgParaFiltrar}`;
+        params.append('organizacao', orgParaFiltrar);
       }
+      
+      // Adicionar filtro de status se não for 'todos'
+      if (statusParaFiltrar !== 'todos') {
+        params.append('status', statusParaFiltrar);
+      }
+      
+      if (params.toString()) {
+        url += `?${params.toString()}`;
+      }
+      
       // Para usuários não-Portes, não enviar parâmetro organizacao - o backend usará x-user-organization
       
       console.log('📄 Gerando PDF para organização:', orgParaFiltrar);
+      console.log('📄 Gerando PDF para status:', statusParaFiltrar);
       console.log('📄 Tipo de usuário:', currentUser?.organizacao);
       console.log('📄 URL da API:', url);
       
@@ -256,6 +271,22 @@ const Cronograma = () => {
       }
       
       const { resumo, organizacoes, metadata } = data.data;
+      
+      console.log('📄 Dados recebidos da API:', {
+        resumo,
+        organizacoes: Object.keys(organizacoes),
+        metadata
+      });
+      
+      // Debug: verificar se os dados estão filtrados corretamente
+      console.log('📄 Verificando filtro de status:', {
+        statusSolicitado: statusParaFiltrar,
+        totalDemandas: resumo.totalDemandas,
+        demandasConcluidas: resumo.demandasConcluidas,
+        demandasEmAndamento: resumo.demandasEmAndamento,
+        demandasPendentes: resumo.demandasPendentes,
+        demandasAtrasadas: resumo.demandasAtrasadas
+      });
       
       // Se não há demandas para a organização selecionada
       if (resumo.totalDemandas === 0) {
@@ -349,10 +380,29 @@ const Cronograma = () => {
       } else {
         addText(`Escopo: ${orgParaFiltrar.toUpperCase()}`, 14, true);
       }
+      
+      // Mostrar filtro de status se aplicável
+      if (statusParaFiltrar !== 'todos') {
+        const statusLabel = statusParaFiltrar === 'concluido' ? 'Concluídas' : 
+                           statusParaFiltrar === 'em_andamento' ? 'Em Andamento' :
+                           statusParaFiltrar === 'pendente' ? 'Pendentes' :
+                           statusParaFiltrar === 'atrasado' ? 'Atrasadas' : statusParaFiltrar;
+        addText(`Filtro de Status: ${statusLabel}`, 14, true);
+      }
+      
       addText('', 5); // Espaço
       
       // Estatísticas gerais
-      addText('RESUMO GERAL', 16, true);
+      if (statusParaFiltrar !== 'todos') {
+        const statusLabel = statusParaFiltrar === 'concluido' ? 'Concluídas' : 
+                           statusParaFiltrar === 'em_andamento' ? 'Em Andamento' :
+                           statusParaFiltrar === 'pendente' ? 'Pendentes' :
+                           statusParaFiltrar === 'atrasado' ? 'Atrasadas' : statusParaFiltrar;
+        addText(`RESUMO - DEMANDAS ${statusLabel.toUpperCase()}`, 16, true);
+      } else {
+        addText('RESUMO GERAL', 16, true);
+      }
+      
       addTableRow([
         `Total: ${resumo.totalDemandas}`,
         `Concluídas: ${resumo.demandasConcluidas}`,
@@ -360,7 +410,16 @@ const Cronograma = () => {
         `Pendentes: ${resumo.demandasPendentes}`,
         `Atrasadas: ${resumo.demandasAtrasadas}`
       ], 12);
-      addText(`Percentual de Conclusão: ${resumo.percentualConclusao}%`, 14, true);
+      
+      if (statusParaFiltrar !== 'todos') {
+        addText(`Todas as ${resumo.totalDemandas} demandas são ${statusParaFiltrar === 'concluido' ? 'concluídas' : 
+                                                               statusParaFiltrar === 'em_andamento' ? 'em andamento' :
+                                                               statusParaFiltrar === 'pendente' ? 'pendentes' :
+                                                               statusParaFiltrar === 'atrasado' ? 'atrasadas' : statusParaFiltrar}`, 12, true);
+      } else {
+        addText(`Percentual de Conclusão: ${resumo.percentualConclusao}%`, 14, true);
+      }
+      
       addText('', 5); // Espaço
       
       // Detalhes por organização
@@ -428,7 +487,8 @@ const Cronograma = () => {
       
       // Salvar o PDF
       const escopoNome = orgParaFiltrar === 'todos' ? 'todas-organizacoes' : orgParaFiltrar.toLowerCase().replace(/\s+/g, '-');
-      const fileName = `overview-cronograma-${escopoNome}-${new Date().toISOString().split('T')[0]}.pdf`;
+      const statusNome = statusParaFiltrar === 'todos' ? 'todos-status' : statusParaFiltrar;
+      const fileName = `overview-cronograma-${escopoNome}-${statusNome}-${new Date().toISOString().split('T')[0]}.pdf`;
       pdf.save(fileName);
       
     } catch (error) {
@@ -451,7 +511,7 @@ const Cronograma = () => {
   // Função para confirmar e baixar PDF após seleção no modal
   const confirmarDownloadPDF = () => {
     setIsOrganizationModalOpen(false);
-    gerarOverviewPDF(selectedOrganizationForPDF);
+    gerarOverviewPDF(selectedOrganizationForPDF, selectedStatusForPDF);
   };
 
   // Função para carregar itens do checklist
@@ -2459,10 +2519,10 @@ const Cronograma = () => {
           <DialogHeader className="pb-4">
             <DialogTitle className="flex items-center gap-3 text-lg">
               <Download className="h-6 w-6" />
-              Selecionar Organização para Overview
+              Configurar Overview PDF
             </DialogTitle>
             <DialogDescription className="text-base">
-              Escolha qual organização deseja incluir no overview PDF.
+              Escolha a organização e o status das demandas para incluir no overview PDF.
             </DialogDescription>
           </DialogHeader>
           
@@ -2484,6 +2544,22 @@ const Cronograma = () => {
               </Select>
             </div>
             
+            <div className="space-y-3">
+              <Label htmlFor="status-pdf-select" className="text-base font-medium">Status das Demandas</Label>
+              <Select value={selectedStatusForPDF} onValueChange={setSelectedStatusForPDF}>
+                <SelectTrigger className="h-12">
+                  <SelectValue placeholder="Selecione um status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="todos">Todas as demandas</SelectItem>
+                  <SelectItem value="concluido">Concluídas</SelectItem>
+                  <SelectItem value="em_andamento">Em andamento</SelectItem>
+                  <SelectItem value="pendente">Pendentes</SelectItem>
+                  <SelectItem value="atrasado">Atrasadas</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            
             {selectedOrganizationForPDF !== 'todos' && (
               <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
                 <div className="flex items-start gap-3">
@@ -2496,6 +2572,14 @@ const Cronograma = () => {
                     </p>
                     <p className="text-sm text-blue-600 mt-2">
                       Será gerado um PDF contendo apenas as demandas desta organização.
+                      {selectedStatusForPDF !== 'todos' && (
+                        <span className="block mt-1">
+                          <strong>Status filtrado:</strong> {selectedStatusForPDF === 'concluido' ? 'Concluídas' : 
+                                                          selectedStatusForPDF === 'em_andamento' ? 'Em Andamento' :
+                                                          selectedStatusForPDF === 'pendente' ? 'Pendentes' :
+                                                          selectedStatusForPDF === 'atrasado' ? 'Atrasadas' : selectedStatusForPDF}
+                        </span>
+                      )}
                     </p>
                   </div>
                 </div>
@@ -2514,6 +2598,14 @@ const Cronograma = () => {
                     </p>
                     <p className="text-sm text-green-600 mt-2">
                       Será gerado um PDF contendo todas as demandas de todas as organizações.
+                      {selectedStatusForPDF !== 'todos' && (
+                        <span className="block mt-1">
+                          <strong>Status filtrado:</strong> {selectedStatusForPDF === 'concluido' ? 'Concluídas' : 
+                                                          selectedStatusForPDF === 'em_andamento' ? 'Em Andamento' :
+                                                          selectedStatusForPDF === 'pendente' ? 'Pendentes' :
+                                                          selectedStatusForPDF === 'atrasado' ? 'Atrasadas' : selectedStatusForPDF}
+                        </span>
+                      )}
                     </p>
                   </div>
                 </div>

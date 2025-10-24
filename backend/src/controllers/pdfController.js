@@ -31,10 +31,11 @@ const limparTituloChecklist = (titulo) => {
 exports.obterDadosParaPDF = async (req, res) => {
   let pool, server;
   try {
-    const { organizacao } = req.query;
+    const { organizacao, status } = req.query;
     const userOrg = req.headers['x-user-organization'] || 'cassems';
     
     console.log('📄 Gerando dados para PDF - Organização solicitada:', organizacao || 'todas');
+    console.log('📄 Gerando dados para PDF - Status solicitado:', status || 'todos');
     console.log('📄 Organização do usuário:', userOrg);
     console.log('📄 userOrg === "portes":', userOrg === 'portes');
     console.log('📄 Tipo de userOrg:', typeof userOrg);
@@ -71,6 +72,13 @@ exports.obterDadosParaPDF = async (req, res) => {
       query += ` AND c.organizacao = ?`;
       params.push(userOrg);
       console.log(`🔒 Usuário ${userOrg} - limitado aos dados da própria organização`);
+    }
+    
+    // Filtrar por status se especificado
+    if (status && status !== 'todos') {
+      query += ` AND c.status = ?`;
+      params.push(status);
+      console.log(`📄 Filtrando por status: ${status}`);
     }
     
     query += ` ORDER BY c.prioridade DESC, c.data_inicio ASC, c.created_at DESC`;
@@ -139,13 +147,56 @@ exports.obterDadosParaPDF = async (req, res) => {
       cronogramasFormatados.push(cronogramaFormatado);
     }
     
-    // Calcular estatísticas
+    // Calcular estatísticas baseado no filtro aplicado
     const totalDemandas = cronogramasFormatados.length;
-    const demandasConcluidas = cronogramasFormatados.filter(c => c.status === 'concluido').length;
-    const demandasEmAndamento = cronogramasFormatados.filter(c => c.status === 'em_andamento').length;
-    const demandasPendentes = cronogramasFormatados.filter(c => c.status === 'pendente').length;
-    const demandasAtrasadas = cronogramasFormatados.filter(c => c.status === 'atrasado').length;
-    const percentualConclusao = totalDemandas > 0 ? Math.round((demandasConcluidas / totalDemandas) * 100) : 0;
+    
+    let demandasConcluidas, demandasEmAndamento, demandasPendentes, demandasAtrasadas, percentualConclusao;
+    
+    if (status && status !== 'todos') {
+      // Se há filtro de status, mostrar apenas as estatísticas relevantes
+      if (status === 'concluido') {
+        demandasConcluidas = totalDemandas;
+        demandasEmAndamento = 0;
+        demandasPendentes = 0;
+        demandasAtrasadas = 0;
+        percentualConclusao = 100;
+      } else if (status === 'em_andamento') {
+        demandasConcluidas = 0;
+        demandasEmAndamento = totalDemandas;
+        demandasPendentes = 0;
+        demandasAtrasadas = 0;
+        percentualConclusao = 0;
+      } else if (status === 'pendente') {
+        demandasConcluidas = 0;
+        demandasEmAndamento = 0;
+        demandasPendentes = totalDemandas;
+        demandasAtrasadas = 0;
+        percentualConclusao = 0;
+      } else if (status === 'atrasado') {
+        demandasConcluidas = 0;
+        demandasEmAndamento = 0;
+        demandasPendentes = 0;
+        demandasAtrasadas = totalDemandas;
+        percentualConclusao = 0;
+      }
+    } else {
+      // Sem filtro de status, calcular todas as estatísticas
+      demandasConcluidas = cronogramasFormatados.filter(c => c.status === 'concluido').length;
+      demandasEmAndamento = cronogramasFormatados.filter(c => c.status === 'em_andamento').length;
+      demandasPendentes = cronogramasFormatados.filter(c => c.status === 'pendente').length;
+      demandasAtrasadas = cronogramasFormatados.filter(c => c.status === 'atrasado').length;
+      percentualConclusao = totalDemandas > 0 ? Math.round((demandasConcluidas / totalDemandas) * 100) : 0;
+    }
+    
+    console.log('📊 Estatísticas calculadas:', {
+      totalDemandas,
+      demandasConcluidas,
+      demandasEmAndamento,
+      demandasPendentes,
+      demandasAtrasadas,
+      percentualConclusao,
+      filtroStatus: status
+    });
     
     // Agrupar por organização
     const organizacoes = {};
