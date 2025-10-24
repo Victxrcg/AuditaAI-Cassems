@@ -258,25 +258,26 @@ const Users = () => {
   };
 
   return (
-    <div className="p-6 space-y-6">
-      <div className="flex justify-between items-center">
-        <div>
-          <h1 className="text-3xl font-bold">Usuários do Sistema</h1>
-          <p className="text-gray-600">
+    <div className="p-4 sm:p-6 space-y-4 sm:space-y-6 max-w-full overflow-hidden">
+      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
+        <div className="min-w-0 flex-1">
+          <h1 className="text-2xl sm:text-3xl font-bold truncate">Usuários do Sistema</h1>
+          <p className="text-sm sm:text-base text-gray-600 truncate">
             {currentUser?.organizacao === 'portes' 
               ? 'Gerencie todos os usuários do sistema' 
               : `Usuários da ${currentUser?.nome_empresa || currentUser?.organizacao_nome || 'sua organização'}`
             }
           </p>
           {currentUser?.organizacao !== 'portes' && (
-            <p className="text-sm text-blue-600 mt-1">
+            <p className="text-xs sm:text-sm text-blue-600 mt-1">
               Visualizando usuários da sua organização
             </p>
           )}
         </div>
-        <Button variant="outline" onClick={fetchUsers} disabled={loading}>
+        <Button variant="outline" onClick={fetchUsers} disabled={loading} className="flex-shrink-0">
           <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
-          Recarregar
+          <span className="hidden sm:inline">Recarregar</span>
+          <span className="sm:hidden">↻</span>
         </Button>
       </div>
 
@@ -297,73 +298,69 @@ const Users = () => {
               Nenhum usuário encontrado.
             </div>
           ) : (
-            <div className="space-y-4">
+            <div className="space-y-3 sm:space-y-4">
               {users.map(user => (
-                <div key={user.id} className="border border-gray-200 rounded-lg p-6 hover:bg-gray-50 transition-colors">
-                  <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-center">
+                <div key={user.id} className="border border-gray-200 rounded-lg p-4 sm:p-6 hover:bg-gray-50 transition-colors">
+                  {/* Layout principal responsivo */}
+                  <div className="flex flex-col lg:flex-row lg:items-center gap-4 lg:gap-6">
                     {/* Avatar e Info Básica */}
-                    <div className="lg:col-span-4">
-                      <div className="flex items-center gap-4">
-                        <div className="w-12 h-12 bg-gray-200 rounded-full flex items-center justify-center">
-                          <User className="h-6 w-6 text-gray-600" />
-                        </div>
-                        <div>
-                          <div className="font-semibold text-lg">{user.nome || 'Sem nome'}</div>
-                          <div className="text-sm text-gray-600 flex items-center gap-1">
-                            <Mail className="h-4 w-4" />
-                            {user.email}
-                          </div>
+                    <div className="flex items-center gap-3 min-w-0 flex-1">
+                      <div className="w-10 h-10 sm:w-12 sm:h-12 bg-gray-200 rounded-full flex items-center justify-center flex-shrink-0">
+                        <User className="h-5 w-5 sm:h-6 sm:w-6 text-gray-600" />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="font-semibold text-base sm:text-lg truncate">{user.nome || 'Sem nome'}</div>
+                        <div className="text-xs sm:text-sm text-gray-600 flex items-center gap-1 truncate">
+                          <Mail className="h-3 w-3 sm:h-4 sm:w-4 flex-shrink-0" />
+                          <span className="truncate">{user.email}</span>
                         </div>
                       </div>
                     </div>
 
-                    {/* Empresa */}
-                    <div className="lg:col-span-2">
+                    {/* Badges e Ações em linha para telas grandes */}
+                    <div className="flex flex-col sm:flex-row lg:flex-col xl:flex-row gap-3 sm:gap-4 lg:gap-2 xl:gap-4 lg:items-start xl:items-center">
+                      {/* Empresa */}
                       <div className="space-y-1">
                         <div className="text-xs text-gray-500 font-medium">Empresa</div>
-                        {getOrganizationBadge(user)}
+                        <div className="truncate">{getOrganizationBadge(user)}</div>
                       </div>
-                    </div>
 
-                    {/* Perfil */}
-                    <div className="lg:col-span-2">
+                      {/* Perfil */}
                       <div className="space-y-1">
                         <div className="text-xs text-gray-500 font-medium">Perfil</div>
-                        {getRoleBadge(user.perfil)}
+                        <div className="truncate">{getRoleBadge(user.perfil)}</div>
                       </div>
-                    </div>
 
-                    {/* Status */}
-                    <div className="lg:col-span-2">
+                      {/* Status */}
                       <div className="space-y-1">
                         <div className="text-xs text-gray-500 font-medium">Status</div>
-                        {getStatusBadge(user.ativo)}
+                        <div className="truncate">{getStatusBadge(user.ativo)}</div>
                       </div>
-                    </div>
 
-                    {/* Ações */}
-                    <div className="lg:col-span-2">
+                      {/* Ações */}
                       <div className="space-y-1">
                         <div className="text-xs text-gray-500 font-medium">Ações</div>
                         {currentUser?.organizacao === 'portes' ? (
-                          <div className="flex gap-2">
+                          <div className="flex flex-col sm:flex-row gap-2">
                             <Button
                               variant="outline"
                               size="sm"
                               onClick={() => openEditDialog(user)}
-                              className="text-blue-600 border-blue-300 hover:bg-blue-50"
+                              className="text-blue-600 border-blue-300 hover:bg-blue-50 text-xs sm:text-sm"
                             >
-                              <Edit className="h-4 w-4 mr-1" />
-                              Editar
+                              <Edit className="h-3 w-3 sm:h-4 sm:w-4 mr-1" />
+                              <span className="hidden sm:inline">Editar</span>
+                              <span className="sm:hidden">Ed.</span>
                             </Button>
                             <Button
                               variant="outline"
                               size="sm"
                               onClick={() => resetPassword(user.id, user.nome || user.email)}
-                              className="text-orange-600 border-orange-300 hover:bg-orange-50"
+                              className="text-orange-600 border-orange-300 hover:bg-orange-50 text-xs sm:text-sm"
                             >
-                              <Key className="h-4 w-4 mr-1" />
-                              Resetar
+                              <Key className="h-3 w-3 sm:h-4 sm:w-4 mr-1" />
+                              <span className="hidden sm:inline">Resetar</span>
+                              <span className="sm:hidden">Reset</span>
                             </Button>
                           </div>
                         ) : (
@@ -376,17 +373,17 @@ const Users = () => {
                   </div>
 
                   {/* Informações Adicionais */}
-                  <div className="mt-4 pt-4 border-t border-gray-100">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-gray-600">
-                      <div className="flex items-center gap-2">
-                        <Calendar className="h-4 w-4" />
+                  <div className="mt-3 sm:mt-4 pt-3 sm:pt-4 border-t border-gray-100">
+                    <div className="flex flex-col sm:flex-row gap-2 sm:gap-4 text-xs sm:text-sm text-gray-600">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <Calendar className="h-3 w-3 sm:h-4 sm:w-4 flex-shrink-0" />
                         <span className="font-medium">Criado em:</span>
-                        <span>{formatDate(user.created_at || '')}</span>
+                        <span className="truncate">{formatDate(user.created_at || '')}</span>
                       </div>
-                      <div className="flex items-center gap-2">
-                        <Clock className="h-4 w-4" />
+                      <div className="flex items-center gap-2 min-w-0">
+                        <Clock className="h-3 w-3 sm:h-4 sm:w-4 flex-shrink-0" />
                         <span className="font-medium">Última atualização:</span>
-                        <span>{formatDate(user.updated_at || '')}</span>
+                        <span className="truncate">{formatDate(user.updated_at || '')}</span>
                       </div>
                     </div>
                   </div>
@@ -399,18 +396,18 @@ const Users = () => {
 
       {/* Dialog de Edição Completo */}
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-md mx-4 sm:mx-auto">
           <DialogHeader>
             <DialogTitle>Editar Usuário</DialogTitle>
           </DialogHeader>
           {editingUser && (
-            <div className="space-y-6">
+            <div className="space-y-4 sm:space-y-6">
               {/* Informações do Usuário */}
               <div className="space-y-2">
                 <label className="text-sm font-medium">Usuário</label>
                 <div className="p-3 bg-gray-50 rounded-lg">
-                  <p className="text-lg font-semibold">{editingUser.nome}</p>
-                  <p className="text-sm text-gray-600">{editingUser.email}</p>
+                  <p className="text-base sm:text-lg font-semibold truncate">{editingUser.nome}</p>
+                  <p className="text-xs sm:text-sm text-gray-600 truncate">{editingUser.email}</p>
                 </div>
               </div>
               
@@ -497,10 +494,11 @@ const Users = () => {
               </div>
 
               {/* Botões de Ação */}
-              <div className="flex justify-end gap-2 pt-4">
+              <div className="flex flex-col sm:flex-row justify-end gap-2 pt-4">
                 <Button
                   variant="outline"
                   onClick={() => setIsEditDialogOpen(false)}
+                  className="w-full sm:w-auto"
                 >
                   <X className="h-4 w-4 mr-2" />
                   Cancelar
@@ -512,6 +510,7 @@ const Users = () => {
                     editingUser.organizacao === users.find(u => u.id === editingUser.id)?.organizacao &&
                     editingUser.ativo === users.find(u => u.id === editingUser.id)?.ativo
                   }
+                  className="w-full sm:w-auto"
                 >
                   <Save className="h-4 w-4 mr-2" />
                   Salvar Alterações

@@ -224,8 +224,22 @@ exports.atualizarCronograma = async (req, res) => {
     }
     if (descricao !== undefined) { updates.push('descricao = ?'); params.push(descricao); }
     if (fase_atual !== undefined) { updates.push('fase_atual = ?'); params.push(fase_atual); }
-    if (data_inicio !== undefined && data_inicio !== '') { updates.push('data_inicio = ?'); params.push(data_inicio); }
-    if (data_fim !== undefined && data_fim !== '') { updates.push('data_fim = ?'); params.push(data_fim); }
+    if (data_inicio !== undefined) { 
+      if (data_inicio !== '' && data_inicio !== null) {
+        updates.push('data_inicio = ?'); 
+        params.push(data_inicio); 
+      } else {
+        updates.push('data_inicio = NULL'); 
+      }
+    }
+    if (data_fim !== undefined) { 
+      if (data_fim !== '' && data_fim !== null) {
+        updates.push('data_fim = ?'); 
+        params.push(data_fim); 
+      } else {
+        updates.push('data_fim = NULL'); 
+      }
+    }
     if (responsavel_id !== undefined) { updates.push('responsavel_id = ?'); params.push(responsavel_id); }
     if (prioridade !== undefined) { updates.push('prioridade = ?'); params.push(prioridade); }
     if (status !== undefined) { updates.push('status = ?'); params.push(status); }
