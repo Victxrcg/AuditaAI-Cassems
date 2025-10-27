@@ -1259,11 +1259,9 @@ const HistoricoAlteracoes = ({ historico, loading }: { historico: HistoricoAlter
 
 // Mover as funções para dentro do componente principal Compliance
 export default function Compliance() {
-  // Inicializar view e competenciaId do localStorage (se existir)
-  const [currentView, setCurrentView] = useState<'list' | 'create' | 'view'>(() => {
-    const savedView = localStorage.getItem('compliance-current-view');
-    return (savedView as 'list' | 'create' | 'view') || 'list';
-  });
+  // Sempre inicializar com a lista ao montar o componente
+  // O localStorage é usado apenas para manter estado durante refresh de página
+  const [currentView, setCurrentView] = useState<'list' | 'create' | 'view'>('list');
   const [selectedCompetencia, setSelectedCompetencia] = useState<Competencia | null>(null);
   const [loading, setLoading] = useState(false);
   const [loadingCompetencia, setLoadingCompetencia] = useState(false);
@@ -1273,9 +1271,7 @@ export default function Compliance() {
   const [competencias, setCompetencias] = useState<Competencia[]>([]);
   // Inicializar complianceItems com estado salvo
   const [complianceItems, setComplianceItems] = useState<ComplianceItem[]>(() => initializeComplianceItems());
-  const [currentCompetenciaId, setCurrentCompetenciaId] = useState<string | null>(() => {
-    return localStorage.getItem('compliance-current-id');
-  });
+  const [currentCompetenciaId, setCurrentCompetenciaId] = useState<string | null>(null);
 
   // NOVO: Estado para data da competência no header
   const [competenciaData, setCompetenciaData] = useState<string>('');
