@@ -929,6 +929,13 @@ const ComplianceItemCard = memo(({
                       console.log('🔍 apiBase original:', apiBase);
                       console.log('🔍 baseUrl:', baseUrl);
                       
+                      // Toast de carregamento
+                      toast({
+                        title: 'Enviando email... ',
+                        description: 'Aguarde, estamos enviando os anexos por email.',
+                        variant: 'default',
+                      });
+                      
                       const response = await fetch(finalUrl, {
                         method: 'POST',
                         headers: {
@@ -1644,6 +1651,27 @@ export default function Compliance() {
         setComplianceItems(updatedItems);
         console.log(' Compliance items atualizados com dados do banco:', updatedItems);
         
+        // Carregar campos de email do localStorage e aplicar nos itens
+        try {
+          const emailFieldsKey = `compliance-email-${competenciaId}`;
+          const savedEmailFields = JSON.parse(localStorage.getItem(emailFieldsKey) || '{}');
+          
+          if (Object.keys(savedEmailFields).length > 0) {
+            const itemsWithEmail = updatedItems.map(item => {
+              const savedFields = savedEmailFields[item.id];
+              if (savedFields) {
+                return { ...item, ...savedFields };
+              }
+              return item;
+            });
+            
+            setComplianceItems(itemsWithEmail);
+            console.log('📧 Campos de email carregados do localStorage:', savedEmailFields);
+          }
+        } catch (error) {
+          console.error('Erro ao carregar campos de email:', error);
+        }
+        
         // Salvar estado atual dos cards no localStorage
         saveCardsState(updatedItems, competenciaId);
 
@@ -2078,13 +2106,31 @@ export default function Compliance() {
   };
 
   // Handlers estáveis com useCallback
-  const handleFieldChange = useCallback((id: string, field: 'valor' | 'data' | 'observacoes' | 'emailRemetente' | 'emailDestinatario' | 'emailEnviado', value: string | boolean) => {
-    setComplianceItems(prev => prev.map(item =>
+  const handleFieldChange = useCallback((id: string, field: 'valor' | 'data' | 'observacoes' | 'emailRemetente' | 'emailDestinatario' | 'emailAssunto' | 'emailEnviado', value: string | boolean) => {
+    const updatedItems = prev => prev.map(item =>
       item.id === id
         ? { ...item, [field]: value }
         : item
-    ));
-  }, []);
+    );
+    
+    setComplianceItems(updatedItems);
+    
+    // Salvar campos de email no localStorage se houver competência
+    if (currentCompetenciaId && ['emailRemetente', 'emailDestinatario', 'emailAssunto', 'emailEnviado'].includes(field)) {
+      try {
+        const emailFieldsKey = `compliance-email-${currentCompetenciaId}`;
+        const savedFields = JSON.parse(localStorage.getItem(emailFieldsKey) || '{}');
+        savedFields[id] = {
+          ...savedFields[id],
+          [field]: value
+        };
+        localStorage.setItem(emailFieldsKey, JSON.stringify(savedFields));
+        console.log('💾 Campos de email salvos no localStorage:', savedFields);
+      } catch (error) {
+        console.error('Erro ao salvar campos de email:', error);
+      }
+    }
+  }, [currentCompetenciaId]);
 
   const handleFileUpload = useCallback(async (id: string, file: File) => {
     console.log(' Arquivo selecionado para item:', id, file.name);
