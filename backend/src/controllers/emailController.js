@@ -40,7 +40,9 @@ exports.enviarNotasFiscais = async (req, res) => {
     const { 
       emailRemetente, 
       emailDestinatario, 
-      competenciaId 
+      competenciaId,
+      assunto,
+      tipoAnexo
     } = req.body;
 
     // Validações básicas
@@ -60,10 +62,11 @@ exports.enviarNotasFiscais = async (req, res) => {
       });
     }
 
-    console.log('📧 Iniciando envio de notas fiscais:', {
+    console.log('📧 Iniciando envio de anexos da competência:', {
       emailRemetente,
       emailDestinatario,
-      competenciaId
+      competenciaId,
+      tipoAnexo
     });
 
     // Buscar anexos da competência (tipo 'estabelecimento' para item 7 - Notas Fiscais)
@@ -78,7 +81,7 @@ exports.enviarNotasFiscais = async (req, res) => {
         tipo_anexo,
         file_data
       FROM compliance_anexos 
-      WHERE compliance_id = ? AND tipo_anexo = 'estabelecimento'
+      WHERE compliance_id = ? AND tipo_anexo = ?
     `;
 
     // Debug: buscar TODOS os anexos da competência primeiro
@@ -87,9 +90,12 @@ exports.enviarNotasFiscais = async (req, res) => {
     const todosAnexos = await executeQueryWithRetry(debugQuery, [competenciaId]);
     console.log('🔍 DEBUG: Todos os anexos da competência:', todosAnexos);
 
-    console.log('🔍 Executando query para buscar anexos do tipo estabelecimento...');
-    const anexos = await executeQueryWithRetry(anexosQuery, [competenciaId]);
-    console.log('🔍 Anexos encontrados (tipo estabelecimento):', anexos);
+    const tipoParaBuscar = tipoAnexo && typeof tipoAnexo === 'string' && tipoAnexo.trim() ? tipoAnexo.trim() : 'estabelecimento';
+    console.log(`🔍 Executando query para buscar anexos do tipo ${tipoParaBuscar}...`);
+    const anexos = await executeQueryWithRetry(anexosQuery, [competenciaId, tipoParaBuscar]);
+    console.log(`🔍 Anexos encontrados (tipo ${tipoParaBuscar}):`, anexos);
+    
+    // Manter variável para uso posterior no envio de email
 
     if (!anexos || anexos.length === 0) {
       console.log('❌ Nenhuma nota fiscal encontrada, retornando 404');
@@ -162,12 +168,14 @@ exports.enviarNotasFiscais = async (req, res) => {
       });
     }
 
-    // Enviar email com os anexos
+    // Enviar email com os anexos (tipoParaBuscar já foi definido acima)
     const resultado = await enviarNotasFiscais(
       emailRemetente,
       emailDestinatario,
       competenciaId,
-      anexosValidos
+      anexosValidos,
+      assunto,
+      tipoParaBuscar
     );
 
     if (resultado.success) {
@@ -187,7 +195,7 @@ exports.enviarNotasFiscais = async (req, res) => {
           competenciaId,
           emailRemetente,
           emailDestinatario,
-          `Notas Fiscais - Competência ${competenciaId}`,
+          assunto && assunto.trim() ? assunto.trim() : `Notas Fiscais - Competência ${competenciaId}`,
           'enviado',
           resultado.messageId
         ]);

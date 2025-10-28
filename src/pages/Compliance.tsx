@@ -69,6 +69,7 @@ interface ComplianceItem {
   // Campos específicos para envio de email (Notas Fiscais)
   emailRemetente?: string;
   emailDestinatario?: string;
+  emailAssunto?: string;
   emailEnviado?: boolean;
 }
 
@@ -328,10 +329,11 @@ const ComplianceItemCard = memo(({
   onToggleExpanded,
   downloadParecerPDF,
   complianceItems,
-  apiBase
+  apiBase,
+  currentUserEmail
 }: {
   item: ComplianceItem;
-  onFieldChange: (id: string, field: 'valor' | 'data' | 'observacoes' | 'emailRemetente' | 'emailDestinatario' | 'emailEnviado', value: string | boolean) => void;
+  onFieldChange: (id: string, field: 'valor' | 'data' | 'observacoes' | 'emailRemetente' | 'emailDestinatario' | 'emailAssunto' | 'emailEnviado', value: string | boolean) => void;
   onFileUpload: (id: string, file: File) => Promise<any>;
   onRemoveFile: (id: string, anexoId: number) => void;
   onSave: (id: string) => void;
@@ -343,6 +345,7 @@ const ComplianceItemCard = memo(({
   downloadParecerPDF: (parecerText: string) => void;
   complianceItems: ComplianceItem[];
   apiBase: string;
+  currentUserEmail?: string;
 }) => {
   const [uploading, setUploading] = useState(false);
   const [anexos, setAnexos] = useState<Anexo[]>(item.anexos || []);
@@ -807,15 +810,18 @@ const ComplianceItemCard = memo(({
             />
           </div>
 
-          {/* Campos de Email - apenas para Notas Fiscais (ID '7') */}
-          {item.id === '7' && (
+          {/* Campos de Email - para Notas Fiscais (ID '7') e Relatório Faturamento (ID '3') */}
+          {(item.id === '7' || item.id === '3') && (
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
               <div className="flex items-center gap-2 mb-3">
                 <Mail className="h-5 w-5 text-blue-600" />
                 <h3 className="text-lg font-semibold text-blue-900">Envio por Email</h3>
               </div>
               <p className="text-sm text-blue-700 mb-4">
-                Envie as notas fiscais anexadas diretamente por email
+                {item.id === '3' 
+                  ? 'Envie o relatório de faturamento anexado diretamente por email'
+                  : 'Envie as notas fiscais anexadas diretamente por email'
+                }
               </p>
               
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -827,10 +833,11 @@ const ComplianceItemCard = memo(({
                   <Input
                     id={`email-remetente-${item.id}`}
                     type="email"
-                    value={item.emailRemetente || ''}
+                    value={item.emailRemetente || currentUserEmail || ''}
                     onChange={(e) => onFieldChange(item.id, 'emailRemetente', e.target.value)}
                     placeholder="seu.email@exemplo.com"
                     className="mt-1"
+                    disabled
                   />
                 </div>
                 
@@ -848,6 +855,22 @@ const ComplianceItemCard = memo(({
                     className="mt-1"
                   />
                 </div>
+              </div>
+
+              {/* Assunto opcional */}
+              <div className="mt-4">
+                <Label htmlFor={`email-assunto-${item.id}`}>Assunto (opcional)</Label>
+                <Input
+                  id={`email-assunto-${item.id}`}
+                  type="text"
+                  value={(item as any).emailAssunto || ''}
+                  onChange={(e) => onFieldChange(item.id, 'emailAssunto' as any, e.target.value)}
+                    placeholder={item.id === '3' 
+                      ? `Relatório Faturamento - Competência ${currentCompetenciaId || ''} (padrão)`
+                      : `Notas Fiscais - Competência ${currentCompetenciaId || ''} (padrão)`
+                    }
+                  className="mt-1"
+                />
               </div>
               
               {/* Status de envio */}
@@ -867,7 +890,8 @@ const ComplianceItemCard = memo(({
               <div className="mt-4 flex justify-end">
                 <Button
                   onClick={async () => {
-                    if (!item.emailRemetente || !item.emailDestinatario) {
+                    const emailRemetenteToUse = item.emailRemetente || currentUserEmail || '';
+                    if (!emailRemetenteToUse || !item.emailDestinatario) {
                       toast({
                         title: "Campos obrigatórios",
                         description: "Preencha ambos os campos de email antes de enviar.",
@@ -878,7 +902,9 @@ const ComplianceItemCard = memo(({
                     if (anexos.length === 0) {
                       toast({
                         title: "Nenhum arquivo",
-                        description: "Anexe pelo menos uma nota fiscal antes de enviar por email.",
+                        description: item.id === '3' 
+                          ? "Anexe pelo menos um relatório de faturamento antes de enviar por email."
+                          : "Anexe pelo menos uma nota fiscal antes de enviar por email.",
                         variant: "destructive",
                       });
                       return;
@@ -909,9 +935,11 @@ const ComplianceItemCard = memo(({
                           'Content-Type': 'application/json',
                         },
                         body: JSON.stringify({
-                          emailRemetente: item.emailRemetente,
+                          emailRemetente: emailRemetenteToUse,
                           emailDestinatario: item.emailDestinatario,
-                          competenciaId: currentCompetenciaId
+                          competenciaId: currentCompetenciaId,
+                          assunto: (item as any).emailAssunto && (item as any).emailAssunto.trim() ? (item as any).emailAssunto.trim() : undefined,
+                          tipoAnexo: item.id === '3' ? 'relatorio_faturamento' : 'estabelecimento'
                         })
                       });
 
@@ -923,7 +951,9 @@ const ComplianceItemCard = memo(({
                         
                         toast({
                           title: "Email enviado!",
-                          description: `Notas fiscais enviadas de ${item.emailRemetente} para ${item.emailDestinatario}`,
+                          description: item.id === '3'
+                            ? `Relatório de faturamento enviado para ${item.emailDestinatario}`
+                            : `Notas fiscais enviadas para ${item.emailDestinatario}`,
                           variant: "default",
                         });
                       } else {
@@ -943,7 +973,7 @@ const ComplianceItemCard = memo(({
                     }
                   }}
                   className={item.emailEnviado ? "bg-green-600 hover:bg-green-700 text-white" : "bg-blue-600 hover:bg-blue-700 text-white"}
-                  disabled={!item.emailRemetente || !item.emailDestinatario || anexos.length === 0 || loading || item.emailEnviado}
+                  disabled={!(item.emailRemetente || currentUserEmail) || !item.emailDestinatario || anexos.length === 0 || loading || item.emailEnviado}
                 >
                   <Mail className="h-4 w-4 mr-2" />
                   {loading ? 'Enviando...' : item.emailEnviado ? 'Email Enviado ✓' : 'Enviar por Email'}
@@ -2713,6 +2743,7 @@ export default function Compliance() {
             downloadParecerPDF={downloadParecerPDF}
             complianceItems={complianceItems}
             apiBase={API_BASE}
+            currentUserEmail={currentUser?.email}
           />
         ))}
       </div>
@@ -2798,7 +2829,8 @@ export default function Compliance() {
             onToggleExpanded={handleToggleExpanded}
             downloadParecerPDF={downloadParecerPDF}
             complianceItems={complianceItems}
-            apiBase={API_BASE}
+          apiBase={API_BASE}
+          currentUserEmail={currentUser?.email}
           />
         ))}
         </div>

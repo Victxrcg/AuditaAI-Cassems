@@ -25,7 +25,7 @@ function createTransporter() {
 }
 
 // Função para enviar email com anexos
-const enviarEmailComAnexos = async (destinatario, remetente, assunto, corpo, anexos = []) => {
+const enviarEmailComAnexos = async (destinatario, remetente, assunto, corpo, anexos = [], replyTo) => {
   try {
     const transporter = createTransporter();
 
@@ -65,7 +65,8 @@ const enviarEmailComAnexos = async (destinatario, remetente, assunto, corpo, ane
       to: destinatario,
       subject: assunto,
       html: corpo,
-      attachments: attachments
+      attachments: attachments,
+      ...(replyTo ? { replyTo } : {})
     };
 
     console.log('📧 Enviando email:', {
@@ -94,22 +95,41 @@ const enviarEmailComAnexos = async (destinatario, remetente, assunto, corpo, ane
   }
 };
 
-// Função específica para enviar notas fiscais
-const enviarNotasFiscais = async (emailRemetente, emailDestinatario, competenciaId, anexos) => {
+// Função específica para enviar anexos por email
+const enviarNotasFiscais = async (emailRemetente, emailDestinatario, competenciaId, anexos, assuntoOpcional, tipoAnexo) => {
   try {
-    const assunto = `Notas Fiscais - Competência ${competenciaId}`;
+    // Determinar assunto padrão baseado no tipo de anexo
+    let assuntoPadrao = `Arquivo - Competência ${competenciaId}`;
+    if (tipoAnexo === 'relatorio_faturamento') {
+      assuntoPadrao = `Relatório Faturamento - Competência ${competenciaId}`;
+    } else if (tipoAnexo === 'estabelecimento') {
+      assuntoPadrao = `Notas Fiscais - Competência ${competenciaId}`;
+    }
+    
+    const assunto = assuntoOpcional && assuntoOpcional.trim() ? assuntoOpcional.trim() : assuntoPadrao;
     
     // Usar o mesmo formato de email que já está funcionando no sistema
     const appName = process.env.APP_NAME || 'Compliance App';
     const from = process.env.SMTP_FROM || 'no-reply@portes.com.br';
     
+    // Determinar título e mensagem baseado no tipo de anexo
+    const tituloEmail = tipoAnexo === 'relatorio_faturamento' 
+      ? '📊 Relatório de Faturamento Enviado'
+      : '📄 Notas Fiscais Enviadas';
+    
+    const mensagemEmail = assuntoOpcional && assuntoOpcional.trim() 
+      ? assuntoOpcional.trim() 
+      : tipoAnexo === 'relatorio_faturamento'
+        ? `Segue em anexo o relatório de faturamento da competência <strong>${competenciaId}</strong>.`
+        : `Segue em anexo as notas fiscais da competência <strong>${competenciaId}</strong>.`;
+    
     const corpo = `
       <div style="font-family: Arial, sans-serif; line-height:1.6;">
-        <h2>📄 Notas Fiscais Enviadas</h2>
+        <h2>${tituloEmail}</h2>
         
         <p>Olá,</p>
         
-        <p>Segue em anexo as notas fiscais da competência <strong>${competenciaId}</strong>.</p>
+        <p>${mensagemEmail}</p>
         
         <div style="background-color: #f8fafc; padding: 15px; border-radius: 8px; margin: 20px 0;">
           <h3 style="color: #1e40af; margin-top: 0;">📋 Detalhes do Envio:</h3>
@@ -132,7 +152,7 @@ const enviarNotasFiscais = async (emailRemetente, emailDestinatario, competencia
       </div>
     `;
 
-    return await enviarEmailComAnexos(emailDestinatario, from, assunto, corpo, anexos);
+    return await enviarEmailComAnexos(emailDestinatario, from, assunto, corpo, anexos, emailRemetente);
 
   } catch (error) {
     console.error('❌ Erro ao enviar notas fiscais:', error);
