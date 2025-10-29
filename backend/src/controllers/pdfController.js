@@ -501,62 +501,6 @@ const analisarCronogramaComIA = async (cronogramasFormatados, organizacoes, user
         }
       };
     });
-
-    // Estatísticas detalhadas por mês (para auditoria)
-    const resumoMensalDetalhado = mesesOrdenados.map(mes => {
-      const dados = dadosPorMes[mes];
-      const [ano, mesNum] = mes.split('-');
-      const nomeMes = new Date(ano, parseInt(mesNum) - 1).toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
-
-      const concluidas = dados.demandasConcluidas || [];
-      const atrasadas = dados.demandasAtrasadas || [];
-      const pendentes = dados.demandasPendentes || [];
-      const totalDemandas = concluidas.length + atrasadas.length + pendentes.length;
-
-      // Duração média (dias) considerando apenas concluídas com datas válidas
-      const duracoes = concluidas
-        .map(d => d.data_inicio && (d.data_fim || d.updated_at)
-          ? Math.max(1, Math.ceil((new Date(d.data_fim || d.updated_at) - new Date(d.data_inicio)) / (1000*60*60*24)))
-          : null)
-        .filter(v => typeof v === 'number');
-      const duracaoMediaDias = duracoes.length > 0 ? +(duracoes.reduce((a,b) => a+b, 0) / duracoes.length).toFixed(1) : null;
-
-      // Responsável mais ativo (por conclusões no mês)
-      const porResp = {};
-      concluidas.forEach(d => {
-        const nome = d.responsavel_nome || 'Não definido';
-        porResp[nome] = (porResp[nome] || 0) + 1;
-      });
-      let responsavelMaisAtivo = null;
-      let maxCount = 0;
-      Object.entries(porResp).forEach(([nome, qtd]) => {
-        if (qtd > maxCount) { maxCount = qtd; responsavelMaisAtivo = nome; }
-      });
-
-      return {
-        mes: mes,
-        mesLabel: nomeMes,
-        totalDemandas,
-        concluidas: concluidas.length,
-        atrasadas: atrasadas.length,
-        pendentes: pendentes.length,
-        duracaoMediaDias,
-        responsavelMaisAtivo: responsavelMaisAtivo || null
-      };
-    });
-
-    // Ranking de responsáveis (geral do período)
-    const ranking = {};
-    cronogramasFormatados.forEach(d => {
-      const nome = d.responsavel_nome || 'Não definido';
-      if (!ranking[nome]) ranking[nome] = { nome, concluidas: 0, atrasadas: 0 };
-      if (d.status === 'concluido') ranking[nome].concluidas += 1;
-      if (d.status === 'atrasado') ranking[nome].atrasadas += 1;
-    });
-    const topResponsaveis = Object.values(ranking)
-      .sort((a, b) => (b.concluidas - a.concluidas) || (a.atrasadas - b.atrasadas))
-      .slice(0, 10);
-
     // Logs ricos em dev
     try {
       if (process.env.NODE_ENV !== 'production') {
