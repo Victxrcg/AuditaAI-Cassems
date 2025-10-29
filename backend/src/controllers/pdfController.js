@@ -263,115 +263,95 @@ exports.obterDadosParaPDF = async (req, res) => {
   }
 };
 
-// Função auxiliar para agrupar cronogramas por mês
+// Função auxiliar para agrupar cronogramas por mês (suporta multi-mês)
 const agruparPorMes = (cronogramasFormatados) => {
   const porMes = {};
-  
+
+  const monthCode = (date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+  const ensureMonth = (code) => {
+    if (!porMes[code]) {
+      porMes[code] = {
+        mes: code,
+        demandasIniciadas: [],
+        demandasConcluidas: [],
+        demandasEmAndamento: [],
+        demandasPendentes: [],
+        demandasAtrasadas: [],
+        emExecucao: [], // multi-mês
+        checklistsConcluidos: [],
+        checklistsPendentes: []
+      };
+    }
+    return porMes[code];
+  };
+
+  const endOfMonth = (date) => new Date(date.getFullYear(), date.getMonth() + 1, 0);
+  const startOfMonth = (date) => new Date(date.getFullYear(), date.getMonth(), 1);
+
+  const addRangeMonths = (start, end, fn) => {
+    const s = new Date(start.getFullYear(), start.getMonth(), 1);
+    const e = new Date(end.getFullYear(), end.getMonth(), 1);
+    for (let d = new Date(s); d <= e; d.setMonth(d.getMonth() + 1)) {
+      fn(monthCode(d));
+    }
+  };
+
+  const hoje = new Date();
+
   cronogramasFormatados.forEach(cronograma => {
-    // Processar data de início
-    if (cronograma.data_inicio) {
-      const dataInicio = new Date(cronograma.data_inicio);
-      const mesInicio = `${dataInicio.getFullYear()}-${String(dataInicio.getMonth() + 1).padStart(2, '0')}`;
-      
-      if (!porMes[mesInicio]) {
-        porMes[mesInicio] = {
-          mes: mesInicio,
-          demandasIniciadas: [],
-          demandasConcluidas: [],
-          demandasEmAndamento: [],
-          demandasPendentes: [],
-          demandasAtrasadas: [],
-          checklistsConcluidos: [],
-          checklistsPendentes: []
-        };
-      }
-      
-      // Adicionar como iniciada neste mês se status for apropriado
-      if (cronograma.status === 'em_andamento' || cronograma.status === 'pendente') {
-        porMes[mesInicio].demandasEmAndamento.push(cronograma);
+    const di = cronograma.data_inicio ? new Date(cronograma.data_inicio) : null;
+    const df = cronograma.data_fim ? new Date(cronograma.data_fim) : null;
+
+    // 1) Demanda concluída: entra em emExecucao em todos os meses entre início e fim, e em Concluídas no mês do fim
+    if (di) {
+      const rangeEnd = df || hoje;
+      addRangeMonths(di, rangeEnd, (code) => {
+        const bucket = ensureMonth(code);
+        // Regra 2b: se está atrasada e sem data_fim, NÃO duplicar em emExecucao
+        if (!(cronograma.status === 'atrasado' && !df)) {
+          // Evitar duplicidade
+          if (!bucket.emExecucao.find(d => d.id === cronograma.id)) {
+            bucket.emExecucao.push(cronograma);
+          }
+        }
+      });
+    }
+
+    // 2) Marcar início
+    if (di) {
+      ensureMonth(monthCode(di)).demandasIniciadas.push(cronograma);
+    }
+
+    // 3) Conclusão no mês de fim
+    if (cronograma.status === 'concluido') {
+      let baseConclusao = df || (cronograma.updated_at ? new Date(cronograma.updated_at) : di || hoje);
+      const code = monthCode(baseConclusao);
+      const bucket = ensureMonth(code);
+      bucket.demandasConcluidas.push(cronograma);
+
+      // Checklists concluídos/pendentes associados à conclusão
+      if (cronograma.checklists && cronograma.checklists.length > 0) {
+        cronograma.checklists.forEach(checklist => {
+          if (checklist.concluido) {
+            bucket.checklistsConcluidos.push({ titulo: checklist.titulo, demanda: cronograma.titulo, demandaId: cronograma.id });
+          } else {
+            bucket.checklistsPendentes.push({ titulo: checklist.titulo, demanda: cronograma.titulo, demandaId: cronograma.id });
+          }
+        });
       }
     }
-    
-  // Processar data de conclusão (priorizar data_fim; fallback para updated_at; último recurso: data_inicio)
-  if (cronograma.status === 'concluido') {
-      let baseConclusao = null;
-      if (cronograma.data_fim) {
-        baseConclusao = new Date(cronograma.data_fim);
-      } else if (cronograma.updated_at) {
-        baseConclusao = new Date(cronograma.updated_at);
-      } else if (cronograma.data_inicio) {
-        baseConclusao = new Date(cronograma.data_inicio);
-      }
-      if (baseConclusao) {
-        const mesConclusao = `${baseConclusao.getFullYear()}-${String(baseConclusao.getMonth() + 1).padStart(2, '0')}`;
-      
-        if (!porMes[mesConclusao]) {
-          porMes[mesConclusao] = {
-            mes: mesConclusao,
-            demandasIniciadas: [],
-            demandasConcluidas: [],
-            demandasEmAndamento: [],
-            demandasPendentes: [],
-            demandasAtrasadas: [],
-            checklistsConcluidos: [],
-            checklistsPendentes: []
-          };
-        }
-      
-        porMes[mesConclusao].demandasConcluidas.push(cronograma);
-      
-        // Adicionar checklists conforme conclusão da demanda
-        if (cronograma.checklists && cronograma.checklists.length > 0) {
-          cronograma.checklists.forEach(checklist => {
-            if (checklist.concluido) {
-              porMes[mesConclusao].checklistsConcluidos.push({
-                titulo: checklist.titulo,
-                demanda: cronograma.titulo,
-                demandaId: cronograma.id
-              });
-            } else {
-              porMes[mesConclusao].checklistsPendentes.push({
-                titulo: checklist.titulo,
-                demanda: cronograma.titulo,
-                demandaId: cronograma.id
-              });
-            }
-          });
-        }
-      }
+
+    // 4) Pendentes e Atrasadas do mês atual (rastro)
+    const codeAtual = monthCode(hoje);
+    const bucketAtual = ensureMonth(codeAtual);
+    if (cronograma.status === 'pendente') {
+      if (!bucketAtual.demandasPendentes.find(d => d.id === cronograma.id)) bucketAtual.demandasPendentes.push(cronograma);
     }
-    
-    // Processar status atual para meses recentes
-    if (cronograma.data_inicio || cronograma.data_fim) {
-      const hoje = new Date();
-      const mesAtual = `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, '0')}`;
-      
-      if (!porMes[mesAtual]) {
-        porMes[mesAtual] = {
-          mes: mesAtual,
-          demandasIniciadas: [],
-          demandasConcluidas: [],
-          demandasEmAndamento: [],
-          demandasPendentes: [],
-          demandasAtrasadas: [],
-          checklistsConcluidos: [],
-          checklistsPendentes: []
-        };
-      }
-      
-      // Adicionar status atual
-      if (cronograma.status === 'pendente') {
-        if (!porMes[mesAtual].demandasPendentes.find(d => d.id === cronograma.id)) {
-          porMes[mesAtual].demandasPendentes.push(cronograma);
-        }
-      } else if (cronograma.status === 'atrasado') {
-        if (!porMes[mesAtual].demandasAtrasadas.find(d => d.id === cronograma.id)) {
-          porMes[mesAtual].demandasAtrasadas.push(cronograma);
-        }
-      }
+    if (cronograma.status === 'atrasado') {
+      if (!bucketAtual.demandasAtrasadas.find(d => d.id === cronograma.id)) bucketAtual.demandasAtrasadas.push(cronograma);
     }
   });
-  
+
   return porMes;
 };
 
@@ -454,14 +434,30 @@ const analisarCronogramaComIA = async (cronogramasFormatados, organizacoes, user
     const mesesOrdenados = Object.keys(dadosPorMes).sort();
     
     // Preparar dados resumidos por mês para a IA
-    const resumoMensal = mesesOrdenados.map(mes => {
+    const resumoMensal = mesesOrdenados.map((mes, idx) => {
       const dados = dadosPorMes[mes];
       const [ano, mesNum] = mes.split('-');
       const nomeMes = new Date(ano, parseInt(mesNum) - 1).toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
+      // Métricas de fluxo
+      const anteriores = idx > 0 ? dadosPorMes[mesesOrdenados[idx-1]] : null;
+      const novasNoMes = (dados.demandasIniciadas || []).length;
+      const concluidasNoMes = (dados.demandasConcluidas || []).length;
+      const emExec = (dados.emExecucao || []);
+      const carregadasDoMesAnterior = anteriores ? (emExec.filter(d => new Date(d.data_inicio) < new Date(ano, parseInt(mesNum)-1, 1)).length) : 0;
+      // Roladas: continuam após o fim do mês e não foram concluídas nele
+      const fimDoMes = new Date(parseInt(ano), parseInt(mesNum), 0);
+      const roladasProximoMes = emExec.filter(d => (!d.data_fim || new Date(d.data_fim) > fimDoMes) && !dados.demandasConcluidas.find(x => x.id === d.id)).length;
       
       return {
         mes: nomeMes,
         mesCodigo: mes,
+        emExecucao: emExec.map(d => ({
+          titulo: d.titulo,
+          responsavel: d.responsavel_nome || 'Não definido',
+          organizacao: d.organizacao,
+          inicio: d.data_inicio || null,
+          fim: d.data_fim || null
+        })),
         demandasConcluidas: dados.demandasConcluidas.map(d => ({
           titulo: d.titulo,
           responsavel: d.responsavel_nome || 'Não definido',
@@ -496,7 +492,13 @@ const analisarCronogramaComIA = async (cronogramasFormatados, organizacoes, user
           demanda: c.demanda
         })),
         totalConcluido: dados.demandasConcluidas.length + dados.checklistsConcluidos.length,
-        totalPendente: dados.demandasPendentes.length + dados.demandasAtrasadas.length + dados.checklistsPendentes.length
+        totalPendente: dados.demandasPendentes.length + dados.demandasAtrasadas.length + dados.checklistsPendentes.length,
+        metricasFluxo: {
+          novasNoMes,
+          concluidasNoMes,
+          carregadasDoMesAnterior,
+          roladasProximoMes
+        }
       };
     });
 
@@ -589,15 +591,14 @@ REQUISITOS DE FORMATO (OBRIGATÓRIO):
   ## Por Mês
     ### Mês/Ano (ex.: março/2025)
       O QUE FOI FEITO
+      O QUE ESTÁ EM ANDAMENTO
       O QUE NÃO FOI FEITO
       Checklists
       Tendência (uma linha): comportamento do mês (ex.: mais atrasos, melhora de produtividade, estabilidade)
   ## Estatísticas Resumidas
-  ${isComparativo ? '## Comparativo entre Organizações\n' : ''}## Recomendações
-  ### Curto prazo (ações imediatas)
-  ### Médio prazo (melhorias de processo)
-  ### Longo prazo (estratégia organizacional)
+  ${isComparativo ? '## Comparativo\n' : ''}
 - Nas listas de cada mês, prefixe os bullets exatamente com:
+(Nao mostrar a legenda de [OK] e [PENDENTE])
   - [OK] para itens concluídos
   - [PENDENTE] para itens pendentes/atrasados
 - Limite a no máximo 5 bullets por lista; se houver mais, escreva: "e mais X itens".
@@ -608,8 +609,8 @@ CONTEÚDO ESPERADO:
 1) Resumo Executivo: 3–5 linhas sobre o período.
 2) Período: datas inicial e final.
 3) Por Mês: para cada mês presente no JSON, inclua:
-   - O QUE FOI FEITO: até 5 bullets com [OK] "Demanda — Responsável". Se houver campos de duração (início/fim/duracaoDias), indique entre parênteses: "(de INÍCIO a FIM — DURACAO dias)".
-   - O QUE NÃO FOI FEITO: até 5 bullets com [PENDENTE] "Demanda — Responsável". Se houver diasEmAberto/diasEmAtraso, indique entre parênteses. Para demandas atrasadas, SEMPRE incluir o motivo do atraso se disponível: "(motivo: MOTIVO)".
+   - O QUE FOI FEITO: com [OK] "Demanda — Responsável". Se houver campos de duração (início/fim), indique entre parênteses: "(de INÍCIO a FIM — DURACAO dias)".
+   - O QUE NÃO FOI FEITO: até 5 bullets com [PENDENTE] "Demanda — Responsável". Para demandas atrasadas, SEMPRE incluir o motivo do atraso se disponível: "(motivo: MOTIVO)".
    - Checklists: informe totais concluídos vs pendentes.
    - Tendência: 1 frase simples.
 4) Estatísticas Resumidas: números agregados do período.
@@ -621,7 +622,8 @@ Exemplo (ilustrativo do formato, não invente dados):
 O QUE FOI FEITO
 - [OK] Ajuste do módulo X — Maria
 O QUE NÃO FOI FEITO
-- [PENDENTE] Integração Y — João
+- [EM ANDAMENTO] Integração Y — João
+- [PENDENTE] Integração Z — João (motivo: MOTIVO) *As vezes ainda nao tem inicio definido, ou ainda nao se iniciou*
 Checklists
 - Concluídos: 3 | Pendentes: 1`;
 
@@ -635,7 +637,7 @@ Checklists
         },
         { role: "user", content: prompt }
       ],
-      max_tokens: 4000,
+      max_tokens: 6000,
       temperature: 0.2
     });
     
