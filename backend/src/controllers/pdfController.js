@@ -485,46 +485,56 @@ const analisarCronogramaComIA = async (cronogramasFormatados, organizacoes, user
     // Montar prompt para a IA
     const isComparativo = userOrg === 'portes' && organizacaoFiltro === 'todos';
     
-    let prompt = `Você é um especialista em análise de cronogramas e gestão de projetos. Analise os dados do cronograma e gere um relatório claro e objetivo para pessoas leigas.
+    let prompt = `Você é um especialista em análise de cronogramas e gestão de projetos. Analise os dados e gere um relatório claro para pessoas leigas, em pt-BR, seguindo EXATAMENTE o formato abaixo em Markdown.
 
 PERÍODO ANALISADO: ${primeiraData.toLocaleDateString('pt-BR')} até ${ultimaData.toLocaleDateString('pt-BR')}
 
 ${isComparativo ? `VISUALIZANDO DADOS DE MÚLTIPLAS ORGANIZAÇÕES: ${organizacoesList.join(', ')}` : `ORGANIZAÇÃO: ${organizacoesList[0] || 'N/A'}`}
 
-DADOS POR MÊS:
+DADOS POR MÊS (JSON):
 ${JSON.stringify(resumoMensal, null, 2)}
 
-${isComparativo ? `COMPARAÇÃO ENTRE ORGANIZAÇÕES:
+${isComparativo ? `COMPARAÇÃO ENTRE ORGANIZAÇÕES (JSON):
 ${JSON.stringify(statsPorOrganizacao, null, 2)}` : ''}
 
-Gere um relatório em português brasileiro com:
+REQUISITOS DE FORMATO (OBRIGATÓRIO):
+- Use Markdown com os seguintes títulos/seções fixas:
+  # OVERVIEW DO CRONOGRAMA – ANÁLISE INTELIGENTE
+  ## Resumo Executivo
+  ## Período
+  ## Por Mês
+    ### Mês/Ano (ex.: março/2025)
+      O QUE FOI FEITO
+      O QUE NÃO FOI FEITO
+      Checklists
+  ## Estatísticas Resumidas
+  ${isComparativo ? '## Comparativo entre Organizações\n' : ''}## Recomendações
+- Nas listas de cada mês, prefixe os bullets exatamente com:
+  - [OK] para itens concluídos
+  - [PENDENTE] para itens pendentes/atrasados
+- Limite a no máximo 5 bullets por lista; se houver mais, escreva: "e mais X itens".
+- Não invente dados; use somente o conteúdo fornecido.
+- Linguagem simples, objetiva, sem jargões.
 
-1. RESUMO EXECUTIVO (2-3 parágrafos):
-   - Visão geral do período
-   - Principais conquistas
-   - Principais desafios
+CONTEÚDO ESPERADO:
+1) Resumo Executivo: 3–5 linhas sobre o período.
+2) Período: datas inicial e final.
+3) Por Mês: para cada mês presente no JSON, inclua:
+   - O QUE FOI FEITO: até 5 bullets com [OK] "Demanda — Responsável" e exemplos de checklists concluídos.
+   - O QUE NÃO FOI FEITO: até 5 bullets com [PENDENTE] "Demanda — Responsável" e checklists não concluídos.
+   - Checklists: informe totais concluídos vs pendentes.
+4) Estatísticas Resumidas: números agregados do período.
+${isComparativo ? '5) Comparativo entre Organizações: ranking e destaques.\n' : ''}5) Recomendações: 3–5 ações objetivas.
 
-2. ANÁLISE MENSAL (uma seção para cada mês com dados):
-   Para cada mês, liste de forma CLARA e SIMPLES:
-   - ✅ O QUE FOI FEITO:
-     * Demandas concluídas (nome da demanda e responsável)
-     * Checklists concluídos (nome do checklist e qual demanda)
-   - ⏳ O QUE NÃO FOI FEITO:
-     * Demandas pendentes/atrasadas (nome e responsável)
-     * Checklists não concluídos (nome e qual demanda)
-   - Percentual de progresso do mês
-
-${isComparativo ? `3. COMPARAÇÃO ENTRE ORGANIZAÇÕES:
-   - Ranking de desempenho
-   - Melhores práticas identificadas
-   - Organizações que precisam de atenção` : ''}
-
-4. INSIGHTS E RECOMENDAÇÕES:
-   - Ações prioritárias para os próximos meses
-   - Tendências identificadas
-   - Alertas importantes
-
-IMPORTANTE: Use linguagem simples e direta. Seja objetivo. O relatório será usado por pessoas que precisam entender rapidamente o status do projeto. Evite jargões técnicos.`;
+Exemplo (ilustrativo do formato, não invente dados):
+## Por Mês
+### janeiro/2025
+O QUE FOI FEITO
+- [OK] Ajuste do módulo X — Maria
+O QUE NÃO FOI FEITO
+- [PENDENTE] Integração Y — João
+Checklists
+- Concluídos: 3 | Pendentes: 1`;
 
     // Chamar OpenAI
     const completion = await openai.chat.completions.create({
@@ -532,15 +542,12 @@ IMPORTANTE: Use linguagem simples e direta. Seja objetivo. O relatório será us
       messages: [
         {
           role: "system",
-          content: "Você é um especialista em análise de cronogramas. Gere relatórios claros, objetivos e fáceis de entender para pessoas leigas. Seja específico e prático."
+          content: "Você gera relatórios em pt-BR, para leigos, sempre em Markdown determinístico com títulos H1/H2/H3, bullets prefixados com [OK]/[PENDENTE], sem emojis, sem jargões."
         },
-        {
-          role: "user",
-          content: prompt
-        }
+        { role: "user", content: prompt }
       ],
       max_tokens: 4000,
-      temperature: 0.3
+      temperature: 0.2
     });
     
     const analiseIA = completion.choices[0].message.content;
