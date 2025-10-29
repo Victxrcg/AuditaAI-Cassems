@@ -72,7 +72,19 @@ const Sidebar = ({ isOpen, onOpenChange }: SidebarProps) => {
     }
   };
 
-  const menuItems = [
+  const isRedeFrota = () => {
+    try {
+      const raw = localStorage.getItem('user');
+      if (!raw) return false;
+      const u = JSON.parse(raw);
+      const org = u?.organizacao?.toLowerCase() || '';
+      return org === 'rede_frota' || org === 'marajó / rede frota';
+    } catch {
+      return false;
+    }
+  };
+
+  const allMenuItems = [
     { 
       name: "Cronograma", 
       icon: Calendar, 
@@ -104,6 +116,14 @@ const Sidebar = ({ isOpen, onOpenChange }: SidebarProps) => {
       badge: null
     }
   ];
+
+  // Filtrar Compliance para usuários da rede_frota
+  const menuItems = allMenuItems.filter(item => {
+    if (item.path === '/compliance' && isRedeFrota()) {
+      return false;
+    }
+    return true;
+  });
 
   const bottomMenuItems = [
     // Removido o item Configurações

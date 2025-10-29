@@ -626,14 +626,25 @@ const Cronograma = () => {
   const formatDateForDisplay = (dateString: string | null) => {
     if (!dateString) return 'Não definida';
     try {
-      // Se é uma string ISO (termina com Z), extrair apenas a data
-      if (typeof dateString === 'string' && dateString.endsWith('Z')) {
-        const datePart = dateString.split('T')[0];
+      // Se já está no formato DD/MM/YYYY, retornar como está
+      if (typeof dateString === 'string' && dateString.includes('/')) {
+        return dateString;
+      }
+      
+      // Se está no formato ISO completo (YYYY-MM-DDTHH:MM:SS.000Z), extrair apenas a data
+      if (typeof dateString === 'string' && dateString.includes('T')) {
+        const datePart = dateString.split('T')[0]; // Pega apenas YYYY-MM-DD
         const [year, month, day] = datePart.split('-');
         return `${day}/${month}/${year}`;
       }
       
-      // Para outras datas, usar conversão normal
+      // Se está no formato YYYY-MM-DD, converter sem usar new Date() para evitar problemas de fuso horário
+      if (typeof dateString === 'string' && dateString.includes('-')) {
+        const [year, month, day] = dateString.split('-');
+        return `${day}/${month}/${year}`;
+      }
+      
+      // Para outros formatos, usar new Date() como fallback
       const date = new Date(dateString);
       if (isNaN(date.getTime())) return 'Não definida';
       
@@ -2713,7 +2724,24 @@ const Cronograma = () => {
                   </div>
                 )}
                 
-                <h3 className="text-sm font-medium text-gray-600 mb-3">Checklist da Demanda</h3>
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-sm font-medium text-gray-600">Checklist da Demanda</h3>
+                  {(viewingCronograma?.data_inicio || viewingCronograma?.data_fim) && (
+                    <div className="flex items-center gap-2 text-xs text-gray-500">
+                      <Calendar className="h-3 w-3" />
+                      <span>
+                        {viewingCronograma.data_inicio && viewingCronograma.data_fim
+                          ? `${formatDateForDisplay(viewingCronograma.data_inicio)} a ${formatDateForDisplay(viewingCronograma.data_fim)}`
+                          : viewingCronograma.data_inicio
+                          ? `Início: ${formatDateForDisplay(viewingCronograma.data_inicio)}`
+                          : viewingCronograma.data_fim
+                          ? `Fim: ${formatDateForDisplay(viewingCronograma.data_fim)}`
+                          : null
+                        }
+                      </span>
+                    </div>
+                  )}
+                </div>
                 <ScrollArea className="h-64 pr-4">
                   {checklistLoading ? (
                     <div className="flex justify-center py-4">
@@ -2744,6 +2772,17 @@ const Cronograma = () => {
                               <p className={`text-xs ${item.concluido ? 'text-gray-400' : 'text-gray-500'}`}>
                                 {item.descricao}
                               </p>
+                            )}
+                            {(item.data_inicio || item.data_fim) && (
+                              <div className={`flex items-center gap-3 mt-2 text-xs ${item.concluido ? 'text-gray-400' : 'text-gray-500'}`}>
+                                <Clock className="h-3 w-3" />
+                                {item.data_inicio && (
+                                  <span>Início: {formatDateForDisplay(item.data_inicio)}</span>
+                                )}
+                                {item.data_fim && (
+                                  <span>Fim: {formatDateForDisplay(item.data_fim)}</span>
+                                )}
+                              </div>
                             )}
                           </div>
                         </div>

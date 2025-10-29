@@ -14,7 +14,8 @@ import {
   Check,
   Clock,
   UserPlus,
-  MoreHorizontal
+  MoreHorizontal,
+  Calendar
 } from 'lucide-react';
 import { 
   listChecklistItems, 
@@ -25,6 +26,7 @@ import {
   type ChecklistItem,
   type CreateChecklistItemData
 } from '@/services/checklistService';
+import { formatDateBR } from '@/utils/dateUtils';
 
 interface ChecklistProps {
   cronogramaId: number;
@@ -37,12 +39,43 @@ export const Checklist: React.FC<ChecklistProps> = ({ cronogramaId, isOpen, onCl
   const [loading, setLoading] = useState(false);
   const [newItemTitle, setNewItemTitle] = useState('');
   const [newItemDescription, setNewItemDescription] = useState('');
+  const [newItemDataInicio, setNewItemDataInicio] = useState('');
+  const [newItemDataFim, setNewItemDataFim] = useState('');
   const [editingItem, setEditingItem] = useState<ChecklistItem | null>(null);
   const [editTitle, setEditTitle] = useState('');
   const [editDescription, setEditDescription] = useState('');
+  const [editDataInicio, setEditDataInicio] = useState('');
+  const [editDataFim, setEditDataFim] = useState('');
   const [showNewItemForm, setShowNewItemForm] = useState(false);
   const [hideCompleted, setHideCompleted] = useState(false);
+  const [demandaPrincipal, setDemandaPrincipal] = useState<{ data_inicio?: string; data_fim?: string } | null>(null);
   const { toast } = useToast();
+  
+  const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:4011';
+
+  // Carregar dados da demanda principal (cronograma)
+  const loadDemandaPrincipal = async () => {
+    try {
+      const user = JSON.parse(localStorage.getItem('user') || '{}');
+      const userOrg = user.organizacao || 'cassems';
+      
+      const response = await fetch(`${API_BASE}/cronograma/${cronogramaId}`, {
+        headers: {
+          'x-user-organization': userOrg
+        }
+      });
+      
+      if (response.ok) {
+        const cronograma = await response.json();
+        setDemandaPrincipal({
+          data_inicio: cronograma.data_inicio,
+          data_fim: cronograma.data_fim
+        });
+      }
+    } catch (error) {
+      console.error('Erro ao carregar demanda principal:', error);
+    }
+  };
 
   // Carregar itens do checklist
   const loadChecklistItems = async () => {
@@ -76,12 +109,16 @@ export const Checklist: React.FC<ChecklistProps> = ({ cronogramaId, isOpen, onCl
       const newItemData: CreateChecklistItemData = {
         titulo: newItemTitle.trim(),
         descricao: newItemDescription.trim() || undefined,
+        data_inicio: newItemDataInicio || undefined,
+        data_fim: newItemDataFim || undefined,
       };
 
       const newItem = await createChecklistItem(cronogramaId, newItemData);
       setItems(prev => [...(prev || []), newItem]);
       setNewItemTitle('');
       setNewItemDescription('');
+      setNewItemDataInicio('');
+      setNewItemDataFim('');
       setShowNewItemForm(false);
 
       toast({
@@ -124,12 +161,16 @@ export const Checklist: React.FC<ChecklistProps> = ({ cronogramaId, isOpen, onCl
       const updatedItem = await updateChecklistItem(cronogramaId, editingItem.id, {
         titulo: editTitle.trim(),
         descricao: editDescription.trim() || undefined,
+        data_inicio: editDataInicio || undefined,
+        data_fim: editDataFim || undefined,
       });
 
       setItems(prev => (prev || []).map(i => i.id === editingItem.id ? updatedItem : i));
       setEditingItem(null);
       setEditTitle('');
       setEditDescription('');
+      setEditDataInicio('');
+      setEditDataFim('');
 
       toast({
         title: "Sucesso",
@@ -170,6 +211,8 @@ export const Checklist: React.FC<ChecklistProps> = ({ cronogramaId, isOpen, onCl
     setEditingItem(item);
     setEditTitle(item.titulo);
     setEditDescription(item.descricao || '');
+    setEditDataInicio(item.data_inicio ? item.data_inicio.split('T')[0] : '');
+    setEditDataFim(item.data_fim ? item.data_fim.split('T')[0] : '');
   };
 
   // Cancelar edição
@@ -177,6 +220,8 @@ export const Checklist: React.FC<ChecklistProps> = ({ cronogramaId, isOpen, onCl
     setEditingItem(null);
     setEditTitle('');
     setEditDescription('');
+    setEditDataInicio('');
+    setEditDataFim('');
   };
 
   // Calcular progresso
@@ -188,6 +233,7 @@ export const Checklist: React.FC<ChecklistProps> = ({ cronogramaId, isOpen, onCl
   useEffect(() => {
     if (isOpen && cronogramaId) {
       loadChecklistItems();
+      loadDemandaPrincipal();
     }
   }, [isOpen, cronogramaId]);
 
@@ -202,6 +248,21 @@ export const Checklist: React.FC<ChecklistProps> = ({ cronogramaId, isOpen, onCl
           <DialogDescription>
             Gerencie as tarefas e marque o progresso da demanda
           </DialogDescription>
+          {demandaPrincipal && (demandaPrincipal.data_inicio || demandaPrincipal.data_fim) && (
+            <div className="flex items-center gap-2 mt-2 text-sm text-gray-600">
+              <Calendar className="h-4 w-4" />
+              <span>
+                {demandaPrincipal.data_inicio && demandaPrincipal.data_fim
+                  ? `Período: ${formatDateBR(demandaPrincipal.data_inicio)} a ${formatDateBR(demandaPrincipal.data_fim)}`
+                  : demandaPrincipal.data_inicio
+                  ? `Início: ${formatDateBR(demandaPrincipal.data_inicio)}`
+                  : demandaPrincipal.data_fim
+                  ? `Fim: ${formatDateBR(demandaPrincipal.data_fim)}`
+                  : null
+                }
+              </span>
+            </div>
+          )}
         </DialogHeader>
 
         <div className="flex-1 overflow-hidden flex flex-col space-y-4">
@@ -243,6 +304,26 @@ export const Checklist: React.FC<ChecklistProps> = ({ cronogramaId, isOpen, onCl
                   onChange={(e) => setNewItemDescription(e.target.value)}
                   rows={2}
                 />
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="text-sm font-medium text-gray-700 mb-1 block">Data Início (opcional)</label>
+                    <Input
+                      type="date"
+                      value={newItemDataInicio}
+                      onChange={(e) => setNewItemDataInicio(e.target.value)}
+                      className="w-full"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium text-gray-700 mb-1 block">Data Fim (opcional)</label>
+                    <Input
+                      type="date"
+                      value={newItemDataFim}
+                      onChange={(e) => setNewItemDataFim(e.target.value)}
+                      className="w-full"
+                    />
+                  </div>
+                </div>
                 <div className="flex gap-2">
                   <Button onClick={handleCreateItem} size="sm">
                     <Check className="h-4 w-4 mr-1" />
@@ -255,6 +336,8 @@ export const Checklist: React.FC<ChecklistProps> = ({ cronogramaId, isOpen, onCl
                       setShowNewItemForm(false);
                       setNewItemTitle('');
                       setNewItemDescription('');
+                      setNewItemDataInicio('');
+                      setNewItemDataFim('');
                     }}
                   >
                     <X className="h-4 w-4 mr-1" />
@@ -299,6 +382,26 @@ export const Checklist: React.FC<ChecklistProps> = ({ cronogramaId, isOpen, onCl
                         placeholder="Descrição (opcional)"
                         rows={2}
                       />
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="text-sm font-medium text-gray-700 mb-1 block">Data Início (opcional)</label>
+                          <Input
+                            type="date"
+                            value={editDataInicio}
+                            onChange={(e) => setEditDataInicio(e.target.value)}
+                            className="w-full"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-sm font-medium text-gray-700 mb-1 block">Data Fim (opcional)</label>
+                          <Input
+                            type="date"
+                            value={editDataFim}
+                            onChange={(e) => setEditDataFim(e.target.value)}
+                            className="w-full"
+                          />
+                        </div>
+                      </div>
                       <div className="flex gap-2">
                         <Button onClick={handleEditItem} size="sm">
                           <Check className="h-4 w-4 mr-1" />
@@ -334,6 +437,17 @@ export const Checklist: React.FC<ChecklistProps> = ({ cronogramaId, isOpen, onCl
                           <p className={`text-sm mt-1 ${item.concluido ? 'text-gray-400' : 'text-gray-600'}`}>
                             {item.descricao}
                           </p>
+                        )}
+                        {(item.data_inicio || item.data_fim) && (
+                          <div className={`flex items-center gap-3 mt-2 text-xs ${item.concluido ? 'text-gray-400' : 'text-gray-500'}`}>
+                            <Clock className="h-3 w-3" />
+                            {item.data_inicio && (
+                              <span>Início: {formatDateBR(item.data_inicio)}</span>
+                            )}
+                            {item.data_fim && (
+                              <span>Fim: {formatDateBR(item.data_fim)}</span>
+                            )}
+                          </div>
                         )}
                       </div>
 

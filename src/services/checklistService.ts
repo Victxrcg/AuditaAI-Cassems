@@ -6,6 +6,8 @@ interface ChecklistItem {
   descricao?: string;
   concluido: boolean;
   ordem: number;
+  data_inicio?: string;
+  data_fim?: string;
   created_at: string;
   updated_at: string;
 }
@@ -13,6 +15,8 @@ interface ChecklistItem {
 interface CreateChecklistItemData {
   titulo: string;
   descricao?: string;
+  data_inicio?: string;
+  data_fim?: string;
 }
 
 interface UpdateChecklistItemData {
@@ -20,6 +24,8 @@ interface UpdateChecklistItemData {
   descricao?: string;
   concluido?: boolean;
   ordem?: number;
+  data_inicio?: string;
+  data_fim?: string;
 }
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3001';
