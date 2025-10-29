@@ -292,43 +292,52 @@ const agruparPorMes = (cronogramasFormatados) => {
       }
     }
     
-    // Processar data de conclusão (updated_at quando status é concluído)
-    if (cronograma.status === 'concluido' && cronograma.updated_at) {
-      const dataConclusao = new Date(cronograma.updated_at);
-      const mesConclusao = `${dataConclusao.getFullYear()}-${String(dataConclusao.getMonth() + 1).padStart(2, '0')}`;
-      
-      if (!porMes[mesConclusao]) {
-        porMes[mesConclusao] = {
-          mes: mesConclusao,
-          demandasIniciadas: [],
-          demandasConcluidas: [],
-          demandasEmAndamento: [],
-          demandasPendentes: [],
-          demandasAtrasadas: [],
-          checklistsConcluidos: [],
-          checklistsPendentes: []
-        };
+  // Processar data de conclusão (priorizar data_fim; fallback para updated_at; último recurso: data_inicio)
+  if (cronograma.status === 'concluido') {
+      let baseConclusao = null;
+      if (cronograma.data_fim) {
+        baseConclusao = new Date(cronograma.data_fim);
+      } else if (cronograma.updated_at) {
+        baseConclusao = new Date(cronograma.updated_at);
+      } else if (cronograma.data_inicio) {
+        baseConclusao = new Date(cronograma.data_inicio);
       }
+      if (baseConclusao) {
+        const mesConclusao = `${baseConclusao.getFullYear()}-${String(baseConclusao.getMonth() + 1).padStart(2, '0')}`;
       
-      porMes[mesConclusao].demandasConcluidas.push(cronograma);
+        if (!porMes[mesConclusao]) {
+          porMes[mesConclusao] = {
+            mes: mesConclusao,
+            demandasIniciadas: [],
+            demandasConcluidas: [],
+            demandasEmAndamento: [],
+            demandasPendentes: [],
+            demandasAtrasadas: [],
+            checklistsConcluidos: [],
+            checklistsPendentes: []
+          };
+        }
       
-      // Adicionar checklists concluídos
-      if (cronograma.checklists && cronograma.checklists.length > 0) {
-        cronograma.checklists.forEach(checklist => {
-          if (checklist.concluido) {
-            porMes[mesConclusao].checklistsConcluidos.push({
-              titulo: checklist.titulo,
-              demanda: cronograma.titulo,
-              demandaId: cronograma.id
-            });
-          } else {
-            porMes[mesConclusao].checklistsPendentes.push({
-              titulo: checklist.titulo,
-              demanda: cronograma.titulo,
-              demandaId: cronograma.id
-            });
-          }
-        });
+        porMes[mesConclusao].demandasConcluidas.push(cronograma);
+      
+        // Adicionar checklists conforme conclusão da demanda
+        if (cronograma.checklists && cronograma.checklists.length > 0) {
+          cronograma.checklists.forEach(checklist => {
+            if (checklist.concluido) {
+              porMes[mesConclusao].checklistsConcluidos.push({
+                titulo: checklist.titulo,
+                demanda: cronograma.titulo,
+                demandaId: cronograma.id
+              });
+            } else {
+              porMes[mesConclusao].checklistsPendentes.push({
+                titulo: checklist.titulo,
+                demanda: cronograma.titulo,
+                demandaId: cronograma.id
+              });
+            }
+          });
+        }
       }
     }
     
