@@ -465,7 +465,12 @@ const analisarCronogramaComIA = async (cronogramasFormatados, organizacoes, user
         demandasConcluidas: dados.demandasConcluidas.map(d => ({
           titulo: d.titulo,
           responsavel: d.responsavel_nome || 'Não definido',
-          organizacao: d.organizacao
+          organizacao: d.organizacao,
+          inicio: d.data_inicio || null,
+          fim: d.data_fim || d.updated_at || null,
+          duracaoDias: d.data_inicio && (d.data_fim || d.updated_at)
+            ? Math.max(1, Math.ceil((new Date(d.data_fim || d.updated_at) - new Date(d.data_inicio)) / (1000*60*60*24)))
+            : null
         })),
         checklistsConcluidos: dados.checklistsConcluidos.map(c => ({
           titulo: c.titulo,
@@ -474,13 +479,17 @@ const analisarCronogramaComIA = async (cronogramasFormatados, organizacoes, user
         demandasPendentes: dados.demandasPendentes.map(d => ({
           titulo: d.titulo,
           responsavel: d.responsavel_nome || 'Não definido',
-          organizacao: d.organizacao
+          organizacao: d.organizacao,
+          inicio: d.data_inicio || null,
+          diasEmAberto: d.data_inicio ? Math.max(0, Math.ceil((new Date() - new Date(d.data_inicio)) / (1000*60*60*24))) : null
         })),
         demandasAtrasadas: dados.demandasAtrasadas.map(d => ({
           titulo: d.titulo,
           responsavel: d.responsavel_nome || 'Não definido',
           organizacao: d.organizacao,
-          motivoAtraso: d.motivo_atraso || 'Não informado'
+          motivoAtraso: d.motivo_atraso || 'Não informado',
+          inicio: d.data_inicio || null,
+          diasEmAtraso: d.data_inicio ? Math.max(0, Math.ceil((new Date() - new Date(d.data_inicio)) / (1000*60*60*24))) : null
         })),
         checklistsPendentes: dados.checklistsPendentes.map(c => ({
           titulo: c.titulo,
@@ -529,8 +538,8 @@ CONTEÚDO ESPERADO:
 1) Resumo Executivo: 3–5 linhas sobre o período.
 2) Período: datas inicial e final.
 3) Por Mês: para cada mês presente no JSON, inclua:
-   - O QUE FOI FEITO: até 5 bullets com [OK] "Demanda — Responsável" e exemplos de checklists concluídos.
-   - O QUE NÃO FOI FEITO: até 5 bullets com [PENDENTE] "Demanda — Responsável" e checklists não concluídos.
+   - O QUE FOI FEITO: até 5 bullets com [OK] "Demanda — Responsável". Se houver campos de duração (início/fim/duracaoDias), indique entre parênteses: "(de INÍCIO a FIM — DURACAO dias)".
+   - O QUE NÃO FOI FEITO: até 5 bullets com [PENDENTE] "Demanda — Responsável". Se houver diasEmAberto/diasEmAtraso, indique entre parênteses. Para demandas atrasadas, SEMPRE incluir o motivo do atraso se disponível: "(motivo: MOTIVO)".
    - Checklists: informe totais concluídos vs pendentes.
 4) Estatísticas Resumidas: números agregados do período.
 ${isComparativo ? '5) Comparativo entre Organizações: ranking e destaques.\n' : ''}5) Recomendações: 3–5 ações objetivas.
