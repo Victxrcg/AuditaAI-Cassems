@@ -499,6 +499,71 @@ const analisarCronogramaComIA = async (cronogramasFormatados, organizacoes, user
         totalPendente: dados.demandasPendentes.length + dados.demandasAtrasadas.length + dados.checklistsPendentes.length
       };
     });
+
+    // Estatísticas detalhadas por mês (para auditoria)
+    const resumoMensalDetalhado = mesesOrdenados.map(mes => {
+      const dados = dadosPorMes[mes];
+      const [ano, mesNum] = mes.split('-');
+      const nomeMes = new Date(ano, parseInt(mesNum) - 1).toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
+
+      const concluidas = dados.demandasConcluidas || [];
+      const atrasadas = dados.demandasAtrasadas || [];
+      const pendentes = dados.demandasPendentes || [];
+      const totalDemandas = concluidas.length + atrasadas.length + pendentes.length;
+
+      // Duração média (dias) considerando apenas concluídas com datas válidas
+      const duracoes = concluidas
+        .map(d => d.data_inicio && (d.data_fim || d.updated_at)
+          ? Math.max(1, Math.ceil((new Date(d.data_fim || d.updated_at) - new Date(d.data_inicio)) / (1000*60*60*24)))
+          : null)
+        .filter(v => typeof v === 'number');
+      const duracaoMediaDias = duracoes.length > 0 ? +(duracoes.reduce((a,b) => a+b, 0) / duracoes.length).toFixed(1) : null;
+
+      // Responsável mais ativo (por conclusões no mês)
+      const porResp = {};
+      concluidas.forEach(d => {
+        const nome = d.responsavel_nome || 'Não definido';
+        porResp[nome] = (porResp[nome] || 0) + 1;
+      });
+      let responsavelMaisAtivo = null;
+      let maxCount = 0;
+      Object.entries(porResp).forEach(([nome, qtd]) => {
+        if (qtd > maxCount) { maxCount = qtd; responsavelMaisAtivo = nome; }
+      });
+
+      return {
+        mes: mes,
+        mesLabel: nomeMes,
+        totalDemandas,
+        concluidas: concluidas.length,
+        atrasadas: atrasadas.length,
+        pendentes: pendentes.length,
+        duracaoMediaDias,
+        responsavelMaisAtivo: responsavelMaisAtivo || null
+      };
+    });
+
+    // Ranking de responsáveis (geral do período)
+    const ranking = {};
+    cronogramasFormatados.forEach(d => {
+      const nome = d.responsavel_nome || 'Não definido';
+      if (!ranking[nome]) ranking[nome] = { nome, concluidas: 0, atrasadas: 0 };
+      if (d.status === 'concluido') ranking[nome].concluidas += 1;
+      if (d.status === 'atrasado') ranking[nome].atrasadas += 1;
+    });
+    const topResponsaveis = Object.values(ranking)
+      .sort((a, b) => (b.concluidas - a.concluidas) || (a.atrasadas - b.atrasadas))
+      .slice(0, 10);
+
+    // Logs ricos em dev
+    try {
+      if (process.env.NODE_ENV !== 'production') {
+        // eslint-disable-next-line no-console
+        console.table((cronogramasFormatados || []).slice(0, 10).map(c => ({ id: c.id, titulo: c.titulo, status: c.status, org: c.organizacao, checklists: (c.checklists||[]).length })));
+        // eslint-disable-next-line no-console
+        console.log('📈 Meses agrupados:', mesesOrdenados);
+      }
+    } catch {}
     
     // Montar prompt para a IA
     const isComparativo = userOrg === 'portes' && organizacaoFiltro === 'todos';
@@ -519,14 +584,19 @@ REQUISITOS DE FORMATO (OBRIGATÓRIO):
 - Use Markdown com os seguintes títulos/seções fixas:
   # OVERVIEW DO CRONOGRAMA – ANÁLISE INTELIGENTE
   ## Resumo Executivo
+  - Veredito geral do período (satisfatório, moderado, crítico, instável) e por quê.
   ## Período
   ## Por Mês
     ### Mês/Ano (ex.: março/2025)
       O QUE FOI FEITO
       O QUE NÃO FOI FEITO
       Checklists
+      Tendência (uma linha): comportamento do mês (ex.: mais atrasos, melhora de produtividade, estabilidade)
   ## Estatísticas Resumidas
   ${isComparativo ? '## Comparativo entre Organizações\n' : ''}## Recomendações
+  ### Curto prazo (ações imediatas)
+  ### Médio prazo (melhorias de processo)
+  ### Longo prazo (estratégia organizacional)
 - Nas listas de cada mês, prefixe os bullets exatamente com:
   - [OK] para itens concluídos
   - [PENDENTE] para itens pendentes/atrasados
@@ -541,6 +611,7 @@ CONTEÚDO ESPERADO:
    - O QUE FOI FEITO: até 5 bullets com [OK] "Demanda — Responsável". Se houver campos de duração (início/fim/duracaoDias), indique entre parênteses: "(de INÍCIO a FIM — DURACAO dias)".
    - O QUE NÃO FOI FEITO: até 5 bullets com [PENDENTE] "Demanda — Responsável". Se houver diasEmAberto/diasEmAtraso, indique entre parênteses. Para demandas atrasadas, SEMPRE incluir o motivo do atraso se disponível: "(motivo: MOTIVO)".
    - Checklists: informe totais concluídos vs pendentes.
+   - Tendência: 1 frase simples.
 4) Estatísticas Resumidas: números agregados do período.
 ${isComparativo ? '5) Comparativo entre Organizações: ranking e destaques.\n' : ''}5) Recomendações: 3–5 ações objetivas.
 
@@ -579,6 +650,8 @@ Checklists
         fimFormatado: ultimaData.toLocaleDateString('pt-BR')
       },
       resumoMensal,
+      resumoMensalDetalhado,
+      topResponsaveis,
       statsPorOrganizacao: isComparativo ? statsPorOrganizacao : null,
       isComparativo
     };
@@ -722,6 +795,8 @@ exports.analisarCronogramaIA = async (req, res) => {
         analise: resultadoIA.analise,
         periodo: resultadoIA.periodo,
         resumoMensal: resultadoIA.resumoMensal,
+          resumoMensalDetalhado: resultadoIA.resumoMensalDetalhado,
+          topResponsaveis: resultadoIA.topResponsaveis,
         statsPorOrganizacao: resultadoIA.statsPorOrganizacao,
         isComparativo: resultadoIA.isComparativo,
         metadata: {
