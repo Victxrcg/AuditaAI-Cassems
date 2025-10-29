@@ -16,6 +16,7 @@ import ErrorBoundary from '@/components/ErrorBoundary';
 import { 
   listChecklistItems, 
   toggleChecklistItem,
+  updateChecklistItem,
   type ChecklistItem
 } from '@/services/checklistService';
 import Checklist from '@/components/Checklist';
@@ -565,7 +566,9 @@ const Cronograma = () => {
       console.log('🔍 Carregando checklist para cronograma:', cronogramaId);
       const items = await listChecklistItems(cronogramaId);
       console.log('🔍 Itens carregados:', items);
-      setChecklistItems(items);
+      // Ordenar por ordem antes de definir
+      const sortedItems = [...items].sort((a, b) => (a.ordem ?? 0) - (b.ordem ?? 0));
+      setChecklistItems(sortedItems);
     } catch (error) {
       console.error('Erro ao carregar checklist:', error);
       toast({
@@ -598,6 +601,124 @@ const Cronograma = () => {
         variant: "destructive",
       });
     }
+  };
+
+  // Função para reordenar itens do checklist
+  const handleChecklistDragEnd = async (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!viewingCronograma || !over || active.id === over.id) return;
+
+    const oldIndex = checklistItems.findIndex(item => item.id === active.id);
+    const newIndex = checklistItems.findIndex(item => item.id === over.id);
+
+    if (oldIndex === -1 || newIndex === -1) return;
+
+    // Reordenar localmente
+    const reorderedItems = arrayMove(checklistItems, oldIndex, newIndex);
+    
+    // Atualizar ordem sequencialmente
+    const updatedItems = reorderedItems.map((item, index) => ({
+      ...item,
+      ordem: index + 1
+    }));
+
+    setChecklistItems(updatedItems);
+
+    // Persistir no backend
+    try {
+      // Atualizar apenas itens que mudaram de posição
+      const itemsToUpdate = updatedItems.filter((item, idx) => {
+        const originalItem = checklistItems.find(orig => orig.id === item.id);
+        return originalItem && originalItem.ordem !== item.ordem;
+      });
+
+      await Promise.all(
+        itemsToUpdate.map(item =>
+          updateChecklistItem(viewingCronograma.id, item.id, { ordem: item.ordem })
+        )
+      );
+
+      toast({
+        title: "Sucesso",
+        description: "Ordem do checklist atualizada",
+      });
+    } catch (error) {
+      console.error('Erro ao salvar ordem do checklist:', error);
+      // Reverter em caso de erro
+      setChecklistItems(checklistItems);
+      toast({
+        title: "Erro",
+        description: "Erro ao salvar nova ordem do checklist",
+        variant: "destructive",
+      });
+      // Recarregar do servidor
+      await loadChecklistItems(viewingCronograma.id);
+    }
+  };
+
+  // Componente Sortable para item do checklist
+  const SortableChecklistItem = ({ item }: { item: ChecklistItem }) => {
+    const {
+      attributes,
+      listeners,
+      setNodeRef,
+      transform,
+      transition,
+      isDragging,
+    } = useSortable({ id: item.id });
+
+    const style = {
+      transform: CSS.Transform.toString(transform),
+      transition,
+      opacity: isDragging ? 0.5 : 1,
+    };
+
+    return (
+      <div
+        ref={setNodeRef}
+        style={style}
+        className="flex items-start gap-3 p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors border border-gray-200 min-h-[120px] max-h-[200px]"
+      >
+        <div
+          {...attributes}
+          {...listeners}
+          className="flex-shrink-0 cursor-grab active:cursor-grabbing mt-1"
+        >
+          <GripVertical className="h-5 w-5 text-gray-400 hover:text-gray-600" />
+        </div>
+        <button
+          onClick={() => toggleChecklistItemStatus(item.id, !item.concluido)}
+          className={`flex-shrink-0 w-5 h-5 rounded border-2 flex items-center justify-center transition-colors ${
+            item.concluido
+              ? 'bg-green-500 border-green-500 text-white'
+              : 'border-gray-300 hover:border-green-400'
+          }`}
+        >
+          {item.concluido && <CheckCircle className="h-3 w-3" />}
+        </button>
+        <div className="flex-1 min-w-0 overflow-hidden">
+          <p className={`text-sm font-medium mb-1 ${item.concluido ? 'line-through text-gray-500' : 'text-gray-700'}`}>
+            {item.titulo}
+          </p>
+          {item.descricao && (
+            <p className={`text-xs leading-relaxed line-clamp-3 overflow-hidden ${item.concluido ? 'text-gray-400' : 'text-gray-500'}`}>
+              {item.descricao}
+            </p>
+          )}
+          {(item.data_inicio || item.data_fim) && (
+            <div className={`flex items-center gap-3 mt-2 text-xs ${item.concluido ? 'text-gray-400' : 'text-gray-500'}`}>
+              <Clock className="h-3 w-3" />
+              {item.data_inicio && (
+                <span>Início: {formatDateForDisplay(item.data_inicio)}</span>
+              )}
+              {item.data_fim && (
+                <span>Fim: {formatDateForDisplay(item.data_fim)}</span>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+    );
   };
 
   useEffect(() => {
@@ -2583,7 +2704,7 @@ const Cronograma = () => {
 
       {/* Modal de Visualização */}
       <Dialog open={isViewDialogOpen} onOpenChange={setIsViewDialogOpen}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
+        <DialogContent className="max-w-7xl w-[95vw] h-[90vh] max-h-[90vh] overflow-hidden flex flex-col">
           <DialogHeader className="relative">
             {viewingCronograma && currentUser?.organizacao === 'portes' && (
               <Button
@@ -2610,122 +2731,182 @@ const Cronograma = () => {
           </DialogHeader>
           
           {viewingCronograma && (
-            <div className="flex-1 overflow-hidden flex flex-col space-y-6">
-              {/* Status e Prioridade */}
-              <div className="flex items-center gap-4">
-                <div className="flex items-center gap-2">
-                  <span className="text-sm font-medium text-gray-600">Status:</span>
-                  <Badge 
-                    variant={getStatusBadgeInfo(viewingCronograma.status).variant as any}
-                    className="text-xs"
-                  >
-                    {getStatusBadgeInfo(viewingCronograma.status).text}
-                  </Badge>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-sm font-medium text-gray-600">Prioridade:</span>
-                  <Badge 
-                    variant={getPriorityBadgeInfo(viewingCronograma.prioridade).variant as any}
-                    className="text-xs"
-                  >
-                    {getPriorityBadgeInfo(viewingCronograma.prioridade).text}
-                  </Badge>
-                </div>
-              </div>
-
-              {/* Descrição */}
-              {viewingCronograma.descricao && (
-                <div>
-                  <h3 className="text-sm font-medium text-gray-600 mb-2">Descrição</h3>
-                  <p className="text-gray-700 bg-gray-50 p-3 rounded-lg text-sm leading-relaxed">
-                    {viewingCronograma.descricao}
-                  </p>
-                </div>
-              )}
-
-              {/* Informações do Período e Responsável */}
-              <div className="grid grid-cols-3 gap-4">
-                <div>
-                  <h3 className="text-sm font-medium text-gray-600 mb-2">Data de Início</h3>
-                  <div className="flex items-center gap-2">
-                    <Calendar className="h-4 w-4 text-gray-400" />
-                    <span className="text-gray-700">
-                      {formatDateForDisplay(viewingCronograma.data_inicio)}
-                    </span>
+            <div className="flex-1 overflow-hidden grid grid-cols-2 gap-6 min-h-0">
+              {/* Grid 1: Informações da Demanda */}
+              <div className="flex flex-col overflow-hidden min-h-0">
+                {/* Área scrollável de conteúdo */}
+                <div className="flex-1 overflow-y-auto pr-2 space-y-6">
+                  {/* Status e Prioridade */}
+                  <div className="flex items-center gap-4">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-medium text-gray-600">Status:</span>
+                      <Badge 
+                        variant={getStatusBadgeInfo(viewingCronograma.status).variant as any}
+                        className="text-xs"
+                      >
+                        {getStatusBadgeInfo(viewingCronograma.status).text}
+                      </Badge>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-medium text-gray-600">Prioridade:</span>
+                      <Badge 
+                        variant={getPriorityBadgeInfo(viewingCronograma.prioridade).variant as any}
+                        className="text-xs"
+                      >
+                        {getPriorityBadgeInfo(viewingCronograma.prioridade).text}
+                      </Badge>
+                    </div>
                   </div>
-                </div>
-                <div>
-                  <h3 className="text-sm font-medium text-gray-600 mb-2">Data de Fim</h3>
-                  <div className="flex items-center gap-2">
-                    <Calendar className="h-4 w-4 text-gray-400" />
-                    <span className="text-gray-700">
-                      {formatDateForDisplay(viewingCronograma.data_fim)}
-                    </span>
-                  </div>
-                </div>
-                <div>
-                  <h3 className="text-sm font-medium text-gray-600 mb-2">Responsável</h3>
-                  <div className="flex items-center gap-2">
-                    <User className="h-4 w-4 text-gray-400" />
-                    <span className="text-gray-700">
-                      {viewingCronograma.responsavel_nome || 'Não definido'}
-                    </span>
-                  </div>
-                </div>
-              </div>
 
-
-              {/* Motivo do Atraso */}
-              {viewingCronograma.motivo_atraso && (
-                <div>
-                  <button
-                    onClick={() => setIsDelayExpanded(!isDelayExpanded)}
-                    className="flex items-center justify-between w-full text-left mb-2 hover:bg-red-50 p-2 rounded-lg transition-colors"
-                  >
-                    <h3 className="text-g font-medium text-red-600">Motivo do Atraso</h3>
-                    <ChevronDown 
-                      className={`h-5 w-5 text-red-500 transition-transform ${
-                        isDelayExpanded ? 'rotate-180' : ''
-                      }`} 
-                    />
-                  </button>
-                  
-                  {isDelayExpanded && (
-                    <div className="bg-red-50 border border-red-200 p-3 rounded-lg">
-                      <div className="flex items-center gap-2 mb-2">
-                        <AlertTriangle className="h-4 w-4 text-red-500" />
-                        <span className="text-sm font-medium text-red-700">Atraso Identificado</span>
-                      </div>
-                      <p className="text-red-700 text-sm leading-relaxed">
-                        {viewingCronograma.motivo_atraso}
+                  {/* Descrição */}
+                  {viewingCronograma.descricao && (
+                    <div>
+                      <h3 className="text-sm font-medium text-gray-600 mb-2">Descrição</h3>
+                      <p className="text-gray-700 bg-gray-50 p-3 rounded-lg text-sm leading-relaxed">
+                        {viewingCronograma.descricao}
                       </p>
                     </div>
                   )}
-                </div>
-              )}
 
-              {/* Checklist */}
-              <div className="flex-1 overflow-hidden flex flex-col">
-                {/* Barra de Progresso */}
-                {checklistItems.length > 0 && (
-                  <div className="mb-4">
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-sm font-medium text-gray-600">
-                        Progresso: {checklistItems.filter(item => item.concluido).length}/{checklistItems.length} itens concluídos
-                      </span>
-                      <span className="text-sm font-medium text-gray-600">
-                        {Math.round((checklistItems.filter(item => item.concluido).length / checklistItems.length) * 100)}%
-                      </span>
+                  {/* Informações do Período e Responsável */}
+                  <div className="grid grid-cols-3 gap-4">
+                    <div>
+                      <h3 className="text-sm font-medium text-gray-600 mb-2">Data de Início</h3>
+                      <div className="flex items-center gap-2">
+                        <Calendar className="h-4 w-4 text-gray-400" />
+                        <span className="text-gray-700">
+                          {formatDateForDisplay(viewingCronograma.data_inicio)}
+                        </span>
+                      </div>
                     </div>
-                    <Progress 
-                      value={(checklistItems.filter(item => item.concluido).length / checklistItems.length) * 100} 
-                      className="h-2 [&>div]:bg-green-500"
-                    />
+                    <div>
+                      <h3 className="text-sm font-medium text-gray-600 mb-2">Data de Fim</h3>
+                      <div className="flex items-center gap-2">
+                        <Calendar className="h-4 w-4 text-gray-400" />
+                        <span className="text-gray-700">
+                          {formatDateForDisplay(viewingCronograma.data_fim)}
+                        </span>
+                      </div>
+                    </div>
+                    <div>
+                      <h3 className="text-sm font-medium text-gray-600 mb-2">Responsável</h3>
+                      <div className="flex items-center gap-2">
+                        <User className="h-4 w-4 text-gray-400" />
+                        <span className="text-gray-700">
+                          {viewingCronograma.responsavel_nome || 'Não definido'}
+                        </span>
+                      </div>
+                    </div>
                   </div>
-                )}
-                
-                <div className="flex items-center justify-between mb-3">
-                  <h3 className="text-sm font-medium text-gray-600">Checklist da Demanda</h3>
+
+                  {/* Motivo do Atraso */}
+                  {viewingCronograma.motivo_atraso && (
+                    <div>
+                      <button
+                        onClick={() => setIsDelayExpanded(!isDelayExpanded)}
+                        className="flex items-center justify-between w-full text-left mb-2 hover:bg-red-50 p-2 rounded-lg transition-colors"
+                      >
+                        <h3 className="text-sm font-medium text-red-600">Motivo do Atraso</h3>
+                        <ChevronDown 
+                          className={`h-5 w-5 text-red-500 transition-transform ${
+                            isDelayExpanded ? 'rotate-180' : ''
+                          }`} 
+                        />
+                      </button>
+                      
+                      {isDelayExpanded && (
+                        <div className="bg-red-50 border border-red-200 p-3 rounded-lg">
+                          <div className="flex items-center gap-2 mb-2">
+                            <AlertTriangle className="h-4 w-4 text-red-500" />
+                            <span className="text-sm font-medium text-red-700">Atraso Identificado</span>
+                          </div>
+                          <p className="text-red-700 text-sm leading-relaxed">
+                            {viewingCronograma.motivo_atraso}
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Barra de Progresso */}
+                  {checklistItems.length > 0 && (
+                    <div>
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-sm font-medium text-gray-600">
+                          Progresso: {checklistItems.filter(item => item.concluido).length}/{checklistItems.length} itens concluídos
+                        </span>
+                        <span className="text-sm font-medium text-gray-600">
+                          {Math.round((checklistItems.filter(item => item.concluido).length / checklistItems.length) * 100)}%
+                        </span>
+                      </div>
+                      <Progress 
+                        value={(checklistItems.filter(item => item.concluido).length / checklistItems.length) * 100} 
+                        className="h-2 [&>div]:bg-green-500"
+                      />
+                    </div>
+                  )}
+
+                  {/* Observações */}
+                  {viewingCronograma.observacoes && (
+                    <div>
+                      <h3 className="text-sm font-medium text-gray-600 mb-2">Observações</h3>
+                      <p className="text-gray-700 bg-gray-50 p-3 rounded-lg text-sm leading-relaxed">
+                        {viewingCronograma.observacoes}
+                      </p>
+                    </div>
+                  )}
+
+                </div>
+
+                {/* Ações - Fixas na parte inferior */}
+                <div className="flex items-center pt-4 border-t flex-shrink-0 mt-4">
+                  {currentUser?.organizacao === 'portes' && (
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        if (viewingCronograma) {
+                          setIsViewDialogOpen(false);
+                          setIsChecklistOpen(true);
+                        }
+                      }}
+                      className="mr-auto bg-blue-50 border-blue-200 text-blue-700 hover:bg-blue-100"
+                    >
+                      <CheckSquare className="h-4 w-4 mr-2" />
+                      Checklist
+                    </Button>
+                  )}
+                  
+                  <div className="flex gap-3 ml-auto">
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        setViewingCronograma(null);
+                        setIsViewDialogOpen(false);
+                      }}
+                    >
+                      Fechar
+                    </Button>
+                    {currentUser?.organizacao === 'portes' && (
+                      <Button
+                        onClick={() => {
+                          setViewingCronograma(null);
+                          setIsViewDialogOpen(false);
+                          setEditingCronograma(viewingCronograma);
+                          setIsEditDialogOpen(true);
+                        }}
+                      >
+                        <Edit className="h-4 w-4 mr-2" />
+                        Editar
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Grid 2: Checklist */}
+              <div className="flex flex-col overflow-hidden min-h-0">
+                <div className="flex items-center justify-between mb-4 flex-shrink-0">
+                  <h3 className="text-lg font-semibold text-gray-700">Checklist da Demanda</h3>
                   {(viewingCronograma?.data_inicio || viewingCronograma?.data_fim) && (
                     <div className="flex items-center gap-2 text-xs text-gray-500">
                       <Calendar className="h-3 w-3" />
@@ -2742,52 +2923,30 @@ const Cronograma = () => {
                     </div>
                   )}
                 </div>
-                <ScrollArea className="h-64 pr-4">
+
+                {/* Lista de itens do checklist */}
+                <div className="flex-1 overflow-y-auto">
                   {checklistLoading ? (
                     <div className="flex justify-center py-4">
                       <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
                     </div>
                   ) : checklistItems.length > 0 ? (
-                    <div className="space-y-2">
-                      {checklistItems.map((item) => (
-                        <div
-                          key={item.id}
-                          className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors"
-                        >
-                          <button
-                            onClick={() => toggleChecklistItemStatus(item.id, !item.concluido)}
-                            className={`flex-shrink-0 w-5 h-5 rounded border-2 flex items-center justify-center transition-colors ${
-                              item.concluido
-                                ? 'bg-green-500 border-green-500 text-white'
-                                : 'border-gray-300 hover:border-green-400'
-                            }`}
-                          >
-                            {item.concluido && <CheckCircle className="h-3 w-3" />}
-                          </button>
-                          <div className="flex-1 min-w-0">
-                            <p className={`text-sm font-medium ${item.concluido ? 'line-through text-gray-500' : 'text-gray-700'}`}>
-                              {item.titulo}
-                            </p>
-                            {item.descricao && (
-                              <p className={`text-xs ${item.concluido ? 'text-gray-400' : 'text-gray-500'}`}>
-                                {item.descricao}
-                              </p>
-                            )}
-                            {(item.data_inicio || item.data_fim) && (
-                              <div className={`flex items-center gap-3 mt-2 text-xs ${item.concluido ? 'text-gray-400' : 'text-gray-500'}`}>
-                                <Clock className="h-3 w-3" />
-                                {item.data_inicio && (
-                                  <span>Início: {formatDateForDisplay(item.data_inicio)}</span>
-                                )}
-                                {item.data_fim && (
-                                  <span>Fim: {formatDateForDisplay(item.data_fim)}</span>
-                                )}
-                              </div>
-                            )}
-                          </div>
+                    <DndContext
+                      sensors={sensors}
+                      collisionDetection={closestCenter}
+                      onDragEnd={handleChecklistDragEnd}
+                    >
+                      <SortableContext
+                        items={checklistItems.map(item => item.id)}
+                        strategy={verticalListSortingStrategy}
+                      >
+                        <div className="grid grid-cols-1 gap-3">
+                          {checklistItems.map((item) => (
+                            <SortableChecklistItem key={item.id} item={item} />
+                          ))}
                         </div>
-                      ))}
-                    </div>
+                      </SortableContext>
+                    </DndContext>
                   ) : (
                     <div className="text-center py-6 text-gray-500">
                       <CheckSquare className="h-8 w-8 mx-auto mb-2 text-gray-300" />
@@ -2797,61 +2956,6 @@ const Cronograma = () => {
                       </p>
                     </div>
                   )}
-                </ScrollArea>
-              </div>
-
-              {/* Observações */}
-              {viewingCronograma.observacoes && (
-                <div>
-                  <h3 className="text-sm font-medium text-gray-600 mb-2">Observações</h3>
-                  <p className="text-gray-700 bg-gray-50 p-3 rounded-lg text-sm leading-relaxed">
-                    {viewingCronograma.observacoes}
-                  </p>
-                </div>
-              )}
-
-              {/* Ações */}
-              <div className="flex items-center pt-4 border-t flex-shrink-0">
-                {currentUser?.organizacao === 'portes' && (
-                  <Button
-                    variant="outline"
-                    onClick={() => {
-                      if (viewingCronograma) {
-                        setIsViewDialogOpen(false);
-                        setIsChecklistOpen(true);
-                      }
-                    }}
-                    className="mr-auto bg-blue-50 border-blue-200 text-blue-700 hover:bg-blue-100"
-                  >
-                    <CheckSquare className="h-4 w-4 mr-2" />
-                    Checklist
-                  </Button>
-                )}
-                
-                <div className="flex gap-3">
-                  <Button
-                    variant="outline"
-                    onClick={() => {
-                      setViewingCronograma(null);
-                      setIsViewDialogOpen(false);
-                    }}
-                  >
-                    Fechar
-                  </Button>
-              {/* Excluir movido para topo do modal; somente Portes pode editar */}
-              {currentUser?.organizacao === 'portes' && (
-                <Button
-                  onClick={() => {
-                    setViewingCronograma(null);
-                    setIsViewDialogOpen(false);
-                    setEditingCronograma(viewingCronograma);
-                    setIsEditDialogOpen(true);
-                  }}
-                >
-                  <Edit className="h-4 w-4 mr-2" />
-                  Editar
-                </Button>
-              )}
                 </div>
               </div>
             </div>
