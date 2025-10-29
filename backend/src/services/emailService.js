@@ -96,14 +96,22 @@ const enviarEmailComAnexos = async (destinatario, remetente, assunto, corpo, ane
 };
 
 // Função específica para enviar anexos por email
-const enviarNotasFiscais = async (emailRemetente, emailDestinatario, competenciaId, anexos, assuntoOpcional, tipoAnexo) => {
+const enviarNotasFiscais = async (emailRemetente, emailDestinatario, competenciaId, anexos, assuntoOpcional, tipoAnexo, competenciaPeriodo) => {
   try {
-    // Determinar assunto padrão baseado no tipo de anexo
+    // Determinar assunto padrão baseado no tipo de anexo e período
     let assuntoPadrao = `Arquivo - Competência ${competenciaId}`;
-    if (tipoAnexo === 'relatorio_faturamento') {
-      assuntoPadrao = `Relatório Faturamento - Competência ${competenciaId}`;
-    } else if (tipoAnexo === 'estabelecimento') {
-      assuntoPadrao = `Notas Fiscais - Competência ${competenciaId}`;
+    if (competenciaPeriodo && competenciaPeriodo.trim()) {
+      if (tipoAnexo === 'relatorio_faturamento') {
+        assuntoPadrao = `Relatório Faturamento - Competência Período (${competenciaPeriodo})`;
+      } else if (tipoAnexo === 'estabelecimento') {
+        assuntoPadrao = `Notas Fiscais - Competência Período (${competenciaPeriodo})`;
+      }
+    } else {
+      if (tipoAnexo === 'relatorio_faturamento') {
+        assuntoPadrao = `Relatório Faturamento - Competência ${competenciaId}`;
+      } else if (tipoAnexo === 'estabelecimento') {
+        assuntoPadrao = `Notas Fiscais - Competência ${competenciaId}`;
+      }
     }
     
     const assunto = assuntoOpcional && assuntoOpcional.trim() ? assuntoOpcional.trim() : assuntoPadrao;

@@ -330,7 +330,8 @@ const ComplianceItemCard = memo(({
   downloadParecerPDF,
   complianceItems,
   apiBase,
-  currentUserEmail
+  currentUserEmail,
+  competenciaPeriodo
 }: {
   item: ComplianceItem;
   onFieldChange: (id: string, field: 'valor' | 'data' | 'observacoes' | 'emailRemetente' | 'emailDestinatario' | 'emailAssunto' | 'emailEnviado', value: string | boolean) => void;
@@ -346,6 +347,7 @@ const ComplianceItemCard = memo(({
   complianceItems: ComplianceItem[];
   apiBase: string;
   currentUserEmail?: string;
+  competenciaPeriodo?: string;
 }) => {
   const [uploading, setUploading] = useState(false);
   const [anexos, setAnexos] = useState<Anexo[]>(item.anexos || []);
@@ -866,8 +868,12 @@ const ComplianceItemCard = memo(({
                   value={(item as any).emailAssunto || ''}
                   onChange={(e) => onFieldChange(item.id, 'emailAssunto' as any, e.target.value)}
                     placeholder={item.id === '3' 
-                      ? `Relatório Faturamento - Competência ${currentCompetenciaId || ''} (padrão)`
-                      : `Notas Fiscais - Competência ${currentCompetenciaId || ''} (padrão)`
+                      ? competenciaPeriodo 
+                        ? `Relatório Faturamento - Competência Período (${competenciaPeriodo}) (padrão)`
+                        : `Relatório Faturamento - Competência ${currentCompetenciaId || ''} (padrão)`
+                      : competenciaPeriodo
+                        ? `Notas Fiscais - Competência Período (${competenciaPeriodo}) (padrão)`
+                        : `Notas Fiscais - Competência ${currentCompetenciaId || ''} (padrão)`
                     }
                   className="mt-1"
                 />
@@ -946,7 +952,8 @@ const ComplianceItemCard = memo(({
                           emailDestinatario: item.emailDestinatario,
                           competenciaId: currentCompetenciaId,
                           assunto: (item as any).emailAssunto && (item as any).emailAssunto.trim() ? (item as any).emailAssunto.trim() : undefined,
-                          tipoAnexo: item.id === '3' ? 'relatorio_faturamento' : 'estabelecimento'
+                          tipoAnexo: item.id === '3' ? 'relatorio_faturamento' : 'estabelecimento',
+                          competenciaPeriodo: competenciaPeriodo || undefined
                         })
                       });
 
@@ -1312,6 +1319,9 @@ export default function Compliance() {
 
   // NOVO: Estado para data da competência no header
   const [competenciaData, setCompetenciaData] = useState<string>('');
+  
+  // Estado para período formatado da competência
+  const [competenciaPeriodo, setCompetenciaPeriodo] = useState<string>('');
 
   // Estado para histórico de alterações
   const [historico, setHistorico] = useState<HistoricoAlteracao[]>([]);
@@ -1533,10 +1543,14 @@ export default function Compliance() {
                   // Período completo
                   updatedItem.data = `${dataInicio}|${dataFim}`;
                   setCompetenciaData(`${dataInicio}|${dataFim}`);
+                  // Definir período formatado para exibição (ex: 12/05/2024 a 12/02/2025)
+                  const periodoFormatado = `${formatDateBR(dataInicio)} a ${formatDateBR(dataFim)}`;
+                  setCompetenciaPeriodo(periodoFormatado);
                 } else if (dataInicio) {
                   // Apenas data de início
                   updatedItem.data = dataInicio;
                   setCompetenciaData(dataInicio);
+                  setCompetenciaPeriodo(formatDateBR(dataInicio));
                 }
               }
               // Fallback para competencia_referencia (compatibilidade)
@@ -2790,6 +2804,7 @@ export default function Compliance() {
             complianceItems={complianceItems}
             apiBase={API_BASE}
             currentUserEmail={currentUser?.email}
+            competenciaPeriodo={competenciaPeriodo}
           />
         ))}
       </div>
@@ -2874,11 +2889,12 @@ export default function Compliance() {
             currentCompetenciaId={currentCompetenciaId}
             onToggleExpanded={handleToggleExpanded}
             downloadParecerPDF={downloadParecerPDF}
-            complianceItems={complianceItems}
+          complianceItems={complianceItems}
           apiBase={API_BASE}
           currentUserEmail={currentUser?.email}
-          />
-        ))}
+          competenciaPeriodo={competenciaPeriodo}
+        />
+      ))}
         </div>
       )}
 

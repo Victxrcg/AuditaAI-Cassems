@@ -42,7 +42,8 @@ exports.enviarNotasFiscais = async (req, res) => {
       emailDestinatario, 
       competenciaId,
       assunto,
-      tipoAnexo
+      tipoAnexo,
+      competenciaPeriodo
     } = req.body;
 
     // Validações básicas
@@ -175,7 +176,8 @@ exports.enviarNotasFiscais = async (req, res) => {
       competenciaId,
       anexosValidos,
       assunto,
-      tipoParaBuscar
+      tipoParaBuscar,
+      competenciaPeriodo
     );
 
     if (resultado.success) {
