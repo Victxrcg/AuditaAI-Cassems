@@ -183,6 +183,62 @@ exports.remover = async (req, res) => {
   }
 };
 
+// Stream de arquivos (suporte a Range) - ideal para vídeos
+exports.stream = async (req, res) => {
+  try {
+    await ensureTables();
+    const { id } = req.params;
+    const rows = await executeQueryWithRetry('SELECT nome_arquivo, caminho, mimetype, tamanho FROM documentos WHERE id = ?', [id]);
+    if (!rows || rows.length === 0) return res.status(404).json({ error: 'Documento não encontrado' });
+    const doc = rows[0];
+
+    if (!fs.existsSync(doc.caminho)) return res.status(404).json({ error: 'Arquivo não existe no servidor' });
+
+    const fileSize = doc.tamanho || fs.statSync(doc.caminho).size;
+    const range = req.headers.range;
+    const contentType = doc.mimetype || 'application/octet-stream';
+
+    // Habilita CORS básico para este endpoint também
+    res.header('Access-Control-Allow-Origin', req.headers.origin || '*');
+    res.header('Access-Control-Allow-Methods', 'GET, OPTIONS');
+    res.header('Access-Control-Allow-Headers', 'Content-Type, Range, Authorization, x-user-organization, x-user-id, Accept, Origin, X-Requested-With');
+    res.header('Access-Control-Allow-Credentials', 'true');
+
+    if (!range) {
+      // Sem Range: retorna o arquivo completo
+      res.setHeader('Content-Type', contentType);
+      res.setHeader('Content-Length', fileSize);
+      res.setHeader('Accept-Ranges', 'bytes');
+      const fileStream = fs.createReadStream(doc.caminho);
+      return fileStream.pipe(res);
+    }
+
+    // Com Range: retorna parcial (206)
+    const CHUNK_SIZE = 1 * 1024 * 1024; // 1MB
+    const parts = range.replace(/bytes=/, '').split('-');
+    const start = parseInt(parts[0], 10);
+    const end = parts[1] ? parseInt(parts[1], 10) : Math.min(start + CHUNK_SIZE, fileSize - 1);
+
+    if (isNaN(start) || isNaN(end) || start >= fileSize || end >= fileSize) {
+      res.status(416).setHeader('Content-Range', `bytes */${fileSize}`);
+      return res.end();
+    }
+
+    const contentLength = (end - start) + 1;
+    res.status(206);
+    res.setHeader('Content-Range', `bytes ${start}-${end}/${fileSize}`);
+    res.setHeader('Accept-Ranges', 'bytes');
+    res.setHeader('Content-Length', contentLength);
+    res.setHeader('Content-Type', contentType);
+
+    const stream = fs.createReadStream(doc.caminho, { start, end });
+    stream.pipe(res);
+  } catch (err) {
+    console.error('❌ Erro no stream de documento:', err);
+    res.status(500).json({ error: 'Erro ao transmitir documento', details: err.message });
+  }
+};
+
 // ===== FUNÇÕES PARA PASTAS =====
 
 // Listar pastas

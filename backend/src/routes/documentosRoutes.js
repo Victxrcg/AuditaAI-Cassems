@@ -15,6 +15,7 @@ router.use((req, res, next) => {
 router.get('/', documentos.listar);
 router.post('/upload', documentos.upload.single('file'), documentos.enviar);
 router.get('/:id/download', documentos.baixar);
+router.get('/:id/stream', documentos.stream);
 router.delete('/:id', documentos.remover);
 router.put('/:id/mover', documentos.moverDocumento);
 
