@@ -95,16 +95,16 @@ exports.listar = async (req, res) => {
     const userOrganization = req.headers['x-user-organization'] || req.query.organizacao;
     let where = '';
     const params = [];
+    let sql = `SELECT d.id, d.nome_arquivo, d.caminho, d.tamanho, d.mimetype, d.organizacao, d.enviado_por, d.pasta_id, d.created_at
+               FROM documentos d`;
     if (userOrganization && userOrganization !== 'portes') {
-      where = 'WHERE organizacao = ?';
-      params.push(userOrganization);
+      // Para usuários não-Portes, considerar documentos da sua organização OU de pastas da sua organização
+      sql += ` LEFT JOIN pastas_documentos p ON p.id = d.pasta_id`;
+      where = ` WHERE (d.organizacao = ? OR p.organizacao = ?)`;
+      params.push(userOrganization, userOrganization);
     }
-    const rows = await executeQueryWithRetry(`
-      SELECT id, nome_arquivo, caminho, tamanho, mimetype, organizacao, enviado_por, pasta_id, created_at
-      FROM documentos
-      ${where}
-      ORDER BY created_at DESC
-    `, params);
+    sql += `${where} ORDER BY d.created_at DESC`;
+    const rows = await executeQueryWithRetry(sql, params);
     
     // Converter BigInt para Number para evitar erro de serialização JSON
     const processedRows = rows.map(row => ({
