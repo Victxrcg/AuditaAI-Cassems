@@ -128,7 +128,14 @@ exports.enviar = async (req, res) => {
     if (!req.file) return res.status(400).json({ error: 'Nenhum arquivo enviado' });
     const { originalname, path: filePath, size, mimetype } = req.file;
     const { userId, organizacao, pastaId } = req.body;
-    const org = organizacao || req.headers['x-user-organization'] || 'cassems';
+    let org = organizacao || req.headers['x-user-organization'] || 'cassems';
+    // Se veio pastaId, herdar a organização da pasta
+    if (pastaId) {
+      const rows = await executeQueryWithRetry('SELECT organizacao FROM pastas_documentos WHERE id = ?', [pastaId]);
+      if (rows && rows[0] && rows[0].organizacao) {
+        org = rows[0].organizacao;
+      }
+    }
     const result = await executeQueryWithRetry(`
       INSERT INTO documentos (nome_arquivo, caminho, tamanho, mimetype, organizacao, enviado_por, pasta_id)
       VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -296,11 +303,22 @@ exports.moverDocumento = async (req, res) => {
     const { id } = req.params;
     const { pastaId } = req.body;
     
-    await executeQueryWithRetry(`
-      UPDATE documentos 
-      SET pasta_id = ?
-      WHERE id = ?
-    `, [pastaId || null, id]);
+    // Atualizar pasta; se destino tem organização definida, atualizar também o campo organizacao do documento
+    if (pastaId) {
+      const rows = await executeQueryWithRetry('SELECT organizacao FROM pastas_documentos WHERE id = ?', [pastaId]);
+      const orgDestino = rows && rows[0] ? rows[0].organizacao : null;
+      await executeQueryWithRetry(`
+        UPDATE documentos 
+        SET pasta_id = ?, organizacao = COALESCE(?, organizacao)
+        WHERE id = ?
+      `, [pastaId, orgDestino, id]);
+    } else {
+      await executeQueryWithRetry(`
+        UPDATE documentos 
+        SET pasta_id = NULL
+        WHERE id = ?
+      `, [id]);
+    }
     
     res.json({ success: true, message: 'Documento movido com sucesso' });
   } catch (err) {
