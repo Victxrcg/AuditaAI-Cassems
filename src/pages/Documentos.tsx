@@ -38,11 +38,13 @@ import {
   X,
   AlertTriangle
 } from 'lucide-react';
+import { Play } from 'lucide-react';
 
 export default function Documentos() {
   const [docs, setDocs] = useState<Documento[]>([]);
   const [pastas, setPastas] = useState<Pasta[]>([]);
   const [currentUser, setCurrentUser] = useState<any>(null);
+  const [playingDoc, setPlayingDoc] = useState<Documento | null>(null);
   // undefined = nenhuma pasta selecionada ainda; null = filtro "Sem pasta"
   const [selectedPasta, setSelectedPasta] = useState<number | null | undefined>(undefined);
   const [showCreatePasta, setShowCreatePasta] = useState(false);
@@ -73,6 +75,22 @@ export default function Documentos() {
   const [pastaDescricao, setPastaDescricao] = useState('');
   const [pastaOrganizacao, setPastaOrganizacao] = useState<string>('');
   const [organizacoesDisponiveis, setOrganizacoesDisponiveis] = useState<string[]>([]);
+
+  // Corrige nomes com acentos que vieram em mojibake (ex.: "Ã§" -> "ç")
+  const normalizeFileName = (name: string) => {
+    try {
+      // Heurística: se contiver padrões típicos de mojibake, tenta reparar
+      if (/Ã|Â|â|œ|�/.test(name)) {
+        // decodeURIComponent(escape(...)) converte de latin1 -> utf8 em navegadores
+        // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+        // @ts-ignore
+        return decodeURIComponent(escape(name));
+      }
+      return name;
+    } catch (_e) {
+      return name;
+    }
+  };
 
   useEffect(() => {
     const user = JSON.parse(localStorage.getItem('user') || '{}');
@@ -467,14 +485,23 @@ export default function Documentos() {
               <div 
                 key={d.id} 
                 className="flex items-center justify-between p-3 rounded border hover:bg-gray-50 transition-colors cursor-pointer"
-                onMouseEnter={(e) => showPreview(d, e)}
-                onMouseLeave={hidePreview}
-                onMouseMove={(e) => updatePosition(e)}
               >
                 <div className="flex items-center gap-3 min-w-0">
                   <FileText className="w-5 h-5 text-gray-600" />
                   <div className="min-w-0">
-                    <div className="font-medium truncate" title={d.nome_arquivo}>{d.nome_arquivo}</div>
+                    <div 
+                      className="font-medium truncate"
+                      title={normalizeFileName(d.nome_arquivo)}
+                    >
+                      <span 
+                        className="hover:underline"
+                        onMouseEnter={(e) => showPreview(d, e)}
+                        onMouseLeave={hidePreview}
+                        onMouseMove={(e) => updatePosition(e)}
+                      >
+                        {normalizeFileName(d.nome_arquivo)}
+                      </span>
+                    </div>
                     <div className="text-xs text-gray-500">{new Date(d.created_at).toLocaleString('pt-BR')}</div>
                   </div>
                   <Badge className="ml-2">{Math.round((d.tamanho || 0) / 1024)} KB</Badge>
@@ -483,6 +510,16 @@ export default function Documentos() {
                   </Badge>
                 </div>
                 <div className="flex gap-2 flex-shrink-0">
+                  {d.mimetype && d.mimetype.startsWith('video/') && (
+                    <Button 
+                      variant="default" 
+                      size="sm" 
+                      onClick={(e) => { e.stopPropagation(); setPlayingDoc(d); }}
+                      title="Assistir vídeo"
+                    >
+                      <Play className="w-4 h-4 mr-1" /> Assistir
+                    </Button>
+                  )}
                   <Button 
                     variant="outline" 
                     size="sm" 
@@ -543,6 +580,38 @@ export default function Documentos() {
                     </Button>
                   ))}
                 </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* Modal do Player de Vídeo */}
+      {playingDoc && (
+        <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50">
+          <Card className="w-[90vw] max-w-5xl">
+            <CardHeader>
+              <div className="flex justify-between items-center">
+                <CardTitle>Reproduzir vídeo</CardTitle>
+                <Button variant="ghost" size="sm" onClick={() => setPlayingDoc(null)}>
+                  <X className="w-4 h-4" />
+                </Button>
+              </div>
+              <CardDescription className="truncate" title={normalizeFileName(playingDoc.nome_arquivo)}>
+                {normalizeFileName(playingDoc.nome_arquivo)}
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="w-full aspect-video bg-black rounded overflow-hidden">
+                {/* Usar endpoint de stream com suporte a Range */}
+                <video
+                  controls
+                  autoPlay
+                  className="w-full h-full"
+                  src={`${(import.meta as any).env.VITE_API_URL || 'http://localhost:3001'}/documentos/${playingDoc.id}/stream`}
+                >
+                  Seu navegador não suporta a reprodução de vídeo.
+                </video>
               </div>
             </CardContent>
           </Card>

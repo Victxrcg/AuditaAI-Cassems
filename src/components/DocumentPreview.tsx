@@ -38,6 +38,20 @@ export const DocumentPreview: React.FC<DocumentPreviewProps> = ({
   const [isLoading, setIsLoading] = useState(false);
   const previewRef = useRef<HTMLDivElement>(null);
 
+  // Corrige nomes com acentos em mojibake
+  const normalizeFileName = (name: string) => {
+    try {
+      if (/Ã|Â|â|œ|�/.test(name)) {
+        // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+        // @ts-ignore
+        return decodeURIComponent(escape(name));
+      }
+      return name;
+    } catch (_e) {
+      return name;
+    }
+  };
+
   // Função para formatar tamanho do arquivo
   const formatFileSize = (bytes: number): string => {
     if (bytes === 0) return '0 Bytes';
@@ -142,8 +156,8 @@ export const DocumentPreview: React.FC<DocumentPreviewProps> = ({
         <div className="flex items-start gap-3 mb-4">
           {getFileIcon(document.mimetype)}
           <div className="flex-1 min-w-0">
-            <h3 className="font-semibold text-sm truncate" title={document.nome_arquivo}>
-              {document.nome_arquivo}
+            <h3 className="font-semibold text-sm truncate" title={normalizeFileName(document.nome_arquivo)}>
+              {normalizeFileName(document.nome_arquivo)}
             </h3>
             <div className="flex items-center gap-2 mt-1">
               <Badge className={cn("text-xs", getTypeColor(document.mimetype))}>
