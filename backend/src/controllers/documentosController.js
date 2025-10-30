@@ -93,6 +93,7 @@ exports.listar = async (req, res) => {
   try {
     await ensureTables();
     const userOrganization = req.headers['x-user-organization'] || req.query.organizacao;
+    console.log('📁 Listar documentos - org header:', userOrganization);
     let where = '';
     const params = [];
     let sql = `SELECT d.id, d.nome_arquivo, d.caminho, d.tamanho, d.mimetype, d.organizacao, d.enviado_por, d.pasta_id, d.created_at
@@ -100,11 +101,13 @@ exports.listar = async (req, res) => {
     if (userOrganization && userOrganization !== 'portes') {
       // Para usuários não-Portes, considerar documentos da sua organização OU de pastas da sua organização
       sql += ` LEFT JOIN pastas_documentos p ON p.id = d.pasta_id`;
-      where = ` WHERE (d.organizacao = ? OR p.organizacao = ?)`;
+      where = ` WHERE (LOWER(d.organizacao) = LOWER(?) OR LOWER(p.organizacao) = LOWER(?))`;
       params.push(userOrganization, userOrganization);
     }
     sql += `${where} ORDER BY d.created_at DESC`;
+    console.log('📁 SQL documentos:', sql, 'params:', params);
     const rows = await executeQueryWithRetry(sql, params);
+    console.log('📁 Total documentos retornados:', rows.length);
     
     // Converter BigInt para Number para evitar erro de serialização JSON
     const processedRows = rows.map(row => ({
