@@ -99,4 +99,11 @@ export async function removerPasta(id: number) {
   return res.json();
 }
 
+// Organizações disponíveis para Portes
+export async function listarOrganizacoesDocumentos() {
+  const res = await fetch(`${API_BASE}/documentos/organizacoes`);
+  if (!res.ok) throw new Error('Erro ao listar organizações');
+  return res.json();
+}
+
 

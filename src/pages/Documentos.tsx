@@ -9,6 +9,7 @@ import FileUploadArea, { FileUploadState } from '@/components/FileUploadArea';
 import DocumentPreview from '@/components/DocumentPreview';
 import PreviewWrapper from '@/components/PreviewWrapper';
 import { useDocumentPreview } from '@/hooks/useDocumentPreview';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { 
   downloadDocumento, 
   listarDocumentos, 
@@ -19,6 +20,7 @@ import {
   atualizarPasta,
   removerPasta,
   moverDocumento,
+  listarOrganizacoesDocumentos,
   type Documento,
   type Pasta
 } from '@/services/documentosService';
@@ -41,7 +43,8 @@ export default function Documentos() {
   const [docs, setDocs] = useState<Documento[]>([]);
   const [pastas, setPastas] = useState<Pasta[]>([]);
   const [currentUser, setCurrentUser] = useState<any>(null);
-  const [selectedPasta, setSelectedPasta] = useState<number | null>(null);
+  // undefined = nenhuma pasta selecionada ainda; null = filtro "Sem pasta"
+  const [selectedPasta, setSelectedPasta] = useState<number | null | undefined>(undefined);
   const [showCreatePasta, setShowCreatePasta] = useState(false);
   const [editingPasta, setEditingPasta] = useState<Pasta | null>(null);
   const [movingDoc, setMovingDoc] = useState<Documento | null>(null);
@@ -68,6 +71,8 @@ export default function Documentos() {
   // Estados para formulário de pasta
   const [pastaTitulo, setPastaTitulo] = useState('');
   const [pastaDescricao, setPastaDescricao] = useState('');
+  const [pastaOrganizacao, setPastaOrganizacao] = useState<string>('');
+  const [organizacoesDisponiveis, setOrganizacoesDisponiveis] = useState<string[]>([]);
 
   useEffect(() => {
     const user = JSON.parse(localStorage.getItem('user') || '{}');
@@ -82,9 +87,27 @@ export default function Documentos() {
     ]);
     setDocs(docsData);
     setPastas(pastasData);
+    // Se não houver nenhuma pasta, abrir formulário de criação
+    if ((pastasData || []).length === 0) {
+      setShowCreatePasta(true);
+    }
   };
 
   useEffect(() => { if (currentUser) load(); }, [currentUser]);
+
+  // Carregar organizações para Portes
+  useEffect(() => {
+    (async () => {
+      try {
+        if (currentUser?.organizacao === 'portes') {
+          const orgs = await listarOrganizacoesDocumentos();
+          setOrganizacoesDisponiveis(orgs || []);
+        }
+      } catch (e) {
+        console.error('Erro ao listar organizações:', e);
+      }
+    })();
+  }, [currentUser]);
 
   const handleFileSelect = (file: File) => {
     setUploadState({
@@ -108,7 +131,16 @@ export default function Documentos() {
         });
       }, 200);
 
-      await uploadDocumento(file, currentUser?.id, currentUser?.organizacao, selectedPasta || undefined);
+      // Bloquear upload sem pasta selecionada
+      if (selectedPasta === null || selectedPasta === undefined) {
+        alert('Selecione uma pasta antes de enviar arquivos.');
+        setUploadState(prev => ({ ...prev, status: 'idle', progress: 0 }));
+        return;
+      }
+
+      const pastaDestino = pastas.find(p => p.id === selectedPasta);
+      const orgDestino = pastaDestino?.organizacao || currentUser?.organizacao;
+      await uploadDocumento(file, currentUser?.id, orgDestino, selectedPasta);
       
       clearInterval(progressInterval);
       
@@ -153,9 +185,11 @@ export default function Documentos() {
   const handleCreatePasta = async () => {
     if (!pastaTitulo.trim()) return;
     try {
-      await criarPasta(pastaTitulo, pastaDescricao, currentUser?.id, currentUser?.organizacao);
+      const orgDestino = currentUser?.organizacao === 'portes' ? (pastaOrganizacao || currentUser?.organizacao) : currentUser?.organizacao;
+      await criarPasta(pastaTitulo, pastaDescricao, currentUser?.id, orgDestino);
       setPastaTitulo('');
       setPastaDescricao('');
+      setPastaOrganizacao('');
       setShowCreatePasta(false);
       await load();
     } catch (error) {
@@ -221,8 +255,8 @@ export default function Documentos() {
   };
 
   // Filtrar documentos por pasta selecionada
-  const filteredDocs = selectedPasta === null 
-    ? docs.filter(doc => !doc.pasta_id)
+  const filteredDocs = selectedPasta === undefined
+    ? []
     : docs.filter(doc => doc.pasta_id === selectedPasta);
 
   const startEditPasta = (pasta: Pasta) => {
@@ -235,6 +269,7 @@ export default function Documentos() {
     setEditingPasta(null);
     setPastaTitulo('');
     setPastaDescricao('');
+    setPastaOrganizacao('');
     setShowCreatePasta(false);
   };
 
@@ -255,30 +290,7 @@ export default function Documentos() {
         </CardHeader>
         <CardContent>
           <div className="space-y-2">
-            {/* Pasta "Sem pasta" */}
-            <div 
-              className={`flex items-center justify-between p-3 rounded-lg cursor-pointer transition-colors ${
-                selectedPasta === null 
-                  ? 'bg-blue-50 border-2 border-blue-500' 
-                  : 'hover:bg-gray-50 border-2 border-transparent'
-              }`}
-              onClick={() => setSelectedPasta(null)}
-            >
-              <div className="flex items-center gap-3 min-w-0">
-                <Folder className="w-5 h-5 text-gray-500" />
-                <div className="min-w-0">
-                  <h3 className="font-medium">Sem pasta</h3>
-                  <p className="text-sm text-gray-500">
-                    {docs.filter(doc => !doc.pasta_id).length} documentos
-                  </p>
-                </div>
-              </div>
-              <div className="flex items-center gap-2">
-                <Badge variant="secondary" className="text-xs">
-                  {docs.filter(doc => !doc.pasta_id).length} docs
-                </Badge>
-              </div>
-            </div>
+            {/* Sem pasta removido */}
 
             {/* Pastas criadas */}
             {pastas.map((pasta) => (
@@ -364,6 +376,24 @@ export default function Documentos() {
                   rows={3}
                 />
               </div>
+              {currentUser?.organizacao === 'portes' && !editingPasta && (
+                <div>
+                  <Label>Organização destino (apenas Portes)</Label>
+                  <Select value={pastaOrganizacao} onValueChange={setPastaOrganizacao}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecione a organização" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {organizacoesDisponiveis.map((org) => (
+                        <SelectItem key={org} value={org}>
+                          {org.toUpperCase()}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-gray-500 mt-1">A pasta será criada na organização selecionada.</p>
+                </div>
+              )}
               <div className="flex gap-2">
                 <Button 
                   onClick={editingPasta ? handleEditPasta : handleCreatePasta}
@@ -385,22 +415,40 @@ export default function Documentos() {
         <CardHeader>
           <CardTitle>Enviar Documento</CardTitle>
           <CardDescription>
-            {selectedPasta === null 
-              ? 'Arquivo será enviado para "Sem pasta"'
-              : `Arquivo será enviado para "${pastas.find(p => p.id === selectedPasta)?.titulo || 'Pasta selecionada'}"`
-            }
+            {pastas.length === 0
+              ? 'Nenhuma pasta cadastrada. Crie uma pasta para habilitar o envio.'
+              : selectedPasta === undefined
+                ? 'Selecione uma pasta para habilitar o envio.'
+                : `Arquivo será enviado para "${pastas.find(p => p.id === selectedPasta)?.titulo || 'Pasta selecionada'}"`}
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <FileUploadArea
-            onFileSelect={handleFileSelect}
-            onFileUpload={handleFileUpload}
-            onFileRemove={handleFileRemove}
-            accept="*/*"
-            maxSize={50 * 1024 * 1024} // 50MB
-            uploadState={uploadState}
-            setUploadState={setUploadState}
-          />
+          {pastas.length === 0 || selectedPasta === undefined ? (
+            <div className="p-4 rounded border border-dashed text-sm text-gray-600 bg-gray-50">
+              {pastas.length === 0 ? (
+                <div className="flex items-center justify-between">
+                  <span>Crie uma pasta para habilitar o envio de documentos.</span>
+                  <Button className="ml-3" onClick={() => setShowCreatePasta(true)}>
+                    <Plus className="w-4 h-4 mr-2" /> Criar pasta
+                  </Button>
+                </div>
+              ) : (
+                <div className="flex items-center justify-between">
+                  <span>Selecione uma pasta na lista ao lado para habilitar o envio.</span>
+                </div>
+              )}
+            </div>
+          ) : (
+            <FileUploadArea
+              onFileSelect={handleFileSelect}
+              onFileUpload={handleFileUpload}
+              onFileRemove={handleFileRemove}
+              accept="*/*"
+              maxSize={50 * 1024 * 1024} // 50MB
+              uploadState={uploadState}
+              setUploadState={setUploadState}
+            />
+          )}
         </CardContent>
       </Card>
 
@@ -408,10 +456,9 @@ export default function Documentos() {
       <Card>
         <CardHeader>
           <CardTitle>
-            {selectedPasta === null 
-              ? 'Documentos sem pasta'
-              : `Documentos em "${pastas.find(p => p.id === selectedPasta)?.titulo || 'Pasta selecionada'}"`
-            }
+              {selectedPasta === undefined
+              ? 'Selecione uma pasta para visualizar documentos'
+              : `Documentos em "${pastas.find(p => p.id === selectedPasta)?.titulo || 'Pasta selecionada'}"`}
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -483,14 +530,7 @@ export default function Documentos() {
                   <strong>{movingDoc.nome_arquivo}</strong>
                 </p>
                 <div className="space-y-2">
-                  <Button 
-                    variant={movingDoc.pasta_id === null ? "default" : "outline"}
-                    className="w-full justify-start"
-                    onClick={() => handleMoveDocument(movingDoc.id, null)}
-                  >
-                    <Folder className="w-4 h-4 mr-2" />
-                    Sem pasta
-                  </Button>
+                  {/* Removido: opção Sem pasta */}
                   {pastas.map((pasta) => (
                     <Button 
                       key={pasta.id}
