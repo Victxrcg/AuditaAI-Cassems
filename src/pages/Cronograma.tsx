@@ -10,6 +10,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Switch } from '@/components/ui/switch';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useToast } from '@/hooks/use-toast';
 import ErrorBoundary from '@/components/ErrorBoundary';
@@ -114,6 +115,8 @@ const Cronograma = () => {
   const [selectedOrganizationForPDF, setSelectedOrganizationForPDF] = useState<string>('todos');
   const [selectedStatusForPDF, setSelectedStatusForPDF] = useState<string>('todos');
   const [selectedStatusForNonPortesPDF, setSelectedStatusForNonPortesPDF] = useState<string>('todos');
+  const [usarIA, setUsarIA] = useState(false);
+  const [loadingIA, setLoadingIA] = useState(false);
   const initialFormData = () => ({
     titulo: '',
     descricao: '',
@@ -319,10 +322,10 @@ const Cronograma = () => {
       
       // Função para adicionar texto com quebra de linha e suporte melhorado para Unicode
       const addText = (text: string, fontSize: number = 12, isBold: boolean = false) => {
-        // Limpar e normalizar texto para evitar caracteres problemáticos
+        // Preservar acentuação; apenas normalizar e reduzir espaços
         const cleanText = text
-          .replace(/[^\x00-\x7F\u00C0-\u017F\u0100-\u017F\u0180-\u024F\u1E00-\u1EFF\u2000-\u206F\u20A0-\u20CF\u2190-\u21FF]/g, '') // Manter apenas caracteres latinos e símbolos comuns
-          .replace(/\s+/g, ' ') // Normalizar espaços
+          .normalize('NFC')
+          .replace(/\s+/g, ' ')
           .trim();
         
         pdf.setFontSize(fontSize);
@@ -547,16 +550,275 @@ const Cronograma = () => {
     }
   };
 
+  // Função para gerar PDF com análise de IA
+  const gerarOverviewPDFComIA = async (organizacaoSelecionada?: string, statusSelecionado?: string) => {
+    let loadingToastRef: { dismiss: () => void } | null = null;
+    try {
+      setLoadingIA(true);
+      const orgParaFiltrar = organizacaoSelecionada || filtroOrganizacao;
+      const statusParaFiltrar = statusSelecionado || 'todos';
+
+      const baseUrl = API_BASE.endsWith('/api') ? API_BASE : `${API_BASE}/api`;
+      const url = `${baseUrl}/pdf/analisar-cronograma-ia`;
+
+      loadingToastRef = toast({
+        title: "Analisando com IA",
+        description: "Aguarde enquanto geramos o overview com análise inteligente...",
+      });
+
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-user-organization': currentUser?.organizacao || 'cassems',
+          'x-user-id': currentUser?.id || '',
+        },
+        body: JSON.stringify({
+          organizacao: orgParaFiltrar,
+          status: statusParaFiltrar
+        })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || 'Erro ao analisar cronograma com IA');
+      }
+
+      const data = await response.json();
+
+      if (!data.success) {
+        throw new Error(data.error || 'Erro ao processar análise');
+      }
+
+      const { analise, periodo, resumoMensal, resumoMensalDetalhado, topResponsaveis, statsPorOrganizacao, isComparativo, metadata } = data.data;
+
+      const pdf = new jsPDF({
+        orientation: 'p',
+        unit: 'mm',
+        format: 'a4',
+        compress: true
+      });
+
+      pdf.setFont('helvetica');
+      const pageWidth = pdf.internal.pageSize.getWidth();
+      const margin = 20;
+      const contentWidth = pageWidth - (margin * 2);
+      let yPosition = margin;
+
+      const addText = (text: string, fontSize: number = 12, isBold: boolean = false, color: [number, number, number] = [0, 0, 0]) => {
+        const cleanText = text
+          .normalize('NFC')
+          .replace(/\s+/g, ' ')
+          .trim();
+
+        pdf.setFontSize(fontSize);
+        pdf.setTextColor(color[0], color[1], color[2]);
+        if (isBold) {
+          pdf.setFont('helvetica', 'bold');
+        } else {
+          pdf.setFont('helvetica', 'normal');
+        }
+
+        const lines = pdf.splitTextToSize(cleanText, contentWidth);
+        lines.forEach((line: string) => {
+          if (yPosition > pdf.internal.pageSize.getHeight() - margin - 10) {
+            pdf.addPage();
+            yPosition = margin;
+          }
+          pdf.text(line, margin, yPosition);
+          yPosition += fontSize * 0.5 + 3;
+        });
+        yPosition += 5;
+      };
+
+      addText('OVERVIEW DO CRONOGRAMA - ANÁLISE INTELIGENTE', 20, true, [0, 51, 102]);
+      addText(`Gerado em: ${new Date().toLocaleDateString('pt-BR')} às ${new Date().toLocaleTimeString('pt-BR')}`, 10);
+      addText(`Período analisado: ${periodo.inicioFormatado} até ${periodo.fimFormatado}`, 11, true);
+      addText(`Organização: ${currentUser?.nome_empresa || currentUser?.organizacao_nome || currentUser?.organizacao || 'Sistema'}`, 12, true);
+      
+      if (orgParaFiltrar !== 'todos' && currentUser?.organizacao === 'portes') {
+        addText(`Filtro: ${orgParaFiltrar.toUpperCase()}`, 12, true);
+      }
+      
+      yPosition += 5;
+      // Legenda de cores
+      addText('Legenda:', 12, true, [0, 51, 102]);
+      addText('[OK] Concluído', 11, true, [15, 157, 88]); // #0F9D58
+      addText('[PENDENTE] Pendente/Atrasado', 11, true, [217, 48, 37]); // #D93025
+      yPosition += 3;
+
+      // Seção: Status Atual do Projeto com barras de progresso
+      // Função auxiliar para barras
+      const drawProgress = (label: string, percent: number) => {
+        const barWidth = contentWidth;
+        const barHeight = 6;
+        const barX = margin;
+        const barY = yPosition + 6;
+        const pct = Math.max(0, Math.min(100, Math.round(percent)));
+
+        // Título
+        addText(`${label}  ${pct}%`, 11, true, [0, 51, 102]);
+
+        // Fundo
+        pdf.setDrawColor(220, 225, 235);
+        pdf.setFillColor(235, 238, 245);
+        pdf.rect(barX, barY, barWidth, barHeight, 'FD');
+
+        // Progresso
+        const fillWidth = (barWidth * pct) / 100;
+        pdf.setFillColor(59, 76, 202); // azul
+        pdf.rect(barX, barY, fillWidth, barHeight, 'F');
+
+        yPosition = barY + barHeight + 8;
+      };
+
+      // Cálculo de resumo geral
+      let totalFeitosPeriodo = 0;
+      let totalPendentesPeriodo = 0;
+      if (Array.isArray(resumoMensal) && resumoMensal.length > 0) {
+        totalFeitosPeriodo = resumoMensal.reduce((s: number, m: any) => s + (m.totalConcluido || 0), 0);
+        totalPendentesPeriodo = resumoMensal.reduce((s: number, m: any) => s + (m.totalPendente || 0), 0);
+      }
+      const totalPeriodo = totalFeitosPeriodo + totalPendentesPeriodo;
+      const pctGeral = totalPeriodo > 0 ? (totalFeitosPeriodo / totalPeriodo) * 100 : 0;
+
+      addText('STATUS ATUAL DO PROJETO', 14, true, [0, 51, 102]);
+      drawProgress('Progresso Geral', pctGeral);
+
+      // Barras por mês (mostra últimos 6 meses do resumo retornado)
+      const mesesParaMostrar = Array.isArray(resumoMensal) ? resumoMensal.slice(-6) : [];
+      mesesParaMostrar.forEach((m: any) => {
+        const tot = (m.totalConcluido || 0) + (m.totalPendente || 0);
+        const pct = tot > 0 ? (m.totalConcluido / tot) * 100 : 0;
+        drawProgress(`${m.mes}`, pct);
+      });
+
+      // Tabela compacta por mês (totais + duração média + responsável mais ativo)
+      if (Array.isArray(resumoMensalDetalhado) && resumoMensalDetalhado.length > 0) {
+        addText('TABELA DE STATUS POR MÊS', 13, true, [0, 51, 102]);
+        const ultimos = resumoMensalDetalhado.slice(-6);
+        ultimos.forEach((r: any) => {
+          const linha = `${r.mesLabel}: Total ${r.totalDemandas || 0} | Concluídas ${r.concluidas || 0} | Atrasadas ${r.atrasadas || 0} | Pendentes ${r.pendentes || 0}`;
+          addText(linha, 10);
+          if (r.duracaoMediaDias || r.responsavelMaisAtivo) {
+            addText(`  Duração média: ${r.duracaoMediaDias ?? '-'} dia(s) | Responsável mais ativo: ${r.responsavelMaisAtivo || '-'}`, 9);
+          }
+        });
+      }
+
+      // Ranking de responsáveis (top 5)
+      if (Array.isArray(topResponsaveis) && topResponsaveis.length > 0) {
+        addText('RANKING DE RESPONSÁVEIS (TOP 5)', 13, true, [0, 51, 102]);
+        topResponsaveis.slice(0,5).forEach((p:any, idx:number) => {
+          addText(`${idx+1}. ${p.nome}: ${p.concluidas || 0} concluídas, ${p.atrasadas || 0} atrasadas`, 10);
+        });
+      }
+
+      const analiseLinhas = analise.split('\n');
+      analiseLinhas.forEach((linha: string) => {
+        const t = linha.trim();
+        // Cabeçalhos Markdown
+        if (t.startsWith('### ')) {
+          addText(t.replace(/^###\s+/, ''), 13, true, [0, 102, 204]);
+          return;
+        }
+        if (t.startsWith('## ')) {
+          addText(t.replace(/^##\s+/, ''), 14, true, [0, 102, 204]);
+          return;
+        }
+        // Marcadores de status
+        if (t.startsWith('[OK]')) {
+          addText(linha, 12, true, [15, 157, 88]); // verde
+          return;
+        }
+        if (t.startsWith('[PENDENTE]')) {
+          addText(linha, 12, true, [217, 48, 37]); // vermelho
+          return;
+        }
+        // Fallback para emojis antigos, caso venham
+        if (linha.includes('✅') || t.includes('O QUE FOI FEITO')) {
+          addText(linha, 12, true, [15, 157, 88]);
+        } else if (linha.includes('⏳') || t.includes('O QUE NÃO FOI FEITO')) {
+          addText(linha, 12, true, [217, 48, 37]);
+        } else {
+          addText(linha, 11);
+        }
+      });
+
+      yPosition += 5;
+
+      if (isComparativo && statsPorOrganizacao) {
+        addText('COMPARAÇÃO ENTRE ORGANIZAÇÕES', 16, true, [0, 51, 102]);
+        Object.entries(statsPorOrganizacao).forEach(([org, stats]: [string, any]) => {
+          addText(`${org.toUpperCase()}:`, 12, true);
+          addText(`  Total: ${stats.total} | Concluídas: ${stats.concluidas} (${stats.percentualConclusao}%)`, 10);
+          addText(`  Checklists: ${stats.checklistsConcluidos}/${stats.checklistsTotal} (${stats.percentualChecklists}%)`, 10);
+          yPosition += 3;
+        });
+      }
+
+      yPosition += 5;
+      addText('ESTATÍSTICAS RESUMIDAS', 14, true, [0, 51, 102]);
+      addText(`Total de Demandas: ${metadata.totalDemandas}`, 11);
+      if (resumoMensal.length > 0) {
+        const totalConcluido = resumoMensal.reduce((sum, m) => sum + m.totalConcluido, 0);
+        const totalPendente = resumoMensal.reduce((sum, m) => sum + m.totalPendente, 0);
+        addText(`Itens concluídos no período: ${totalConcluido}`, 11);
+        addText(`Itens pendentes no período: ${totalPendente}`, 11);
+      }
+
+      const totalPages = pdf.internal.pages.length - 1;
+      for (let i = 1; i <= totalPages; i++) {
+        pdf.setPage(i);
+        pdf.setFontSize(8);
+        pdf.setTextColor(100, 100, 100);
+        pdf.text(`Página ${i} de ${totalPages}`, pageWidth - 30, pdf.internal.pageSize.getHeight() - 10);
+      }
+
+      const escopoNome = orgParaFiltrar === 'todos' ? 'todas-organizacoes' : orgParaFiltrar.toLowerCase().replace(/\s+/g, '-');
+      const statusNome = statusParaFiltrar === 'todos' ? 'todos-status' : statusParaFiltrar;
+      const fileName = `overview-cronograma-ia-${escopoNome}-${statusNome}-${new Date().toISOString().split('T')[0]}.pdf`;
+      pdf.save(fileName);
+
+      try { loadingToastRef?.dismiss(); } catch {}
+      toast({
+        title: "PDF gerado com sucesso!",
+        description: "O overview com análise de IA foi baixado.",
+      });
+
+    } catch (error: any) {
+      console.error('Erro ao gerar PDF com IA:', error);
+      try { loadingToastRef?.dismiss(); } catch {}
+      toast({
+        title: "Erro ao gerar PDF",
+        description: error.message || "Erro ao gerar o PDF com análise de IA. Tente novamente.",
+        variant: "destructive",
+      });
+    } finally {
+      setLoadingIA(false);
+    }
+  };
+
   // Função para confirmar e baixar PDF após seleção no modal
   const confirmarDownloadPDF = () => {
     setIsOrganizationModalOpen(false);
-    gerarOverviewPDF(selectedOrganizationForPDF, selectedStatusForPDF);
+    if (usarIA) {
+      gerarOverviewPDFComIA(selectedOrganizationForPDF, selectedStatusForPDF);
+    } else {
+      gerarOverviewPDF(selectedOrganizationForPDF, selectedStatusForPDF);
+    }
+    setUsarIA(false);
   };
 
   // Função para confirmar e baixar PDF para usuários não-Portes (apenas status)
   const confirmarDownloadPDFNonPortes = () => {
     setIsStatusModalOpen(false);
-    gerarOverviewPDF(undefined, selectedStatusForNonPortesPDF);
+    if (usarIA) {
+      gerarOverviewPDFComIA(undefined, selectedStatusForNonPortesPDF);
+    } else {
+      gerarOverviewPDF(undefined, selectedStatusForNonPortesPDF);
+    }
+    setUsarIA(false);
   };
 
   // Função para carregar itens do checklist
@@ -657,7 +919,7 @@ const Cronograma = () => {
   };
 
   // Componente Sortable para item do checklist
-  const SortableChecklistItem = ({ item }: { item: ChecklistItem }) => {
+  const SortableChecklistItem = ({ item, disabled = false }: { item: ChecklistItem; disabled?: boolean }) => {
     const {
       attributes,
       listeners,
@@ -665,7 +927,7 @@ const Cronograma = () => {
       transform,
       transition,
       isDragging,
-    } = useSortable({ id: item.id });
+    } = useSortable({ id: item.id, disabled });
 
     const style = {
       transform: CSS.Transform.toString(transform),
@@ -679,10 +941,9 @@ const Cronograma = () => {
         style={style}
         className="flex items-start gap-3 p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors border border-gray-200 min-h-[120px] max-h-[200px]"
       >
-        <div
-          {...attributes}
-          {...listeners}
-          className="flex-shrink-0 cursor-grab active:cursor-grabbing mt-1"
+        <div className={disabled ? "flex-shrink-0 mt-1 opacity-40" : "flex-shrink-0 cursor-grab active:cursor-grabbing mt-1"}
+          {...(!disabled ? attributes : {})}
+          {...(!disabled ? listeners : {})}
         >
           <GripVertical className="h-5 w-5 text-gray-400 hover:text-gray-600" />
         </div>
@@ -2931,22 +3192,30 @@ const Cronograma = () => {
                       <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
                     </div>
                   ) : checklistItems.length > 0 ? (
-                    <DndContext
-                      sensors={sensors}
-                      collisionDetection={closestCenter}
-                      onDragEnd={handleChecklistDragEnd}
-                    >
-                      <SortableContext
-                        items={checklistItems.map(item => item.id)}
-                        strategy={verticalListSortingStrategy}
+                    currentUser?.organizacao === 'portes' ? (
+                      <DndContext
+                        sensors={sensors}
+                        collisionDetection={closestCenter}
+                        onDragEnd={handleChecklistDragEnd}
                       >
-                        <div className="grid grid-cols-1 gap-3">
-                          {checklistItems.map((item) => (
-                            <SortableChecklistItem key={item.id} item={item} />
-                          ))}
-                        </div>
-                      </SortableContext>
-                    </DndContext>
+                        <SortableContext
+                          items={checklistItems.map(item => item.id)}
+                          strategy={verticalListSortingStrategy}
+                        >
+                          <div className="grid grid-cols-1 gap-3">
+                            {checklistItems.map((item) => (
+                              <SortableChecklistItem key={item.id} item={item} />
+                            ))}
+                          </div>
+                        </SortableContext>
+                      </DndContext>
+                    ) : (
+                      <div className="grid grid-cols-1 gap-3">
+                        {checklistItems.map((item) => (
+                          <SortableChecklistItem key={item.id} item={item} disabled={true} />
+                        ))}
+                      </div>
+                    )
                   ) : (
                     <div className="text-center py-6 text-gray-500">
                       <CheckSquare className="h-8 w-8 mx-auto mb-2 text-gray-300" />
@@ -3149,22 +3418,69 @@ const Cronograma = () => {
                 </div>
               </div>
             )}
+
+            {/* Opção de IA */}
+            <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-start gap-3 flex-1">
+                  <div className="flex-shrink-0">
+                    <TrendingUp className="h-5 w-5 text-purple-600 mt-0.5" />
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-base font-medium text-purple-800">
+                      Análise Inteligente com IA
+                    </p>
+                    <p className="text-sm text-purple-600 mt-1">
+                      Ative para gerar um relatório com análise mensal inteligente do que foi feito e o que falta fazer, incluindo análise de checklists.
+                    </p>
+                  </div>
+                </div>
+                <Switch
+                  checked={usarIA}
+                  onCheckedChange={setUsarIA}
+                  className="ml-4"
+                />
+              </div>
+            </div>
           </div>
 
           <div className="flex justify-end gap-4 pt-6 border-t">
             <Button 
               variant="outline" 
-              onClick={() => setIsOrganizationModalOpen(false)}
+              onClick={() => {
+                setIsOrganizationModalOpen(false);
+                setUsarIA(false);
+              }}
               className="px-6"
+              disabled={loadingIA}
             >
               Cancelar
             </Button>
             <Button 
               onClick={confirmarDownloadPDF}
-              className="bg-blue-600 hover:bg-blue-700 px-6"
+              className={usarIA ? "bg-purple-600 hover:bg-purple-700 px-6" : "bg-blue-600 hover:bg-blue-700 px-6"}
+              disabled={loadingIA}
             >
-              <Download className="h-4 w-4 mr-2" />
-              Baixar Overview
+              {loadingIA ? (
+                <>
+                  <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                  Analisando IA...
+                </>
+              ) : (
+                <>
+                  {usarIA ? (
+                    <>
+                      <TrendingUp className="h-4 w-4 mr-2" />
+                      Baixar Overview com IA
+                    </>
+                  ) : (
+                    <>
+                      <Download className="h-4 w-4 mr-2" />
+                      Baixar Overview
+                    </>
+                  )}
+                </>
+              )}
             </Button>
           </div>
         </DialogContent>
@@ -3223,22 +3539,69 @@ const Cronograma = () => {
                 </div>
               </div>
             </div>
+
+            {/* Opção de IA */}
+            <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-start gap-3 flex-1">
+                  <div className="flex-shrink-0">
+                    <TrendingUp className="h-5 w-5 text-purple-600 mt-0.5" />
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-base font-medium text-purple-800">
+                      Análise Inteligente com IA
+                    </p>
+                    <p className="text-sm text-purple-600 mt-1">
+                      Ative para gerar um relatório com análise mensal inteligente do que foi feito e o que falta fazer, incluindo análise de checklists.
+                    </p>
+                  </div>
+                </div>
+                <Switch
+                  checked={usarIA}
+                  onCheckedChange={setUsarIA}
+                  className="ml-4"
+                />
+              </div>
+            </div>
           </div>
 
           <div className="flex justify-end gap-4 pt-6 border-t">
             <Button 
               variant="outline" 
-              onClick={() => setIsStatusModalOpen(false)}
+              onClick={() => {
+                setIsStatusModalOpen(false);
+                setUsarIA(false);
+              }}
               className="px-6"
+              disabled={loadingIA}
             >
               Cancelar
             </Button>
             <Button 
               onClick={confirmarDownloadPDFNonPortes}
-              className="bg-blue-600 hover:bg-blue-700 px-6"
+              className={usarIA ? "bg-purple-600 hover:bg-purple-700 px-6" : "bg-blue-600 hover:bg-blue-700 px-6"}
+              disabled={loadingIA}
             >
-              <Download className="h-4 w-4 mr-2" />
-              Baixar Overview
+              {loadingIA ? (
+                <>
+                  <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                  Analisando IA...
+                </>
+              ) : (
+                <>
+                  {usarIA ? (
+                    <>
+                      <TrendingUp className="h-4 w-4 mr-2" />
+                      Baixar Overview com IA
+                    </>
+                  ) : (
+                    <>
+                      <Download className="h-4 w-4 mr-2" />
+                      Baixar Overview
+                    </>
+                  )}
+                </>
+              )}
             </Button>
           </div>
         </DialogContent>
