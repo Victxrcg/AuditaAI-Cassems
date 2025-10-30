@@ -444,7 +444,7 @@ export default function Documentos() {
               onFileUpload={handleFileUpload}
               onFileRemove={handleFileRemove}
               accept="*/*"
-              maxSize={50 * 1024 * 1024} // 50MB
+              maxSize={100 * 1024 * 1024} // 100MB
               uploadState={uploadState}
               setUploadState={setUploadState}
             />
