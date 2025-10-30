@@ -24,6 +24,9 @@ router.post('/pastas', documentos.criarPasta);
 router.put('/pastas/:id', documentos.atualizarPasta);
 router.delete('/pastas/:id', documentos.removerPasta);
 
+// Organizações disponíveis (Portes)
+router.get('/organizacoes', documentos.listarOrganizacoes);
+
 module.exports = router;
 
 

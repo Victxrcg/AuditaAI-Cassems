@@ -309,4 +309,30 @@ exports.moverDocumento = async (req, res) => {
   }
 };
 
+// Listar organizações disponíveis (para Portes selecionar destino)
+exports.listarOrganizacoes = async (_req, res) => {
+  try {
+    await ensureTables();
+    // Buscar organizações a partir de cronograma; se vazio, complementar com documentos e pastas
+    const orgsCrono = await executeQueryWithRetry(`
+      SELECT DISTINCT organizacao FROM cronograma WHERE organizacao IS NOT NULL AND organizacao <> '' ORDER BY organizacao
+    `, []);
+    const set = new Set(orgsCrono.map(o => (o.organizacao || '').toLowerCase()));
+    const orgsDocs = await executeQueryWithRetry(`
+      SELECT DISTINCT organizacao FROM documentos WHERE organizacao IS NOT NULL AND organizacao <> ''
+    `, []);
+    orgsDocs.forEach(o => set.add((o.organizacao || '').toLowerCase()));
+    const orgsPastas = await executeQueryWithRetry(`
+      SELECT DISTINCT organizacao FROM pastas_documentos WHERE organizacao IS NOT NULL AND organizacao <> ''
+    `, []);
+    orgsPastas.forEach(o => set.add((o.organizacao || '').toLowerCase()));
+
+    const list = Array.from(set).filter(Boolean).sort();
+    res.json(list);
+  } catch (err) {
+    console.error('❌ Erro ao listar organizações:', err);
+    res.status(500).json({ error: 'Erro ao listar organizações', details: err.message });
+  }
+};
+
 
