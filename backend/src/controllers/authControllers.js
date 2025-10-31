@@ -136,6 +136,26 @@ exports.registrar = async (req, res) => {
       return res.status(400).json({ error: 'Email já está em uso' });
     }
 
+    // Criar tabela de organizações se não existir (compatibilidade)
+    try {
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS organizacoes (
+          id INT(11) NOT NULL AUTO_INCREMENT,
+          nome VARCHAR(255) NOT NULL,
+          slug VARCHAR(100) NOT NULL UNIQUE,
+          cor_identificacao VARCHAR(7) DEFAULT '#3B82F6',
+          ativa TINYINT(1) DEFAULT 1,
+          created_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+          PRIMARY KEY (id),
+          UNIQUE KEY idx_slug (slug),
+          KEY idx_ativa (ativa)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+      `);
+    } catch (err) {
+      console.log('Tabela organizacoes já existe ou erro ao criar:', err.message);
+    }
+
     // Determinar organização baseada no email e nome da empresa
     let organizacao = 'cassems';
     let cor_identificacao = '#3B82F6';
@@ -168,6 +188,37 @@ exports.registrar = async (req, res) => {
     else {
       organizacao = 'cassems';
       cor_identificacao = '#3B82F6';
+    }
+
+    // Buscar organização na tabela ou criar se não existir
+    try {
+      const [orgExiste] = await pool.query(
+        'SELECT id, cor_identificacao FROM organizacoes WHERE slug = ?',
+        [organizacao]
+      );
+
+      if (orgExiste && orgExiste.length > 0) {
+        // Usar cor da tabela se existir
+        cor_identificacao = orgExiste[0].cor_identificacao || cor_identificacao;
+      } else {
+        // Criar organização automaticamente se não existir
+        const nomeOrg = nomeEmpresa || 
+          (organizacao === 'portes' ? 'PORTES ADVOGADOS' : 
+           organizacao === 'cassems' ? 'CASSEMS' : 
+           organizacao === 'rede_frota' ? 'MARAJÓ / REDE FROTA' : 
+           organizacao.split('_').map(p => p.charAt(0).toUpperCase() + p.slice(1)).join(' '));
+        
+        await pool.query(`
+          INSERT INTO organizacoes (nome, slug, cor_identificacao, ativa)
+          VALUES (?, ?, ?, 1)
+          ON DUPLICATE KEY UPDATE nome = VALUES(nome)
+        `, [nomeOrg, organizacao, cor_identificacao]);
+        
+        console.log(`✅ Organização criada automaticamente: ${nomeOrg} (${organizacao})`);
+      }
+    } catch (err) {
+      console.log('⚠️ Erro ao verificar/criar organização na tabela (continuando com padrão):', err.message);
+      // Continuar com valores padrão se houver erro
     }
 
     // Hash da senha (simplificado - produção: bcrypt)

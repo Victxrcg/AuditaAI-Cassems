@@ -10,6 +10,7 @@ const checklistRoutes = require('./routes/checklistRoutes');
 const healthRoutes = require('./routes/healthRoutes');
 const emailRoutes = require('./routes/emailRoutes');
 const pdfRoutes = require('./routes/pdfRoutes');
+const organizacoesRoutes = require('./routes/organizacoesRoutes');
 const { getPoolStatus, getDbPool } = require('./lib/db');
 const app = express();
 
@@ -71,6 +72,7 @@ app.use((req, res, next) => {
 app.use('/api/compliance', complianceRoutes);
 app.use('/api/documentos', documentosRoutes);
 app.use('/api/usuarios', usuariosRoutes);
+app.use('/api/organizacoes', organizacoesRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/cronograma', cronogramaRoutes);
 app.use('/api/email', emailRoutes); // ← MOVER PARA ANTES das rotas genéricas
