@@ -845,9 +845,6 @@ const Users = () => {
                         {(org.total_usuarios || 0) > 0 && (
                           <div className="mt-3 pt-3 border-t border-gray-100">
                             <div className="text-xs text-orange-600 space-y-1">
-                              <p className="font-medium">
-                                ⚠️ Esta organização possui {org.total_usuarios} usuário(s).
-                              </p>
                               <p className="text-orange-700">
                                 Para excluir esta organização, você precisa primeiro transferir todos os usuários para outra organização. Vá na aba "Usuários", edite cada usuário e altere a organização deles.
                               </p>
