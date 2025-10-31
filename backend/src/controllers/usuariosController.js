@@ -21,7 +21,8 @@ exports.listarUsuarios = async (req, res) => {
         created_at,
         updated_at,
         organizacao,
-        cor_identificacao
+        cor_identificacao,
+        permissoes
       FROM usuarios_cassems
     `;
     
@@ -185,6 +186,25 @@ exports.atualizarUsuario = async (req, res) => {
       }
     }
     
+    // Processar permissoes - converter para JSON se necessário
+    let permissoesJSON = null;
+    if (permissoes !== undefined) {
+      if (typeof permissoes === 'string') {
+        // Se já é string JSON, validar
+        try {
+          JSON.parse(permissoes);
+          permissoesJSON = permissoes;
+        } catch {
+          // Se não for JSON válido, tratar como array simples
+          permissoesJSON = JSON.stringify(permissoes ? [permissoes] : []);
+        }
+      } else if (Array.isArray(permissoes)) {
+        permissoesJSON = JSON.stringify(permissoes);
+      } else if (permissoes === null || permissoes === '') {
+        permissoesJSON = null;
+      }
+    }
+
     await pool.query(`
       UPDATE usuarios_cassems 
       SET nome = COALESCE(?, nome),
@@ -192,13 +212,14 @@ exports.atualizarUsuario = async (req, res) => {
           perfil = COALESCE(?, perfil),
           ativo = COALESCE(?, ativo),
           organizacao = COALESCE(?, organizacao),
+          permissoes = COALESCE(?, permissoes),
           updated_at = NOW()
       WHERE id = ?
-    `, [nome, email, perfil, ativo, organizacao, id]);
+    `, [nome, email, perfil, ativo, organizacao, permissoesJSON, id]);
     
     // Buscar o usuário atualizado
     const [updatedUser] = await pool.query(`
-      SELECT id, nome, nome_empresa, email, perfil, ativo, created_at, updated_at, organizacao, cor_identificacao
+      SELECT id, nome, nome_empresa, email, perfil, ativo, created_at, updated_at, organizacao, cor_identificacao, permissoes
       FROM usuarios_cassems WHERE id = ?
     `, [id]);
     
