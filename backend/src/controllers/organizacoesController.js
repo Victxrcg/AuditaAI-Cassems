@@ -6,6 +6,29 @@ const isPortesUser = (userOrganization) => {
   return userOrganization && userOrganization.toLowerCase() === 'portes';
 };
 
+// Função helper para converter BigInt para Number (necessário para JSON.stringify)
+const convertBigIntToNumber = (obj) => {
+  if (obj === null || obj === undefined) return obj;
+  
+  if (typeof obj === 'bigint') {
+    return Number(obj);
+  }
+  
+  if (Array.isArray(obj)) {
+    return obj.map(convertBigIntToNumber);
+  }
+  
+  if (typeof obj === 'object') {
+    const converted = {};
+    for (const [key, value] of Object.entries(obj)) {
+      converted[key] = convertBigIntToNumber(value);
+    }
+    return converted;
+  }
+  
+  return obj;
+};
+
 // Criar tabela organizacoes se não existir e migrar slug para codigo se necessário
 const criarTabelaOrganizacoes = async (pool) => {
   try {
@@ -237,13 +260,16 @@ exports.listarOrganizacoes = async (req, res) => {
       throw queryError;
     }
 
-    // Processar resultado
+    // Processar resultado e converter BigInt para Number
     const rowsArray = Array.isArray(rows) ? rows : (rows && rows[0] ? [rows[0]] : []);
     console.log('🔍 Organizações processadas:', rowsArray.length);
 
+    // Converter BigInt para Number (necessário porque JSON.stringify não suporta BigInt)
+    const processedData = convertBigIntToNumber(rowsArray);
+
     res.json({
       success: true,
-      data: rowsArray
+      data: processedData
     });
   } catch (error) {
     console.error('❌ Erro ao listar organizações:', error);
@@ -284,11 +310,9 @@ exports.buscarOrganizacao = async (req, res) => {
     const rows = await pool.query(`
       SELECT 
         o.*,
-        COUNT(u.id) as total_usuarios
+        (SELECT COUNT(*) FROM usuarios_cassems u WHERE u.organizacao = o.codigo) as total_usuarios
       FROM organizacoes o
-      LEFT JOIN usuarios_cassems u ON u.organizacao = o.codigo
       WHERE o.id = ?
-      GROUP BY o.id
     `, [id]);
 
     const rowsArray = Array.isArray(rows) ? rows : (rows && rows[0] ? [rows[0]] : []);
@@ -299,9 +323,12 @@ exports.buscarOrganizacao = async (req, res) => {
       });
     }
 
+    // Converter BigInt para Number
+    const processedData = convertBigIntToNumber(rowsArray[0]);
+
     res.json({
       success: true,
-      data: rowsArray[0]
+      data: processedData
     });
   } catch (error) {
     console.error('❌ Erro ao buscar organização:', error);
@@ -386,10 +413,13 @@ exports.criarOrganizacao = async (req, res) => {
     
     const novaOrgaArray = Array.isArray(novaOrga) ? novaOrga : (novaOrga && novaOrga[0] ? [novaOrga[0]] : []);
 
+    // Converter BigInt para Number
+    const processedData = convertBigIntToNumber(novaOrgaArray[0]);
+
     res.status(201).json({
       success: true,
       message: 'Organização criada com sucesso',
-      data: novaOrgaArray[0]
+      data: processedData
     });
   } catch (error) {
     console.error('❌ Erro ao criar organização:', error);
@@ -520,10 +550,13 @@ exports.atualizarOrganizacao = async (req, res) => {
     
     const atualizadaArray = Array.isArray(atualizada) ? atualizada : (atualizada && atualizada[0] ? [atualizada[0]] : []);
 
+    // Converter BigInt para Number
+    const processedData = convertBigIntToNumber(atualizadaArray[0]);
+
     res.json({
       success: true,
       message: 'Organização atualizada com sucesso',
-      data: atualizadaArray[0]
+      data: processedData
     });
   } catch (error) {
     console.error('❌ Erro ao atualizar organização:', error);
@@ -580,11 +613,15 @@ exports.deletarOrganizacao = async (req, res) => {
     );
     
     const usuariosArray = Array.isArray(usuarios) ? usuarios : (usuarios && usuarios[0] ? [usuarios[0]] : []);
+    
+    // Converter BigInt para Number
+    const usuariosProcessed = convertBigIntToNumber(usuariosArray);
+    const totalUsuarios = usuariosProcessed[0]?.total ? Number(usuariosProcessed[0].total) : 0;
 
-    if (usuariosArray[0]?.total > 0) {
+    if (totalUsuarios > 0) {
       return res.status(400).json({
         error: 'Não é possível excluir',
-        details: `Existem ${usuariosArray[0].total} usuário(s) vinculado(s) a esta organização. Transfira os usuários antes de excluir.`
+        details: `Existem ${totalUsuarios} usuário(s) vinculado(s) a esta organização. Transfira os usuários antes de excluir.`
       });
     }
 
