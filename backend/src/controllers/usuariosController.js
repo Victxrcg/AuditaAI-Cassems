@@ -1,6 +1,47 @@
 // backend/src/controllers/usuariosController.js
 const { getDbPoolWithTunnel } = require('../lib/db');
 
+// Função para migrar enum de perfil para aceitar apenas 'admin' e 'usuario'
+const migrarEnumPerfil = async (pool) => {
+  try {
+    // Verificar o tipo atual da coluna perfil
+    const [columnInfo] = await pool.query(`
+      SELECT COLUMN_TYPE 
+      FROM INFORMATION_SCHEMA.COLUMNS 
+      WHERE TABLE_SCHEMA = DATABASE() 
+      AND TABLE_NAME = 'usuarios_cassems' 
+      AND COLUMN_NAME = 'perfil'
+    `);
+    
+    if (columnInfo && columnInfo.length > 0) {
+      const columnType = columnInfo[0].COLUMN_TYPE || '';
+      // Se o enum ainda contém valores antigos, atualizar
+      if (columnType.includes('compliance') || columnType.includes('visualizador')) {
+        console.log('🔧 Migrando enum de perfil...');
+        
+        // Primeiro, converter perfis antigos para os novos
+        // compliance e visualizador -> usuario
+        await pool.query(`
+          UPDATE usuarios_cassems 
+          SET perfil = 'usuario' 
+          WHERE perfil IN ('compliance', 'visualizador')
+        `);
+        
+        // Alterar o tipo da coluna para o novo enum
+        await pool.query(`
+          ALTER TABLE usuarios_cassems 
+          MODIFY COLUMN perfil ENUM('admin', 'usuario') DEFAULT 'usuario'
+        `);
+        
+        console.log('✅ Enum de perfil migrado com sucesso');
+      }
+    }
+  } catch (err) {
+    console.warn('⚠️ Aviso ao migrar enum de perfil (pode já estar atualizado):', err.message);
+    // Não bloquear se a migração falhar - pode ser que já esteja atualizado
+  }
+};
+
 // Listar todos os usuários
 exports.listarUsuarios = async (req, res) => {
   let pool, server;
@@ -9,6 +50,9 @@ exports.listarUsuarios = async (req, res) => {
     const userOrganization = req.headers['x-user-organization'] || req.query.organizacao;
     
     ({ pool, server } = await getDbPoolWithTunnel());
+    
+    // Migrar enum se necessário (executar uma vez)
+    await migrarEnumPerfil(pool);
     
     let query = `
       SELECT 
@@ -64,6 +108,9 @@ exports.buscarUsuario = async (req, res) => {
     const { id } = req.params;
     
     ({ pool, server } = await getDbPoolWithTunnel());
+    
+    // Migrar enum se necessário
+    await migrarEnumPerfil(pool);
     
     const [rows] = await pool.query(`
       SELECT 
@@ -163,6 +210,9 @@ exports.atualizarUsuario = async (req, res) => {
     }
     
     ({ pool, server } = await getDbPoolWithTunnel());
+    
+    // Migrar enum se necessário
+    await migrarEnumPerfil(pool);
     
     // Verificar se usuário existe
     const [existingUser] = await pool.query(`

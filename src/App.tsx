@@ -14,6 +14,7 @@ import Documentos from "./pages/Documentos";
 import Ajuda from "./pages/Ajuda";
 import Manutencao from "./pages/Manutencao";
 import { useServerStatus } from "./hooks/useServerStatus";
+import ProtectedRoute from "./components/ProtectedRoute";
 
 const queryClient = new QueryClient();
 
@@ -30,11 +31,46 @@ const AppContent = () => {
       <Routes>
         <Route path="/login" element={<Login />} />
         <Route path="/registrar" element={<Register />} />
-        <Route path="/compliance" element={<Layout><Compliance /></Layout>} />
-        <Route path="/cronograma" element={<Layout><Cronograma /></Layout>} />
-        <Route path="/documentos" element={<Layout><Documentos /></Layout>} />
-        <Route path="/usuarios" element={<Layout><Users /></Layout>} />
-        <Route path="/ajuda" element={<Layout><Ajuda /></Layout>} />
+        <Route 
+          path="/compliance" 
+          element={
+            <ProtectedRoute requiredPermission="compliance">
+              <Layout><Compliance /></Layout>
+            </ProtectedRoute>
+          } 
+        />
+        <Route 
+          path="/cronograma" 
+          element={
+            <ProtectedRoute requiredPermission="cronograma">
+              <Layout><Cronograma /></Layout>
+            </ProtectedRoute>
+          } 
+        />
+        <Route 
+          path="/documentos" 
+          element={
+            <ProtectedRoute requiredPermission="documentos">
+              <Layout><Documentos /></Layout>
+            </ProtectedRoute>
+          } 
+        />
+        <Route 
+          path="/usuarios" 
+          element={
+            <ProtectedRoute requiredPermission="usuarios">
+              <Layout><Users /></Layout>
+            </ProtectedRoute>
+          } 
+        />
+        <Route 
+          path="/ajuda" 
+          element={
+            <ProtectedRoute requiredPermission="ajuda">
+              <Layout><Ajuda /></Layout>
+            </ProtectedRoute>
+          } 
+        />
         {/* Redireciona / e /dashboard para /cronograma */}
         <Route path="/" element={<Navigate to="/cronograma" />} />
         <Route path="/dashboard" element={<Navigate to="/cronograma" />} />

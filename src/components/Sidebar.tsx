@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -31,6 +31,7 @@ interface SidebarProps {
 const Sidebar = ({ isOpen, onOpenChange }: SidebarProps) => {
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [permissionsKey, setPermissionsKey] = useState(0);
   const location = useLocation();
   const navigate = useNavigate();
   const isMobile = useIsMobile();
@@ -84,46 +85,106 @@ const Sidebar = ({ isOpen, onOpenChange }: SidebarProps) => {
     }
   };
 
+  // Verificar se usuário tem permissão para acessar uma página
+  const temPermissao = (paginaId: string) => {
+    try {
+      const raw = localStorage.getItem('user');
+      if (!raw) return true; // Se não tiver usuário, permitir acesso (página de login)
+      const u = JSON.parse(raw);
+      
+      // Usuários Portes sempre têm acesso a tudo
+      if (u?.organizacao?.toLowerCase() === 'portes') {
+        return true;
+      }
+      
+      // Se não tiver campo permissoes ou for null/empty, tem acesso a tudo
+      if (!u?.permissoes) {
+        return true;
+      }
+      
+      // Parse permissoes se for string JSON
+      let permissoesArray: string[] = [];
+      if (typeof u.permissoes === 'string') {
+        try {
+          permissoesArray = JSON.parse(u.permissoes);
+        } catch {
+          return true; // Se não conseguir parsear, permitir acesso
+        }
+      } else if (Array.isArray(u.permissoes)) {
+        permissoesArray = u.permissoes;
+      }
+      
+      // Se array vazio, tem acesso a tudo
+      if (permissoesArray.length === 0) {
+        return true;
+      }
+      
+      // Verificar se a página está na lista de permissões
+      return permissoesArray.includes(paginaId);
+    } catch {
+      return true; // Em caso de erro, permitir acesso
+    }
+  };
+
   const allMenuItems = [
     { 
       name: "Cronograma", 
       icon: Calendar, 
       path: "/cronograma",
+      id: "cronograma",
       badge: null
     },
     { 
       name: "Compliance", 
       icon: Shield, 
       path: "/compliance",
+      id: "compliance",
       badge: null
     },
     {
       name: "Documentos",
       icon: FileText,
       path: "/documentos",
+      id: "documentos",
       badge: null
     },
     {
       name: "Usuários",
       icon: Users,
       path: "/usuarios",
+      id: "usuarios",
       badge: null
     },
     {
       name: "Ajuda",
       icon: HelpCircle,
       path: "/ajuda",
+      id: "ajuda",
       badge: null
     }
   ];
 
-  // Filtrar Compliance para usuários da rede_frota
-  const menuItems = allMenuItems.filter(item => {
-    if (item.path === '/compliance' && isRedeFrota()) {
-      return false;
-    }
-    return true;
-  });
+  // Filtrar itens do menu baseado nas permissões do usuário
+  // Usar permissionsKey para forçar re-render quando permissões mudarem
+  const menuItems = React.useMemo(() => {
+    return allMenuItems.filter(item => {
+      // Usuários Portes sempre veem tudo
+      try {
+        const raw = localStorage.getItem('user');
+        if (raw) {
+          const u = JSON.parse(raw);
+          if (u?.organizacao?.toLowerCase() === 'portes') {
+            return true;
+          }
+        }
+      } catch {
+        // Continuar
+      }
+      
+      // Verificar se tem permissão para esta página
+      return temPermissao(item.id);
+    });
+  }, [permissionsKey]); // Re-executar quando permissionsKey mudar
 
   const bottomMenuItems = [
     // Removido o item Configurações
@@ -158,6 +219,20 @@ const Sidebar = ({ isOpen, onOpenChange }: SidebarProps) => {
       setMobileOpen(isOpen);
     }
   }, [isOpen, isMobile]);
+
+  // Escutar evento de atualização de permissões
+  useEffect(() => {
+    const handlePermissionsUpdate = () => {
+      // Forçar re-render do componente quando permissões forem atualizadas
+      setPermissionsKey(prev => prev + 1);
+    };
+
+    window.addEventListener('userPermissionsUpdated', handlePermissionsUpdate);
+    
+    return () => {
+      window.removeEventListener('userPermissionsUpdated', handlePermissionsUpdate);
+    };
+  }, []);
 
   const SidebarContent = () => (
     <>
