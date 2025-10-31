@@ -587,6 +587,17 @@ Checklists
     
     const analiseIA = completion.choices[0].message.content;
     
+    // Calcular top responsáveis
+    const responsaveisCount = {};
+    cronogramasFormatados.forEach(c => {
+      const nome = c.responsavel_nome || 'Não definido';
+      responsaveisCount[nome] = (responsaveisCount[nome] || 0) + 1;
+    });
+    const topResponsaveis = Object.entries(responsaveisCount)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5)
+      .map(([nome, count]) => ({ nome, count }));
+    
     return {
       analise: analiseIA,
       periodo: {
@@ -596,7 +607,7 @@ Checklists
         fimFormatado: ultimaData.toLocaleDateString('pt-BR')
       },
       resumoMensal,
-      resumoMensalDetalhado,
+      resumoMensalDetalhado: resumoMensal, // Usar resumoMensal como detalhado por enquanto
       topResponsaveis,
       statsPorOrganizacao: isComparativo ? statsPorOrganizacao : null,
       isComparativo
@@ -756,12 +767,21 @@ exports.analisarCronogramaIA = async (req, res) => {
     
   } catch (error) {
     console.error('❌ Erro ao analisar cronograma com IA:', error);
+    console.error('❌ Stack trace:', error.stack);
     res.status(500).json({
       success: false,
       error: 'Erro ao analisar cronograma com IA',
-      details: error.message
+      details: error.message || 'Erro desconhecido',
+      stack: process.env.NODE_ENV !== 'production' ? error.stack : undefined
     });
   } finally {
     if (server) server.close();
+    if (pool) {
+      try {
+        await pool.end();
+      } catch (err) {
+        console.error('Erro ao fechar pool:', err);
+      }
+    }
   }
 };

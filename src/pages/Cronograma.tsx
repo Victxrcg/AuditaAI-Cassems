@@ -855,8 +855,13 @@ const Cronograma = () => {
         title: "Sucesso",
         description: concluido ? "Item marcado como concluído" : "Item marcado como pendente",
       });
-    } catch (error) {
+    } catch (error: any) {
       console.error('Erro ao atualizar item do checklist:', error);
+      const message = (error && (error.message || error.toString())) || '';
+      // Silenciar toast para erros de permissão (403/forbidden)
+      if (/403|forbid|permiss/i.test(message)) {
+        return;
+      }
       toast({
         title: "Erro",
         description: "Erro ao atualizar item do checklist",
@@ -1001,6 +1006,12 @@ const Cronograma = () => {
   useEffect(() => {
     if (isViewDialogOpen && viewingCronograma) {
       loadChecklistItems(viewingCronograma.id);
+      // Expandir automaticamente o campo "Motivo do Atraso" se a demanda estiver em atraso
+      if (viewingCronograma.motivo_atraso || viewingCronograma.status === 'atrasado') {
+        setIsDelayExpanded(true);
+      } else {
+        setIsDelayExpanded(false);
+      }
     }
   }, [isViewDialogOpen, viewingCronograma]);
 
