@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Eye, EyeOff, Building } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -21,12 +21,46 @@ const Register = () => {
   const navigate = useNavigate();
   const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:4011';
 
-  // Lista de empresas disponíveis para cadastro
-  const empresasDisponiveis = [
+  const [empresasDisponiveis, setEmpresasDisponiveis] = useState<{ value: string; label: string }[]>([
     { value: 'cassems', label: 'CASSEMS' },
-    { value: 'portes', label: 'PORTES' },
+    { value: 'portes', label: 'PORTES ADVOGADOS' },
     { value: 'rede_frota', label: 'MARAJÓ / REDE FROTA' }
-  ];
+  ]);
+
+  // Buscar organizações do backend
+  useEffect(() => {
+    const fetchOrganizacoes = async () => {
+      try {
+        const res = await fetch(`${API_BASE}/organizacoes`, {
+          headers: {
+            'x-user-organization': 'portes'
+          }
+        });
+        
+        if (res.ok) {
+          const data = await res.json();
+          const orgs = data.data || data || [];
+          
+          // Mapear organizações para formato de select
+          const orgsFormatadas = orgs
+            .filter((org: any) => org.ativa === 1) // Apenas organizações ativas
+            .map((org: any) => ({
+              value: org.codigo,
+              label: org.nome
+            }));
+          
+          if (orgsFormatadas.length > 0) {
+            setEmpresasDisponiveis(orgsFormatadas);
+          }
+        }
+      } catch (error) {
+        console.error('Erro ao buscar organizações:', error);
+        // Manter lista padrão em caso de erro
+      }
+    };
+
+    fetchOrganizacoes();
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -99,7 +133,7 @@ const Register = () => {
         </CardHeader>
         <CardContent>
           <div className="flex items-center justify-between mb-4">
-            <div className="text-sm text-muted-foreground">
+            <div className="text-base text-muted-foreground">
               Já possui conta? {" "}
               <Link to="/login" className="text-primary hover:underline">Voltar ao login</Link>
             </div>
