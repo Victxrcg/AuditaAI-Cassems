@@ -39,12 +39,15 @@ import {
   AlertTriangle
 } from 'lucide-react';
 import { Play } from 'lucide-react';
+import { Eye } from 'lucide-react';
 
 export default function Documentos() {
   const [docs, setDocs] = useState<Documento[]>([]);
   const [pastas, setPastas] = useState<Pasta[]>([]);
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [playingDoc, setPlayingDoc] = useState<Documento | null>(null);
+  const [pdfDoc, setPdfDoc] = useState<Documento | null>(null);
+  const [docxDoc, setDocxDoc] = useState<Documento | null>(null);
   // undefined = nenhuma pasta selecionada ainda; null = filtro "Sem pasta"
   const [selectedPasta, setSelectedPasta] = useState<number | null | undefined>(undefined);
   const [showCreatePasta, setShowCreatePasta] = useState(false);
@@ -510,6 +513,26 @@ export default function Documentos() {
                   </Badge>
                 </div>
                 <div className="flex gap-2 flex-shrink-0">
+                  {d.mimetype === 'application/pdf' && (
+                    <Button 
+                      variant="default" 
+                      size="sm" 
+                      onClick={(e) => { e.stopPropagation(); setPdfDoc(d); }}
+                      title="Visualizar PDF"
+                    >
+                      <Eye className="w-4 h-4 mr-1" /> Visualizar
+                    </Button>
+                  )}
+                  {(d.mimetype?.includes('word') || d.mimetype?.includes('officedocument.wordprocessingml.document') || /\.docx$/i.test(d.nome_arquivo)) && (
+                    <Button 
+                      variant="default" 
+                      size="sm" 
+                      onClick={(e) => { e.stopPropagation(); setDocxDoc(d); }}
+                      title="Visualizar DOCX"
+                    >
+                      <Eye className="w-4 h-4 mr-1" /> Visualizar
+                    </Button>
+                  )}
                   {d.mimetype && d.mimetype.startsWith('video/') && (
                     <Button 
                       variant="default" 
@@ -612,6 +635,63 @@ export default function Documentos() {
                 >
                   Seu navegador não suporta a reprodução de vídeo.
                 </video>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* Modal do Visualizador de PDF */}
+      {pdfDoc && (
+        <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50">
+          <Card className="w-[95vw] h-[90vh] max-w-7xl">
+            <CardHeader>
+              <div className="flex justify-between items-center">
+                <CardTitle>Visualizar PDF</CardTitle>
+                <Button variant="ghost" size="sm" onClick={() => setPdfDoc(null)}>
+                  <X className="w-4 h-4" />
+                </Button>
+              </div>
+              <CardDescription className="truncate" title={normalizeFileName(pdfDoc.nome_arquivo)}>
+                {normalizeFileName(pdfDoc.nome_arquivo)}
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="h-[calc(90vh-120px)]">
+              <div className="w-full h-full bg-white rounded overflow-hidden border">
+                <iframe
+                  title="PDF"
+                  className="w-full h-full"
+                  src={`${(import.meta as any).env.VITE_API_URL || 'http://localhost:3001'}/documentos/${pdfDoc.id}/stream#toolbar=1&navpanes=0`}
+                />
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* Modal do Visualizador de DOCX */}
+      {docxDoc && (
+        <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50">
+          <Card className="w-[95vw] h-[90vh] max-w-7xl">
+            <CardHeader>
+              <div className="flex justify-between items-center">
+                <CardTitle>Visualizar DOCX</CardTitle>
+                <Button variant="ghost" size="sm" onClick={() => setDocxDoc(null)}>
+                  <X className="w-4 h-4" />
+                </Button>
+              </div>
+              <CardDescription className="truncate" title={normalizeFileName(docxDoc.nome_arquivo)}>
+                {normalizeFileName(docxDoc.nome_arquivo)}
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="h-[calc(90vh-120px)]">
+              <div className="w-full h-full bg-white rounded overflow-hidden border">
+                {/* Visualizador online da Microsoft exige URL pública acessível. Em ambiente local pode não abrir. */}
+                <iframe
+                  title="DOCX"
+                  className="w-full h-full"
+                  src={`https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(((import.meta as any).env.VITE_API_URL || 'http://localhost:3001') + '/documentos/' + docxDoc.id + '/stream')}`}
+                />
               </div>
             </CardContent>
           </Card>
