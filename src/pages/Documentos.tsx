@@ -111,6 +111,9 @@ export default function Documentos() {
     // Se não houver nenhuma pasta, abrir formulário de criação
     if ((pastasData || []).length === 0) {
       setShowCreatePasta(true);
+    } else if (pastasData && pastasData.length > 0) {
+      // Se houver pastas e nenhuma estiver selecionada, selecionar a primeira
+      setSelectedPasta(prev => prev === undefined ? pastasData[0].id : prev);
     }
   };
 

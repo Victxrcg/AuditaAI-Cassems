@@ -775,12 +775,13 @@ exports.analisarCronogramaIA = async (req, res) => {
       stack: process.env.NODE_ENV !== 'production' ? error.stack : undefined
     });
   } finally {
-    if (server) server.close();
-    if (pool) {
+    // Fechar apenas o tunnel (server), se existir
+    // NÃO fechar o pool, pois é compartilhado e usado por outras requisições
+    if (server) {
       try {
-        await pool.end();
+        server.close();
       } catch (err) {
-        console.error('Erro ao fechar pool:', err);
+        console.error('Erro ao fechar tunnel:', err);
       }
     }
   }

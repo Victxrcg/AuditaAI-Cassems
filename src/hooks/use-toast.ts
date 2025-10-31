@@ -161,6 +161,12 @@ function toast({ ...props }: Toast) {
     },
   })
 
+  // Se duration for Infinity, não adicionar timeout para remoção
+  if (props.duration !== Infinity) {
+    // O timeout padrão já está configurado em TOAST_REMOVE_DELAY
+    addToRemoveQueue(id)
+  }
+
   return {
     id: id,
     dismiss,

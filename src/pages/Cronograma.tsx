@@ -564,6 +564,7 @@ const Cronograma = () => {
       loadingToastRef = toast({
         title: "Analisando com IA",
         description: "Aguarde enquanto geramos o overview com análise inteligente...",
+        duration: Infinity, // Manter o toast visível até ser fechado manualmente
       });
 
       const response = await fetch(url, {
@@ -780,7 +781,14 @@ const Cronograma = () => {
       const fileName = `overview-cronograma-ia-${escopoNome}-${statusNome}-${new Date().toISOString().split('T')[0]}.pdf`;
       pdf.save(fileName);
 
-      try { loadingToastRef?.dismiss(); } catch {}
+      // Fechar toast de loading antes de mostrar o de sucesso
+      if (loadingToastRef) {
+        try {
+          loadingToastRef.dismiss();
+          // Aguardar um momento para garantir que o toast foi fechado
+          await new Promise(resolve => setTimeout(resolve, 100));
+        } catch {}
+      }
       toast({
         title: "PDF gerado com sucesso!",
         description: "O overview com análise de IA foi baixado.",
@@ -788,7 +796,14 @@ const Cronograma = () => {
 
     } catch (error: any) {
       console.error('Erro ao gerar PDF com IA:', error);
-      try { loadingToastRef?.dismiss(); } catch {}
+      // Fechar toast de loading antes de mostrar o de erro
+      if (loadingToastRef) {
+        try {
+          loadingToastRef.dismiss();
+          // Aguardar um momento para garantir que o toast foi fechado
+          await new Promise(resolve => setTimeout(resolve, 100));
+        } catch {}
+      }
       toast({
         title: "Erro ao gerar PDF",
         description: error.message || "Erro ao gerar o PDF com análise de IA. Tente novamente.",
