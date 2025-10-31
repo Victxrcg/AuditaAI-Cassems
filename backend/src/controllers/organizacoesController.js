@@ -9,24 +9,28 @@ const isPortesUser = (userOrganization) => {
 // Criar tabela organizacoes se não existir
 const criarTabelaOrganizacoes = async (pool) => {
   try {
-    await pool.query(`
+    const query = `
       CREATE TABLE IF NOT EXISTS organizacoes (
         id INT(11) NOT NULL AUTO_INCREMENT,
         nome VARCHAR(255) NOT NULL,
-        slug VARCHAR(100) NOT NULL UNIQUE,
+        codigo VARCHAR(100) NOT NULL UNIQUE,
         cor_identificacao VARCHAR(7) DEFAULT '#3B82F6',
         ativa TINYINT(1) DEFAULT 1,
         created_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
         PRIMARY KEY (id),
-        UNIQUE KEY idx_slug (slug),
+        UNIQUE KEY idx_codigo (codigo),
         KEY idx_ativa (ativa)
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-    `);
+    `;
+    await pool.query(query);
     console.log('✅ Tabela organizacoes criada/verificada com sucesso');
   } catch (error) {
     console.error('❌ Erro ao criar tabela organizacoes:', error);
-    throw error;
+    // Não lançar erro se a tabela já existe
+    if (!error.message.includes('already exists') && !error.message.includes('Duplicate')) {
+      throw error;
+    }
   }
 };
 
@@ -34,14 +38,15 @@ const criarTabelaOrganizacoes = async (pool) => {
 const migrarOrganizacoesExistentes = async (pool) => {
   try {
     // Buscar todas as organizações únicas dos usuários
-    const organizacoesExistentes = await pool.query(`
+    const result = await pool.query(`
       SELECT DISTINCT organizacao 
       FROM usuarios_cassems 
       WHERE organizacao IS NOT NULL AND organizacao != ''
       ORDER BY organizacao
     `);
-
-    const orgsArray = Array.isArray(organizacoesExistentes) ? organizacoesExistentes : (organizacoesExistentes[0] ? [organizacoesExistentes[0]] : []);
+    
+    // MariaDB pode retornar array direto ou resultado em formato específico
+    const orgsArray = Array.isArray(result) ? result : (result && result[0] ? (Array.isArray(result[0]) ? result[0] : [result[0]]) : []);
     console.log(`🔍 Encontradas ${orgsArray.length} organizações para migrar`);
 
     // Mapear organizações conhecidas para nomes amigáveis
@@ -53,30 +58,31 @@ const migrarOrganizacoesExistentes = async (pool) => {
 
     let inseridas = 0;
     for (const org of orgsArray) {
-      const slug = org.organizacao.toLowerCase().trim();
+      const codigo = org.organizacao.toLowerCase().trim();
       
       // Verificar se já existe
-      const existentes = await pool.query(
-        'SELECT id FROM organizacoes WHERE slug = ?',
-        [slug]
+      const existentesResult = await pool.query(
+        'SELECT id FROM organizacoes WHERE codigo = ?',
+        [codigo]
       );
       
-      const exists = Array.isArray(existentes) ? existentes.length > 0 : existentes && existentes[0];
+      const existentesArray = Array.isArray(existentesResult) ? existentesResult : (existentesResult && existentesResult[0] ? (Array.isArray(existentesResult[0]) ? existentesResult[0] : [existentesResult[0]]) : []);
+      const exists = existentesArray.length > 0;
 
       if (!exists) {
-        // Usar mapeamento ou gerar nome a partir do slug
-        const config = mapeamentoNomes[slug] || {
-          nome: slug.split('_').map(p => p.charAt(0).toUpperCase() + p.slice(1)).join(' '),
+        // Usar mapeamento ou gerar nome a partir do codigo
+        const config = mapeamentoNomes[codigo] || {
+          nome: codigo.split('_').map(p => p.charAt(0).toUpperCase() + p.slice(1)).join(' '),
           cor: '#6366F1'
         };
 
         await pool.query(`
-          INSERT INTO organizacoes (nome, slug, cor_identificacao, ativa)
+          INSERT INTO organizacoes (nome, codigo, cor_identificacao, ativa)
           VALUES (?, ?, ?, 1)
-        `, [config.nome, slug, config.cor]);
+        `, [config.nome, codigo, config.cor]);
 
         inseridas++;
-        console.log(`✅ Organização migrada: ${config.nome} (${slug})`);
+        console.log(`✅ Organização migrada: ${config.nome} (${codigo})`);
       }
     }
 
@@ -92,10 +98,13 @@ const migrarOrganizacoesExistentes = async (pool) => {
 exports.listarOrganizacoes = async (req, res) => {
   let pool, server;
   try {
+    console.log('🔍 Iniciando listagem de organizações...');
     const userOrganization = req.headers['x-user-organization'] || req.query.organizacao;
+    console.log('🔍 Organização do usuário:', userOrganization);
     
     // Apenas Portes pode ver todas as organizações
     if (!isPortesUser(userOrganization)) {
+      console.log('❌ Acesso negado - usuário não é Portes');
       return res.status(403).json({
         error: 'Acesso negado',
         details: 'Apenas usuários Portes podem listar organizações'
@@ -103,35 +112,77 @@ exports.listarOrganizacoes = async (req, res) => {
     }
 
     ({ pool, server } = await getDbPoolWithTunnel());
+    console.log('✅ Pool obtido com sucesso');
     
     // Criar tabela se não existir
+    console.log('🔍 Criando/verificando tabela organizacoes...');
     await criarTabelaOrganizacoes(pool);
+    console.log('✅ Tabela verificada');
     
     // Migrar organizações existentes se necessário
-    await migrarOrganizacoesExistentes(pool);
+    try {
+      console.log('🔍 Iniciando migração de organizações...');
+      await migrarOrganizacoesExistentes(pool);
+      console.log('✅ Migração concluída');
+    } catch (migrationError) {
+      console.error('⚠️ Erro na migração (continuando):', migrationError.message);
+      console.error('⚠️ Stack:', migrationError.stack);
+      // Continuar mesmo se a migração falhar
+    }
 
-    const rows = await pool.query(`
-      SELECT 
-        o.*,
-        COUNT(u.id) as total_usuarios
-      FROM organizacoes o
-      LEFT JOIN usuarios_cassems u ON u.organizacao = o.slug
-      GROUP BY o.id
-      ORDER BY o.nome ASC
-    `);
+    // Usar executeQueryWithRetry para garantir retry automático
+    const { executeQueryWithRetry } = require('../lib/db');
+    
+    console.log('🔍 Buscando organizações do banco...');
+    let rows;
+    try {
+      rows = await executeQueryWithRetry(`
+        SELECT 
+          o.id,
+          o.nome,
+          o.codigo,
+          o.cor_identificacao,
+          o.ativa,
+          o.created_at,
+          o.updated_at,
+          (SELECT COUNT(*) FROM usuarios_cassems u WHERE u.organizacao = o.codigo) as total_usuarios
+        FROM organizacoes o
+        ORDER BY o.nome ASC
+      `);
+      console.log('✅ Query executada com sucesso');
+      console.log('🔍 Resultado tipo:', typeof rows);
+      console.log('🔍 Resultado é array?', Array.isArray(rows));
+      console.log('🔍 Total de linhas:', Array.isArray(rows) ? rows.length : 'N/A');
+    } catch (queryError) {
+      console.error('❌ Erro na query:', queryError);
+      console.error('❌ Stack:', queryError.stack);
+      throw queryError;
+    }
+
+    // Processar resultado
+    const rowsArray = Array.isArray(rows) ? rows : (rows && rows[0] ? [rows[0]] : []);
+    console.log('🔍 Organizações processadas:', rowsArray.length);
 
     res.json({
       success: true,
-      data: Array.isArray(rows) ? rows : rows[0] ? [rows[0]] : []
+      data: rowsArray
     });
   } catch (error) {
     console.error('❌ Erro ao listar organizações:', error);
+    console.error('❌ Stack completo:', error.stack);
     res.status(500).json({
       error: 'Erro ao listar organizações',
-      details: error.message
+      details: error.message,
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
     });
   } finally {
-    if (server) server.close();
+    if (server && typeof server.close === 'function') {
+      try {
+        server.close();
+      } catch (closeError) {
+        console.error('⚠️ Erro ao fechar server (ignorando):', closeError.message);
+      }
+    }
   }
 };
 
@@ -157,7 +208,7 @@ exports.buscarOrganizacao = async (req, res) => {
         o.*,
         COUNT(u.id) as total_usuarios
       FROM organizacoes o
-      LEFT JOIN usuarios_cassems u ON u.organizacao = o.slug
+      LEFT JOIN usuarios_cassems u ON u.organizacao = o.codigo
       WHERE o.id = ?
       GROUP BY o.id
     `, [id]);
@@ -181,7 +232,13 @@ exports.buscarOrganizacao = async (req, res) => {
       details: error.message
     });
   } finally {
-    if (server) server.close();
+    if (server && typeof server.close === 'function') {
+      try {
+        server.close();
+      } catch (closeError) {
+        console.error('⚠️ Erro ao fechar server (ignorando):', closeError.message);
+      }
+    }
   }
 };
 
@@ -199,17 +256,17 @@ exports.criarOrganizacao = async (req, res) => {
       });
     }
 
-    const { nome, slug, cor_identificacao } = req.body;
+    const { nome, codigo, cor_identificacao } = req.body;
 
-    if (!nome || !slug) {
+    if (!nome || !codigo) {
       return res.status(400).json({
         error: 'Dados inválidos',
-        details: 'Nome e slug são obrigatórios'
+        details: 'Nome e código são obrigatórios'
       });
     }
 
-    // Normalizar slug
-    const slugNormalizado = slug.toLowerCase()
+    // Normalizar codigo
+    const codigoNormalizado = codigo.toLowerCase()
       .replace(/[^a-z0-9\s-]/g, '')
       .replace(/\s+/g, '_')
       .replace(/-+/g, '_')
@@ -220,27 +277,27 @@ exports.criarOrganizacao = async (req, res) => {
     // Criar tabela se não existir
     await criarTabelaOrganizacoes(pool);
 
-    // Verificar se slug já existe
+    // Verificar se codigo já existe
     const existentes = await pool.query(
-      'SELECT id FROM organizacoes WHERE slug = ?',
-      [slugNormalizado]
+      'SELECT id FROM organizacoes WHERE codigo = ?',
+      [codigoNormalizado]
     );
 
     const exists = Array.isArray(existentes) ? existentes.length > 0 : (existentes && existentes[0]);
 
     if (exists) {
       return res.status(400).json({
-        error: 'Slug já existe',
-        details: 'Já existe uma organização com este slug'
+        error: 'Código já existe',
+        details: 'Já existe uma organização com este código'
       });
     }
 
     const cor = cor_identificacao || '#6366F1';
 
     const result = await pool.query(`
-      INSERT INTO organizacoes (nome, slug, cor_identificacao, ativa)
+      INSERT INTO organizacoes (nome, codigo, cor_identificacao, ativa)
       VALUES (?, ?, ?, 1)
-    `, [nome, slugNormalizado, cor]);
+    `, [nome, codigoNormalizado, cor]);
 
     const insertId = result.insertId ? result.insertId : (Array.isArray(result) && result[0]?.insertId) || result[0]?.insertId;
 
@@ -263,7 +320,13 @@ exports.criarOrganizacao = async (req, res) => {
       details: error.message
     });
   } finally {
-    if (server) server.close();
+    if (server && typeof server.close === 'function') {
+      try {
+        server.close();
+      } catch (closeError) {
+        console.error('⚠️ Erro ao fechar server (ignorando):', closeError.message);
+      }
+    }
   }
 };
 
@@ -282,7 +345,7 @@ exports.atualizarOrganizacao = async (req, res) => {
       });
     }
 
-    const { nome, slug, cor_identificacao, ativa } = req.body;
+    const { nome, codigo, cor_identificacao, ativa } = req.body;
 
     ({ pool, server } = await getDbPoolWithTunnel());
 
@@ -300,32 +363,32 @@ exports.atualizarOrganizacao = async (req, res) => {
       });
     }
 
-    // Se mudou o slug, verificar se não conflita
-    if (slug && slug !== existentesArray[0].slug) {
-      const slugNormalizado = slug.toLowerCase()
+    // Se mudou o codigo, verificar se não conflita
+    if (codigo && codigo !== existentesArray[0].codigo) {
+      const codigoNormalizado = codigo.toLowerCase()
         .replace(/[^a-z0-9\s-]/g, '')
         .replace(/\s+/g, '_')
         .replace(/-+/g, '_')
         .substring(0, 100);
 
       const conflito = await pool.query(
-        'SELECT id FROM organizacoes WHERE slug = ? AND id != ?',
-        [slugNormalizado, id]
+        'SELECT id FROM organizacoes WHERE codigo = ? AND id != ?',
+        [codigoNormalizado, id]
       );
       
       const conflitoArray = Array.isArray(conflito) ? conflito : (conflito && conflito[0] ? [conflito[0]] : []);
 
       if (conflitoArray.length > 0) {
         return res.status(400).json({
-          error: 'Slug já existe',
-          details: 'Já existe outra organização com este slug'
+          error: 'Código já existe',
+          details: 'Já existe outra organização com este código'
         });
       }
 
-      // Atualizar slug na tabela usuarios_cassems também
+      // Atualizar codigo na tabela usuarios_cassems também
       await pool.query(
         'UPDATE usuarios_cassems SET organizacao = ? WHERE organizacao = ?',
-        [slugNormalizado, existentesArray[0].slug]
+        [codigoNormalizado, existentesArray[0].codigo]
       );
     }
 
@@ -338,14 +401,14 @@ exports.atualizarOrganizacao = async (req, res) => {
       params.push(nome);
     }
 
-    if (slug !== undefined) {
-      const slugNormalizado = slug.toLowerCase()
+    if (codigo !== undefined) {
+      const codigoNormalizado = codigo.toLowerCase()
         .replace(/[^a-z0-9\s-]/g, '')
         .replace(/\s+/g, '_')
         .replace(/-+/g, '_')
         .substring(0, 100);
-      updates.push('slug = ?');
-      params.push(slugNormalizado);
+      updates.push('codigo = ?');
+      params.push(codigoNormalizado);
     }
 
     if (cor_identificacao !== undefined) {
@@ -391,7 +454,13 @@ exports.atualizarOrganizacao = async (req, res) => {
       details: error.message
     });
   } finally {
-    if (server) server.close();
+    if (server && typeof server.close === 'function') {
+      try {
+        server.close();
+      } catch (closeError) {
+        console.error('⚠️ Erro ao fechar server (ignorando):', closeError.message);
+      }
+    }
   }
 };
 
@@ -429,7 +498,7 @@ exports.deletarOrganizacao = async (req, res) => {
     // Verificar se há usuários vinculados
     const usuarios = await pool.query(
       'SELECT COUNT(*) as total FROM usuarios_cassems WHERE organizacao = ?',
-      [existentesArray[0].slug]
+      [existentesArray[0].codigo]
     );
     
     const usuariosArray = Array.isArray(usuarios) ? usuarios : (usuarios && usuarios[0] ? [usuarios[0]] : []);
@@ -455,7 +524,13 @@ exports.deletarOrganizacao = async (req, res) => {
       details: error.message
     });
   } finally {
-    if (server) server.close();
+    if (server && typeof server.close === 'function') {
+      try {
+        server.close();
+      } catch (closeError) {
+        console.error('⚠️ Erro ao fechar server (ignorando):', closeError.message);
+      }
+    }
   }
 };
 

@@ -142,13 +142,13 @@ exports.registrar = async (req, res) => {
         CREATE TABLE IF NOT EXISTS organizacoes (
           id INT(11) NOT NULL AUTO_INCREMENT,
           nome VARCHAR(255) NOT NULL,
-          slug VARCHAR(100) NOT NULL UNIQUE,
+          codigo VARCHAR(100) NOT NULL UNIQUE,
           cor_identificacao VARCHAR(7) DEFAULT '#3B82F6',
           ativa TINYINT(1) DEFAULT 1,
           created_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
           updated_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
           PRIMARY KEY (id),
-          UNIQUE KEY idx_slug (slug),
+          UNIQUE KEY idx_codigo (codigo),
           KEY idx_ativa (ativa)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
       `);
@@ -193,7 +193,7 @@ exports.registrar = async (req, res) => {
     // Buscar organização na tabela ou criar se não existir
     try {
       const [orgExiste] = await pool.query(
-        'SELECT id, cor_identificacao FROM organizacoes WHERE slug = ?',
+        'SELECT id, cor_identificacao FROM organizacoes WHERE codigo = ?',
         [organizacao]
       );
 
@@ -209,7 +209,7 @@ exports.registrar = async (req, res) => {
            organizacao.split('_').map(p => p.charAt(0).toUpperCase() + p.slice(1)).join(' '));
         
         await pool.query(`
-          INSERT INTO organizacoes (nome, slug, cor_identificacao, ativa)
+          INSERT INTO organizacoes (nome, codigo, cor_identificacao, ativa)
           VALUES (?, ?, ?, 1)
           ON DUPLICATE KEY UPDATE nome = VALUES(nome)
         `, [nomeOrg, organizacao, cor_identificacao]);
