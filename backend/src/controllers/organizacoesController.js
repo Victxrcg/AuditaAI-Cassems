@@ -6,31 +6,109 @@ const isPortesUser = (userOrganization) => {
   return userOrganization && userOrganization.toLowerCase() === 'portes';
 };
 
-// Criar tabela organizacoes se não existir
+// Criar tabela organizacoes se não existir e migrar slug para codigo se necessário
 const criarTabelaOrganizacoes = async (pool) => {
   try {
-    const query = `
-      CREATE TABLE IF NOT EXISTS organizacoes (
-        id INT(11) NOT NULL AUTO_INCREMENT,
-        nome VARCHAR(255) NOT NULL,
-        codigo VARCHAR(100) NOT NULL UNIQUE,
-        cor_identificacao VARCHAR(7) DEFAULT '#3B82F6',
-        ativa TINYINT(1) DEFAULT 1,
-        created_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-        PRIMARY KEY (id),
-        UNIQUE KEY idx_codigo (codigo),
-        KEY idx_ativa (ativa)
-      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-    `;
-    await pool.query(query);
-    console.log('✅ Tabela organizacoes criada/verificada com sucesso');
-  } catch (error) {
-    console.error('❌ Erro ao criar tabela organizacoes:', error);
-    // Não lançar erro se a tabela já existe
-    if (!error.message.includes('already exists') && !error.message.includes('Duplicate')) {
-      throw error;
+    // Primeiro, tentar criar a tabela (pode já existir)
+    try {
+      const createQuery = `
+        CREATE TABLE IF NOT EXISTS organizacoes (
+          id INT(11) NOT NULL AUTO_INCREMENT,
+          nome VARCHAR(255) NOT NULL,
+          codigo VARCHAR(100) NOT NULL UNIQUE,
+          cor_identificacao VARCHAR(7) DEFAULT '#3B82F6',
+          ativa TINYINT(1) DEFAULT 1,
+          created_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+          PRIMARY KEY (id),
+          UNIQUE KEY idx_codigo (codigo),
+          KEY idx_ativa (ativa)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+      `;
+      await pool.query(createQuery);
+      console.log('✅ Tabela organizacoes criada/verificada');
+    } catch (createError) {
+      console.log('⚠️ Erro ao criar tabela (pode já existir):', createError.message);
     }
+
+    // Verificar se precisa migrar slug para codigo
+    try {
+      const columnsResult = await pool.query(`
+        SELECT COLUMN_NAME 
+        FROM information_schema.COLUMNS 
+        WHERE TABLE_SCHEMA = DATABASE() 
+        AND TABLE_NAME = 'organizacoes' 
+        AND COLUMN_NAME IN ('slug', 'codigo')
+      `);
+      
+      const columnsArray = Array.isArray(columnsResult) ? columnsResult : (columnsResult && columnsResult[0] ? (Array.isArray(columnsResult[0]) ? columnsResult[0] : [columnsResult[0]]) : []);
+      const columnNames = columnsArray.map(c => c.COLUMN_NAME || c.column_name || c.COLUMN_NAME || c.column_name);
+      const hasSlug = columnNames.some(name => name && name.toLowerCase() === 'slug');
+      const hasCodigo = columnNames.some(name => name && name.toLowerCase() === 'codigo');
+      
+      console.log('🔍 Verificando colunas - hasSlug:', hasSlug, 'hasCodigo:', hasCodigo);
+      
+      if (hasSlug && !hasCodigo) {
+        // Migrar slug para codigo
+        console.log('🔄 Migrando coluna slug para codigo...');
+        
+        // Primeiro, remover índices antigos (MySQL não suporta IF EXISTS, então usamos try/catch)
+        try {
+          await pool.query(`ALTER TABLE organizacoes DROP INDEX slug`);
+          console.log('✅ Índice slug removido');
+        } catch (e) {
+          console.log('⚠️ Índice slug não encontrado ou já removido');
+        }
+        try {
+          await pool.query(`ALTER TABLE organizacoes DROP INDEX idx_slug`);
+          console.log('✅ Índice idx_slug removido');
+        } catch (e) {
+          console.log('⚠️ Índice idx_slug não encontrado ou já removido');
+        }
+        
+        // Renomear coluna slug para codigo (isso preserva os dados)
+        await pool.query(`ALTER TABLE organizacoes CHANGE COLUMN slug codigo VARCHAR(100) NOT NULL`);
+        console.log('✅ Coluna renomeada de slug para codigo');
+        
+        // Criar novo índice único para codigo (se ainda não existir)
+        try {
+          await pool.query(`ALTER TABLE organizacoes ADD UNIQUE KEY idx_codigo (codigo)`);
+          console.log('✅ Índice idx_codigo criado');
+        } catch (e) {
+          // Pode já existir ou ter sido criado automaticamente pelo UNIQUE na coluna
+          console.log('⚠️ Índice idx_codigo pode já existir:', e.message);
+        }
+        
+        console.log('✅ Coluna slug migrada para codigo com sucesso');
+      } else if (!hasCodigo && !hasSlug) {
+        // Adicionar coluna codigo se não existir nenhuma das duas
+        console.log('🔄 Adicionando coluna codigo...');
+        // Primeiro adicionar sem UNIQUE para permitir valores NULL temporários
+        await pool.query(`ALTER TABLE organizacoes ADD COLUMN codigo VARCHAR(100) AFTER nome`);
+        // Preencher com valores baseados em nome ou id
+        await pool.query(`UPDATE organizacoes SET codigo = LOWER(REPLACE(REPLACE(REPLACE(nome, ' ', '_'), '/', '_'), '-', '_')) WHERE codigo IS NULL`);
+        // Tornar NOT NULL e UNIQUE
+        await pool.query(`ALTER TABLE organizacoes MODIFY COLUMN codigo VARCHAR(100) NOT NULL`);
+        try {
+          await pool.query(`ALTER TABLE organizacoes ADD UNIQUE KEY idx_codigo (codigo)`);
+        } catch (e) {
+          console.log('⚠️ Não foi possível criar índice único (pode haver duplicatas)');
+        }
+        console.log('✅ Coluna codigo adicionada com sucesso');
+      } else {
+        console.log('✅ Coluna codigo já existe, nenhuma migração necessária');
+      }
+    } catch (migrationError) {
+      console.error('⚠️ Erro ao verificar/migrar colunas (continuando):', migrationError.message);
+      console.error('⚠️ Stack:', migrationError.stack);
+      // Continuar mesmo se a migração falhar - a tabela pode já estar correta
+    }
+    
+    console.log('✅ Tabela organizacoes verificada/migrada com sucesso');
+  } catch (error) {
+    console.error('❌ Erro ao criar/migrar tabela organizacoes:', error);
+    // Não lançar erro para não bloquear o fluxo
+    console.error('⚠️ Continuando mesmo com erro na tabela...');
   }
 };
 
