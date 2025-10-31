@@ -99,7 +99,7 @@ exports.buscarUsuario = async (req, res) => {
 exports.criarUsuario = async (req, res) => {
   let pool, server;
   try {
-    const { nome, email, senha, perfil = 'visualizador', ativo = true } = req.body;
+    const { nome, email, senha, perfil = 'usuario', ativo = true } = req.body;
     
     if (!nome || !email || !senha) {
       return res.status(400).json({ 
@@ -153,12 +153,12 @@ exports.atualizarUsuario = async (req, res) => {
   let pool, server;
   try {
     const { id } = req.params;
-    const { nome, email, perfil, ativo, organizacao } = req.body;
+    const { nome, email, perfil, ativo, organizacao, permissoes } = req.body;
     
-    // Validar perfil
-    if (perfil && !['admin', 'compliance'].includes(perfil)) {
+    // Validar perfil - apenas admin (Portes) ou usuario (outras empresas)
+    if (perfil && !['admin', 'usuario'].includes(perfil)) {
       return res.status(400).json({ 
-        error: 'Perfil inválido. Use apenas "admin" ou "compliance"' 
+        error: 'Perfil inválido. Use apenas "admin" (usuários Portes) ou "usuario" (outras empresas)' 
       });
     }
     
@@ -188,21 +188,24 @@ exports.atualizarUsuario = async (req, res) => {
     
     // Processar permissoes - converter para JSON se necessário
     let permissoesJSON = null;
-    if (permissoes !== undefined) {
+    if (permissoes !== undefined && permissoes !== null) {
       if (typeof permissoes === 'string') {
         // Se já é string JSON, validar
         try {
-          JSON.parse(permissoes);
+          const parsed = JSON.parse(permissoes);
+          // Se parseou com sucesso, manter como string JSON
           permissoesJSON = permissoes;
         } catch {
-          // Se não for JSON válido, tratar como array simples
-          permissoesJSON = JSON.stringify(permissoes ? [permissoes] : []);
+          // Se não for JSON válido, tratar como string simples e converter para array
+          permissoesJSON = permissoes.trim() !== '' ? JSON.stringify([permissoes]) : null;
         }
       } else if (Array.isArray(permissoes)) {
-        permissoesJSON = JSON.stringify(permissoes);
-      } else if (permissoes === null || permissoes === '') {
-        permissoesJSON = null;
+        // Se for array, converter para JSON string
+        permissoesJSON = permissoes.length > 0 ? JSON.stringify(permissoes) : null;
       }
+    } else if (permissoes === null || permissoes === '') {
+      // Se for null ou string vazia, manter como null
+      permissoesJSON = null;
     }
 
     await pool.query(`

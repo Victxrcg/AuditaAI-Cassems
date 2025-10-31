@@ -121,7 +121,7 @@ exports.login = async (req, res) => {
 exports.registrar = async (req, res) => {
   let pool, server;
   try {
-    const { nome, email, senha, nomeEmpresa, perfil = 'visualizador' } = req.body;
+    const { nome, email, senha, nomeEmpresa, perfil = 'usuario' } = req.body;
 
     if (!nome || !email || !senha || !nomeEmpresa) {
       return res.status(400).json({ error: 'Nome, email, senha e nome da empresa são obrigatórios' });
@@ -190,6 +190,9 @@ exports.registrar = async (req, res) => {
       cor_identificacao = '#3B82F6';
     }
 
+    // Definir perfil baseado na organização: Portes = admin, outras = usuario
+    const perfilFinal = organizacao === 'portes' ? 'admin' : (perfil || 'usuario');
+    
     // Buscar organização na tabela ou criar se não existir
     try {
       const [orgExiste] = await pool.query(
@@ -226,7 +229,7 @@ exports.registrar = async (req, res) => {
 
     const result = await pool.query(
       `INSERT INTO usuarios_cassems (nome, nome_empresa, email, senha, perfil, ativo, organizacao, cor_identificacao) VALUES (?, ?, ?, ?, ?, 0, ?, ?)`,
-      [nome, nomeEmpresa, email, hashedPassword, perfil, organizacao, cor_identificacao]
+      [nome, nomeEmpresa, email, hashedPassword, perfilFinal, organizacao, cor_identificacao]
     );
 
     // Enviar código de verificação para ativar a conta
