@@ -809,32 +809,22 @@ const analisarCronogramaPorMesComIA = async (cronogramasFormatados, organizacoes
       throw new Error('OpenAI não configurado');
     }
     
-    // Filtrar cronogramas que estiveram ativos no mês especificado
+    // Filtrar cronogramas que INICIARAM no mês especificado
     const mesCode = `${ano}-${String(mes).padStart(2, '0')}`;
     const inicioMes = new Date(ano, mes - 1, 1);
     const fimMes = new Date(ano, mes, 0, 23, 59, 59);
     
+    // Focar apenas em demandas que INICIARAM no mês selecionado
     const cronogramasDoMes = cronogramasFormatados.filter(c => {
       const di = c.data_inicio ? new Date(c.data_inicio) : null;
-      const df = c.data_fim ? new Date(c.data_fim) : null;
-      const updated = c.updated_at ? new Date(c.updated_at) : null;
+      if (!di) return false;
       
-      // Incluir se:
-      // 1. Iniciou no mês
-      // 2. Terminou no mês
-      // 3. Esteve ativo durante o mês (início antes do fim do mês e fim após o início do mês)
-      // 4. Foi atualizado no mês
-      if (di && di >= inicioMes && di <= fimMes) return true;
-      if (df && df >= inicioMes && df <= fimMes) return true;
-      if (updated && updated >= inicioMes && updated <= fimMes) return true;
-      if (di && df && di <= fimMes && df >= inicioMes) return true;
-      if (di && !df && di <= fimMes) return true;
-      
-      return false;
+      // Incluir apenas se iniciou no mês especificado
+      return di >= inicioMes && di <= fimMes;
     });
     
     if (cronogramasDoMes.length === 0) {
-      throw new Error(`Nenhuma demanda encontrada para o mês ${mes}/${ano}`);
+      throw new Error(`Nenhuma demanda iniciada no mês ${mes}/${ano}`);
     }
     
     // Buscar checklists concluídos no mês
@@ -875,23 +865,39 @@ const analisarCronogramaPorMesComIA = async (cronogramasFormatados, organizacoes
     });
     
     // Preparar dados detalhados para a IA
+    // Demandas que iniciaram no mês e foram concluídas no mesmo mês
     const demandasConcluidasNoMes = cronogramasDoMes.filter(d => {
       if (d.status !== 'concluido') return false;
       if (d.data_fim) {
         const df = new Date(d.data_fim);
         return df >= inicioMes && df <= fimMes;
       }
-      if (d.updated_at) {
-        const updated = new Date(d.updated_at);
-        return updated >= inicioMes && updated <= fimMes;
+      return false;
+    });
+    
+    // Demandas que iniciaram no mês mas foram concluídas depois do mês
+    const demandasIniciadasNoMesConcluidasDepois = cronogramasDoMes.filter(d => {
+      if (d.status !== 'concluido') return false;
+      if (d.data_fim) {
+        const df = new Date(d.data_fim);
+        return df > fimMes;
       }
       return false;
     });
     
+    // Demandas que iniciaram no mês e ainda estão em andamento
     const demandasEmAndamentoNoMes = cronogramasDoMes.filter(d => {
-      if (d.status !== 'em_andamento') return false;
-      const di = d.data_inicio ? new Date(d.data_inicio) : null;
-      return di && di <= fimMes;
+      return d.status === 'em_andamento' || d.status === 'pendente' || d.status === 'atrasado';
+    });
+    
+    // Demandas que iniciaram no mês e ainda estão pendentes
+    const demandasPendentesNoMes = cronogramasDoMes.filter(d => {
+      return d.status === 'pendente';
+    });
+    
+    // Demandas que iniciaram no mês e estão atrasadas
+    const demandasAtrasadasNoMes = cronogramasDoMes.filter(d => {
+      return d.status === 'atrasado';
     });
     
     const nomeMes = new Date(ano, mes - 1).toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
@@ -910,13 +916,31 @@ DADOS DO MÊS (JSON):
 ${JSON.stringify({
   mes: nomeMes,
   mesCodigo: mesCode,
-  demandasConcluidas: demandasConcluidasNoMes.map(d => ({
+  totalDemandasIniciadasNoMes: cronogramasDoMes.length,
+  demandasConcluidasNoMes: demandasConcluidasNoMes.map(d => ({
     titulo: d.titulo,
     descricao: d.descricao || 'Sem descrição',
     responsavel: d.responsavel_nome || 'Não definido',
     organizacao: d.organizacao,
     dataInicio: d.data_inicio,
     dataFim: d.data_fim,
+    status: 'concluida_no_mes',
+    checklists: d.checklists?.map(c => ({
+      titulo: c.titulo,
+      descricao: c.descricao,
+      concluido: c.concluido,
+      concluidoNoMes: c.concluido && (c.updated_at ? (new Date(c.updated_at) >= inicioMes && new Date(c.updated_at) <= fimMes) : false)
+    })) || []
+  })),
+  demandasIniciadasNoMesConcluidasDepois: demandasIniciadasNoMesConcluidasDepois.map(d => ({
+    titulo: d.titulo,
+    descricao: d.descricao || 'Sem descrição',
+    responsavel: d.responsavel_nome || 'Não definido',
+    organizacao: d.organizacao,
+    dataInicio: d.data_inicio,
+    dataFim: d.data_fim,
+    status: 'concluida_depois',
+    mesConclusao: d.data_fim ? new Date(d.data_fim).toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' }) : null,
     checklists: d.checklists?.map(c => ({
       titulo: c.titulo,
       descricao: c.descricao,
@@ -930,6 +954,8 @@ ${JSON.stringify({
     responsavel: d.responsavel_nome || 'Não definido',
     organizacao: d.organizacao,
     dataInicio: d.data_inicio,
+    dataFim: d.data_fim,
+    status: d.status,
     faseAtual: d.fase_atual,
     checklists: d.checklists?.map(c => ({
       titulo: c.titulo,
@@ -944,41 +970,67 @@ ${JSON.stringify({
     demanda: c.demanda,
     demandaDescricao: c.demandaDescricao || 'Sem descrição'
   })),
-  totalDemandas: cronogramasDoMes.length,
-  totalConcluidas: demandasConcluidasNoMes.length,
-  totalEmAndamento: demandasEmAndamentoNoMes.length,
-  totalChecklistsConcluidos: checklistsConcluidosNoMes.length
+  resumo: {
+    totalIniciadasNoMes: cronogramasDoMes.length,
+    concluidasNoMes: demandasConcluidasNoMes.length,
+    concluidasDepoisDoMes: demandasIniciadasNoMesConcluidasDepois.length,
+    emAndamento: demandasEmAndamentoNoMes.length,
+    pendentes: demandasPendentesNoMes.length,
+    atrasadas: demandasAtrasadasNoMes.length,
+    totalChecklistsConcluidos: checklistsConcluidosNoMes.length
+  }
 }, null, 2)}
+
+IMPORTANTE: Este relatório analisa APENAS demandas que INICIARAM no mês ${nomeMes}. 
+Demandas que iniciaram em outros meses mas estiveram ativas neste mês NÃO são incluídas.
 
 REQUISITOS DE FORMATO (OBRIGATÓRIO):
 - Use Markdown com os seguintes títulos/seções fixas:
   # OVERVIEW DO CRONOGRAMA – ${nomeMes.toUpperCase()}
   ## Resumo Executivo
   - Veredito geral do mês (satisfatório, moderado, crítico, instável) e por quê.
+  - Mencione quantas demandas iniciaram no mês e o status atual delas.
+  ## DEMANDAS QUE INICIARAM NESTE MÊS
+    - Liste TODAS as demandas que iniciaram no mês ${nomeMes}
+    - Para cada demanda, explique claramente:
+      * Se foi concluída no mesmo mês: "[OK] Nome da demanda - Concluída em ${nomeMes}"
+      * Se foi concluída depois: "[OK] Nome da demanda - Iniciada em ${nomeMes}, concluída em [MÊS DE CONCLUSÃO]"
+      * Se ainda está em andamento: "[EM ANDAMENTO] Nome da demanda - Status atual"
+      * Se está pendente: "[PENDENTE] Nome da demanda - Status atual"
+      * Se está atrasada: "[ATRASADA] Nome da demanda - Status atual"
   ## O QUE FOI FEITO NESTE MÊS
-    - Liste TODOS os pontos concluídos, incluindo:
-      * Demandas concluídas (com descrição detalhada)
-      * Checklists concluídos (com descrição detalhada)
+    - Liste apenas os pontos concluídos DENTRO do mês ${nomeMes}:
+      * Demandas concluídas no mês (com descrição detalhada)
+      * Checklists concluídos no mês (com descrição detalhada)
       * Para cada item, analise a descrição e explique o que foi realizado
-  ## O QUE ESTÁ EM ANDAMENTO
-    - Liste as demandas que estavam em andamento no mês
+  ## STATUS DAS DEMANDAS INICIADAS NO MÊS
+    - Explique claramente o status de cada demanda que iniciou no mês:
+      * Quantas iniciaram e foram concluídas no mesmo mês
+      * Quantas iniciaram no mês mas foram concluídas depois (especifique em qual mês)
+      * Quantas ainda estão em andamento
+      * Quantas estão pendentes ou atrasadas
   ## Análise Detalhada
     - Analise as descrições das demandas e checklists concluídos
     - Explique o impacto e importância de cada conclusão
+    - Destaque se houve demandas que se estenderam além do mês e por quê
   ## Estatísticas do Mês
 - Nas listas, prefixe os bullets exatamente com:
   - [OK] para itens concluídos
   - [EM ANDAMENTO] para itens em andamento
-- Não invente dados; use somente o conteúdo fornecido.
+  - [PENDENTE] para itens pendentes
+  - [ATRASADA] para itens atrasados
+- NÃO invente dados; use somente o conteúdo fornecido.
 - Linguagem simples, objetiva, sem jargões.
 - Seja detalhado na análise das descrições e checklists.
+- SEMPRE explique quando uma demanda iniciou no mês mas foi concluída depois, mencionando o mês de conclusão.
 
 CONTEÚDO ESPERADO:
-1) Resumo Executivo: 3–5 linhas sobre o mês.
-2) O QUE FOI FEITO NESTE MÊS: lista completa de todos os pontos concluídos, analisando descrições e checklists.
-3) O QUE ESTÁ EM ANDAMENTO: demandas em andamento no mês.
-4) Análise Detalhada: análise profunda das descrições e impacto das conclusões.
-5) Estatísticas do Mês: números agregados do mês.`;
+1) Resumo Executivo: 3–5 linhas sobre o mês, mencionando quantas demandas iniciaram e seus status.
+2) DEMANDAS QUE INICIARAM NESTE MÊS: lista completa de todas as demandas que iniciaram, com status claro de cada uma.
+3) O QUE FOI FEITO NESTE MÊS: apenas itens concluídos dentro do mês ${nomeMes}.
+4) STATUS DAS DEMANDAS INICIADAS NO MÊS: explicação clara de quantas iniciaram, quantas concluíram no mês, quantas concluíram depois e quantas ainda estão em andamento.
+5) Análise Detalhada: análise profunda das descrições e impacto das conclusões.
+6) Estatísticas do Mês: números agregados do mês.`;
 
     // Chamar OpenAI
     const completion = await openai.chat.completions.create({
@@ -1001,11 +1053,13 @@ CONTEÚDO ESPERADO:
       mes: nomeMes,
       mesCodigo: mesCode,
       demandasConcluidas: demandasConcluidasNoMes.length,
+      demandasIniciadasConcluidasDepois: demandasIniciadasNoMesConcluidasDepois.length,
       demandasEmAndamento: demandasEmAndamentoNoMes.length,
       checklistsConcluidos: checklistsConcluidosNoMes.length,
       totalDemandas: cronogramasDoMes.length,
       dadosDetalhados: {
         demandasConcluidas: demandasConcluidasNoMes,
+        demandasIniciadasConcluidasDepois: demandasIniciadasNoMesConcluidasDepois,
         demandasEmAndamento: demandasEmAndamentoNoMes,
         checklistsConcluidos: checklistsConcluidosNoMes
       }
@@ -1167,6 +1221,7 @@ exports.analisarCronogramaPorMesIA = async (req, res) => {
         estatisticas: {
           totalDemandas: resultadoIA.totalDemandas,
           demandasConcluidas: resultadoIA.demandasConcluidas,
+          demandasIniciadasConcluidasDepois: resultadoIA.demandasIniciadasConcluidasDepois || 0,
           demandasEmAndamento: resultadoIA.demandasEmAndamento,
           checklistsConcluidos: resultadoIA.checklistsConcluidos
         },
