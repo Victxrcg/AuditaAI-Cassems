@@ -9,4 +9,7 @@ router.get('/dados-cronograma', pdfController.obterDadosParaPDF);
 // Rota para analisar cronograma com IA
 router.post('/analisar-cronograma-ia', pdfController.analisarCronogramaIA);
 
+// Rota para analisar cronograma por mês específico com IA
+router.post('/analisar-cronograma-por-mes-ia', pdfController.analisarCronogramaPorMesIA);
+
 module.exports = router;

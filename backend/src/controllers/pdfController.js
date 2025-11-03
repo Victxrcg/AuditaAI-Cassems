@@ -587,16 +587,23 @@ Checklists
     
     const analiseIA = completion.choices[0].message.content;
     
-    // Calcular top responsáveis
+    // Calcular top responsáveis com contagem de concluídas e atrasadas
     const responsaveisCount = {};
     cronogramasFormatados.forEach(c => {
       const nome = c.responsavel_nome || 'Não definido';
-      responsaveisCount[nome] = (responsaveisCount[nome] || 0) + 1;
+      if (!responsaveisCount[nome]) {
+        responsaveisCount[nome] = { concluidas: 0, atrasadas: 0 };
+      }
+      if (c.status === 'concluido') {
+        responsaveisCount[nome].concluidas += 1;
+      } else if (c.status === 'atrasado') {
+        responsaveisCount[nome].atrasadas += 1;
+      }
     });
     const topResponsaveis = Object.entries(responsaveisCount)
-      .sort((a, b) => b[1] - a[1])
+      .sort((a, b) => (b[1].concluidas + b[1].atrasadas) - (a[1].concluidas + a[1].atrasadas))
       .slice(0, 5)
-      .map(([nome, count]) => ({ nome, count }));
+      .map(([nome, stats]) => ({ nome, concluidas: stats.concluidas, atrasadas: stats.atrasadas }));
     
     return {
       analise: analiseIA,
@@ -607,7 +614,14 @@ Checklists
         fimFormatado: ultimaData.toLocaleDateString('pt-BR')
       },
       resumoMensal,
-      resumoMensalDetalhado: resumoMensal, // Usar resumoMensal como detalhado por enquanto
+      resumoMensalDetalhado: resumoMensal.map(r => ({
+        ...r,
+        mesLabel: r.mes, // Adicionar mesLabel para compatibilidade com frontend
+        totalDemandas: (r.demandasConcluidas || []).length + (r.demandasPendentes || []).length + (r.demandasAtrasadas || []).length,
+        concluidas: (r.demandasConcluidas || []).length,
+        atrasadas: (r.demandasAtrasadas || []).length,
+        pendentes: (r.demandasPendentes || []).length
+      })),
       topResponsaveis,
       statsPorOrganizacao: isComparativo ? statsPorOrganizacao : null,
       isComparativo
@@ -777,6 +791,404 @@ exports.analisarCronogramaIA = async (req, res) => {
   } finally {
     // Fechar apenas o tunnel (server), se existir
     // NÃO fechar o pool, pois é compartilhado e usado por outras requisições
+    if (server) {
+      try {
+        server.close();
+      } catch (err) {
+        console.error('Erro ao fechar tunnel:', err);
+      }
+    }
+  }
+};
+
+// Função para analisar cronograma por mês específico com IA
+const analisarCronogramaPorMesComIA = async (cronogramasFormatados, organizacoes, userOrg, organizacaoFiltro, ano, mes) => {
+  try {
+    // Verificar se OpenAI está disponível
+    if (!openai) {
+      throw new Error('OpenAI não configurado');
+    }
+    
+    // Filtrar cronogramas que estiveram ativos no mês especificado
+    const mesCode = `${ano}-${String(mes).padStart(2, '0')}`;
+    const inicioMes = new Date(ano, mes - 1, 1);
+    const fimMes = new Date(ano, mes, 0, 23, 59, 59);
+    
+    const cronogramasDoMes = cronogramasFormatados.filter(c => {
+      const di = c.data_inicio ? new Date(c.data_inicio) : null;
+      const df = c.data_fim ? new Date(c.data_fim) : null;
+      const updated = c.updated_at ? new Date(c.updated_at) : null;
+      
+      // Incluir se:
+      // 1. Iniciou no mês
+      // 2. Terminou no mês
+      // 3. Esteve ativo durante o mês (início antes do fim do mês e fim após o início do mês)
+      // 4. Foi atualizado no mês
+      if (di && di >= inicioMes && di <= fimMes) return true;
+      if (df && df >= inicioMes && df <= fimMes) return true;
+      if (updated && updated >= inicioMes && updated <= fimMes) return true;
+      if (di && df && di <= fimMes && df >= inicioMes) return true;
+      if (di && !df && di <= fimMes) return true;
+      
+      return false;
+    });
+    
+    if (cronogramasDoMes.length === 0) {
+      throw new Error(`Nenhuma demanda encontrada para o mês ${mes}/${ano}`);
+    }
+    
+    // Buscar checklists concluídos no mês
+    const checklistsConcluidosNoMes = [];
+    const demandasComChecklists = [];
+    
+    cronogramasDoMes.forEach(demanda => {
+      if (demanda.checklists && demanda.checklists.length > 0) {
+        const checklistsDoMes = demanda.checklists.filter(c => {
+          if (!c.concluido) return false;
+          if (c.updated_at) {
+            const dataChecklist = new Date(c.updated_at);
+            return dataChecklist >= inicioMes && dataChecklist <= fimMes;
+          }
+          // Se não tem updated_at, verificar se a demanda foi concluída no mês
+          if (demanda.status === 'concluido' && demanda.data_fim) {
+            const dataFim = new Date(demanda.data_fim);
+            return dataFim >= inicioMes && dataFim <= fimMes;
+          }
+          return false;
+        });
+        
+        if (checklistsDoMes.length > 0) {
+          checklistsConcluidosNoMes.push(...checklistsDoMes.map(c => ({
+            titulo: c.titulo,
+            descricao: c.descricao,
+            demanda: demanda.titulo,
+            demandaId: demanda.id,
+            demandaDescricao: demanda.descricao
+          })));
+        }
+        
+        demandasComChecklists.push({
+          ...demanda,
+          checklistsConcluidos: checklistsDoMes
+        });
+      }
+    });
+    
+    // Preparar dados detalhados para a IA
+    const demandasConcluidasNoMes = cronogramasDoMes.filter(d => {
+      if (d.status !== 'concluido') return false;
+      if (d.data_fim) {
+        const df = new Date(d.data_fim);
+        return df >= inicioMes && df <= fimMes;
+      }
+      if (d.updated_at) {
+        const updated = new Date(d.updated_at);
+        return updated >= inicioMes && updated <= fimMes;
+      }
+      return false;
+    });
+    
+    const demandasEmAndamentoNoMes = cronogramasDoMes.filter(d => {
+      if (d.status !== 'em_andamento') return false;
+      const di = d.data_inicio ? new Date(d.data_inicio) : null;
+      return di && di <= fimMes;
+    });
+    
+    const nomeMes = new Date(ano, mes - 1).toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
+    
+    // Montar prompt específico para o mês
+    const isComparativo = userOrg === 'portes' && organizacaoFiltro === 'todos';
+    const organizacoesList = Object.keys(organizacoes);
+    
+    let prompt = `Você é um especialista em análise de cronogramas e gestão de projetos. Analise os dados e gere um relatório claro e detalhado para pessoas leigas, em pt-BR, seguindo EXATAMENTE o formato abaixo em Markdown.
+
+MÊS ANALISADO: ${nomeMes} (${mesCode})
+
+${isComparativo ? `VISUALIZANDO DADOS DE MÚLTIPLAS ORGANIZAÇÕES: ${organizacoesList.join(', ')}` : `ORGANIZAÇÃO: ${organizacoesList[0] || 'N/A'}`}
+
+DADOS DO MÊS (JSON):
+${JSON.stringify({
+  mes: nomeMes,
+  mesCodigo: mesCode,
+  demandasConcluidas: demandasConcluidasNoMes.map(d => ({
+    titulo: d.titulo,
+    descricao: d.descricao || 'Sem descrição',
+    responsavel: d.responsavel_nome || 'Não definido',
+    organizacao: d.organizacao,
+    dataInicio: d.data_inicio,
+    dataFim: d.data_fim,
+    checklists: d.checklists?.map(c => ({
+      titulo: c.titulo,
+      descricao: c.descricao,
+      concluido: c.concluido,
+      concluidoNoMes: c.concluido && (c.updated_at ? (new Date(c.updated_at) >= inicioMes && new Date(c.updated_at) <= fimMes) : false)
+    })) || []
+  })),
+  demandasEmAndamento: demandasEmAndamentoNoMes.map(d => ({
+    titulo: d.titulo,
+    descricao: d.descricao || 'Sem descrição',
+    responsavel: d.responsavel_nome || 'Não definido',
+    organizacao: d.organizacao,
+    dataInicio: d.data_inicio,
+    faseAtual: d.fase_atual,
+    checklists: d.checklists?.map(c => ({
+      titulo: c.titulo,
+      descricao: c.descricao,
+      concluido: c.concluido,
+      concluidoNoMes: c.concluido && (c.updated_at ? (new Date(c.updated_at) >= inicioMes && new Date(c.updated_at) <= fimMes) : false)
+    })) || []
+  })),
+  checklistsConcluidos: checklistsConcluidosNoMes.map(c => ({
+    titulo: c.titulo,
+    descricao: c.descricao || 'Sem descrição',
+    demanda: c.demanda,
+    demandaDescricao: c.demandaDescricao || 'Sem descrição'
+  })),
+  totalDemandas: cronogramasDoMes.length,
+  totalConcluidas: demandasConcluidasNoMes.length,
+  totalEmAndamento: demandasEmAndamentoNoMes.length,
+  totalChecklistsConcluidos: checklistsConcluidosNoMes.length
+}, null, 2)}
+
+REQUISITOS DE FORMATO (OBRIGATÓRIO):
+- Use Markdown com os seguintes títulos/seções fixas:
+  # OVERVIEW DO CRONOGRAMA – ${nomeMes.toUpperCase()}
+  ## Resumo Executivo
+  - Veredito geral do mês (satisfatório, moderado, crítico, instável) e por quê.
+  ## O QUE FOI FEITO NESTE MÊS
+    - Liste TODOS os pontos concluídos, incluindo:
+      * Demandas concluídas (com descrição detalhada)
+      * Checklists concluídos (com descrição detalhada)
+      * Para cada item, analise a descrição e explique o que foi realizado
+  ## O QUE ESTÁ EM ANDAMENTO
+    - Liste as demandas que estavam em andamento no mês
+  ## Análise Detalhada
+    - Analise as descrições das demandas e checklists concluídos
+    - Explique o impacto e importância de cada conclusão
+  ## Estatísticas do Mês
+- Nas listas, prefixe os bullets exatamente com:
+  - [OK] para itens concluídos
+  - [EM ANDAMENTO] para itens em andamento
+- Não invente dados; use somente o conteúdo fornecido.
+- Linguagem simples, objetiva, sem jargões.
+- Seja detalhado na análise das descrições e checklists.
+
+CONTEÚDO ESPERADO:
+1) Resumo Executivo: 3–5 linhas sobre o mês.
+2) O QUE FOI FEITO NESTE MÊS: lista completa de todos os pontos concluídos, analisando descrições e checklists.
+3) O QUE ESTÁ EM ANDAMENTO: demandas em andamento no mês.
+4) Análise Detalhada: análise profunda das descrições e impacto das conclusões.
+5) Estatísticas do Mês: números agregados do mês.`;
+
+    // Chamar OpenAI
+    const completion = await openai.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [
+        {
+          role: "system",
+          content: "Você gera relatórios detalhados em pt-BR, para leigos, sempre em Markdown determinístico com títulos H1/H2/H3, bullets prefixados com [OK]/[EM ANDAMENTO], sem emojis, sem jargões. Analise profundamente as descrições e checklists."
+        },
+        { role: "user", content: prompt }
+      ],
+      max_tokens: 6000,
+      temperature: 0.2
+    });
+    
+    const analiseIA = completion.choices[0].message.content;
+    
+    return {
+      analise: analiseIA,
+      mes: nomeMes,
+      mesCodigo: mesCode,
+      demandasConcluidas: demandasConcluidasNoMes.length,
+      demandasEmAndamento: demandasEmAndamentoNoMes.length,
+      checklistsConcluidos: checklistsConcluidosNoMes.length,
+      totalDemandas: cronogramasDoMes.length,
+      dadosDetalhados: {
+        demandasConcluidas: demandasConcluidasNoMes,
+        demandasEmAndamento: demandasEmAndamentoNoMes,
+        checklistsConcluidos: checklistsConcluidosNoMes
+      }
+    };
+    
+  } catch (error) {
+    console.error('❌ Erro ao analisar cronograma por mês com IA:', error);
+    throw error;
+  }
+};
+
+// Endpoint para analisar cronograma por mês específico com IA
+exports.analisarCronogramaPorMesIA = async (req, res) => {
+  let pool, server;
+  try {
+    // Verificar se OpenAI está disponível
+    if (!openai) {
+      return res.status(503).json({
+        success: false,
+        error: 'Serviço de IA temporariamente indisponível',
+        details: 'OpenAI não configurado. Entre em contato com o administrador.'
+      });
+    }
+    
+    const { organizacao, status, ano, mes } = req.body;
+    const userOrg = req.headers['x-user-organization'] || 'cassems';
+    
+    if (!ano || !mes) {
+      return res.status(400).json({
+        success: false,
+        error: 'Ano e mês são obrigatórios',
+        details: 'Forneça ano (ex: 2025) e mês (1-12)'
+      });
+    }
+    
+    const mesNum = parseInt(mes);
+    const anoNum = parseInt(ano);
+    
+    if (mesNum < 1 || mesNum > 12) {
+      return res.status(400).json({
+        success: false,
+        error: 'Mês inválido',
+        details: 'Mês deve estar entre 1 e 12'
+      });
+    }
+    
+    console.log(`🤖 Iniciando análise com IA para mês ${mes}/${ano} - Organização solicitada:`, organizacao || 'todas');
+    console.log('🤖 Status solicitado:', status || 'todos');
+    
+    ({ pool, server } = await getDbPoolWithTunnel());
+    
+    // Query para buscar cronogramas (mesma lógica do obterDadosParaPDF)
+    let query = `
+      SELECT 
+        c.*,
+        u.nome as responsavel_nome,
+        u.email as responsavel_email
+      FROM cronograma c
+      LEFT JOIN usuarios_cassems u ON c.responsavel_id = u.id
+      WHERE 1=1
+    `;
+    
+    const params = [];
+    
+    // Filtrar por organização baseado no usuário
+    if (userOrg === 'portes') {
+      if (organizacao && organizacao !== 'todos') {
+        query += ` AND c.organizacao = ?`;
+        params.push(organizacao);
+      }
+    } else {
+      query += ` AND c.organizacao = ?`;
+      params.push(userOrg);
+    }
+    
+    // Filtrar por status se especificado
+    if (status && status !== 'todos') {
+      query += ` AND c.status = ?`;
+      params.push(status);
+    }
+    
+    query += ` ORDER BY c.prioridade DESC, c.data_inicio ASC, c.created_at DESC`;
+    
+    const cronogramas = await pool.query(query, params);
+    console.log(`📋 Encontrados ${cronogramas.length} cronogramas para análise`);
+    
+    // Processar cada cronograma
+    const cronogramasFormatados = [];
+    
+    for (const cronograma of cronogramas) {
+      const tituloLimpo = limparTitulo(cronograma.titulo);
+      
+      const checklists = await pool.query(`
+        SELECT id, titulo, descricao, concluido, ordem, updated_at
+        FROM cronograma_checklist 
+        WHERE cronograma_id = ?
+        ORDER BY ordem ASC
+      `, [cronograma.id]);
+      
+      const checklistsFormatados = checklists.map(item => ({
+        id: item.id,
+        titulo: limparTituloChecklist(item.titulo),
+        descricao: item.descricao ? limparTituloChecklist(item.descricao) : null,
+        concluido: Boolean(item.concluido),
+        ordem: item.ordem,
+        updated_at: item.updated_at
+      }));
+      
+      const cronogramaFormatado = {
+        id: cronograma.id,
+        titulo: tituloLimpo,
+        descricao: cronograma.descricao,
+        organizacao: cronograma.organizacao,
+        status: cronograma.status,
+        prioridade: cronograma.prioridade,
+        fase_atual: cronograma.fase_atual,
+        data_inicio: cronograma.data_inicio,
+        data_fim: cronograma.data_fim,
+        responsavel_nome: cronograma.responsavel_nome || 'Não definido',
+        responsavel_email: cronograma.responsavel_email,
+        observacoes: cronograma.observacoes,
+        motivo_atraso: cronograma.motivo_atraso,
+        created_at: cronograma.created_at,
+        updated_at: cronograma.updated_at,
+        checklists: checklistsFormatados
+      };
+      
+      cronogramasFormatados.push(cronogramaFormatado);
+    }
+    
+    // Agrupar por organização
+    const organizacoes = {};
+    cronogramasFormatados.forEach(cronograma => {
+      if (!organizacoes[cronograma.organizacao]) {
+        organizacoes[cronograma.organizacao] = [];
+      }
+      organizacoes[cronograma.organizacao].push(cronograma);
+    });
+    
+    // Analisar com IA para o mês específico
+    console.log(`🤖 Enviando dados para análise da IA do mês ${mes}/${ano}...`);
+    const resultadoIA = await analisarCronogramaPorMesComIA(
+      cronogramasFormatados,
+      organizacoes,
+      userOrg,
+      organizacao || 'todos',
+      anoNum,
+      mesNum
+    );
+    
+    console.log('✅ Análise com IA concluída com sucesso');
+    
+    res.json({
+      success: true,
+      data: {
+        analise: resultadoIA.analise,
+        mes: resultadoIA.mes,
+        mesCodigo: resultadoIA.mesCodigo,
+        estatisticas: {
+          totalDemandas: resultadoIA.totalDemandas,
+          demandasConcluidas: resultadoIA.demandasConcluidas,
+          demandasEmAndamento: resultadoIA.demandasEmAndamento,
+          checklistsConcluidos: resultadoIA.checklistsConcluidos
+        },
+        dadosDetalhados: resultadoIA.dadosDetalhados,
+        metadata: {
+          organizacaoFiltro: organizacao || 'todas',
+          usuarioOrganizacao: userOrg,
+          geradoEm: new Date().toISOString()
+        }
+      }
+    });
+    
+  } catch (error) {
+    console.error('❌ Erro ao analisar cronograma por mês com IA:', error);
+    console.error('❌ Stack trace:', error.stack);
+    res.status(500).json({
+      success: false,
+      error: 'Erro ao analisar cronograma por mês com IA',
+      details: error.message || 'Erro desconhecido',
+      stack: process.env.NODE_ENV !== 'production' ? error.stack : undefined
+    });
+  } finally {
     if (server) {
       try {
         server.close();
