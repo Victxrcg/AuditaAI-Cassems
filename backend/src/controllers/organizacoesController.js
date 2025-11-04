@@ -602,11 +602,20 @@ exports.atualizarOrganizacao = async (req, res) => {
 
     params.push(id);
 
+    console.log('🔍 Atualizando organização:', {
+      id,
+      updates: updates.join(', '),
+      params: params.slice(0, -1), // Excluir o id do log
+      logo_url: logo_url
+    });
+
     await pool.query(`
       UPDATE organizacoes 
       SET ${updates.join(', ')}, updated_at = NOW()
       WHERE id = ?
     `, params);
+
+    console.log('✅ Organização atualizada com sucesso');
 
     // Buscar organização atualizada
     const atualizada = await pool.query(`
@@ -686,14 +695,35 @@ exports.servirLogo = async (req, res) => {
     const { filename } = req.params;
     const filePath = path.join(logosDir, filename);
     
+    console.log('🔍 Tentando servir logo:', filename);
+    console.log('🔍 Caminho completo:', filePath);
+    console.log('🔍 Arquivo existe?', fs.existsSync(filePath));
+    
     if (!fs.existsSync(filePath)) {
+      console.error('❌ Logo não encontrada no caminho:', filePath);
       return res.status(404).json({ error: 'Logo não encontrada' });
     }
 
-    res.sendFile(filePath);
+    // Detectar tipo MIME baseado na extensão
+    const ext = path.extname(filename).toLowerCase();
+    const mimeTypes = {
+      '.jpg': 'image/jpeg',
+      '.jpeg': 'image/jpeg',
+      '.png': 'image/png',
+      '.gif': 'image/gif',
+      '.webp': 'image/webp',
+      '.svg': 'image/svg+xml'
+    };
+    const contentType = mimeTypes[ext] || 'image/jpeg';
+    
+    // Enviar arquivo com headers apropriados
+    res.setHeader('Content-Type', contentType);
+    res.sendFile(path.resolve(filePath));
+    console.log('✅ Logo servida com sucesso:', filename);
   } catch (error) {
     console.error('❌ Erro ao servir logo:', error);
-    res.status(500).json({ error: 'Erro ao servir logo' });
+    console.error('❌ Stack:', error.stack);
+    res.status(500).json({ error: 'Erro ao servir logo', details: error.message });
   }
 };
 
