@@ -40,6 +40,7 @@ const criarTabelaOrganizacoes = async (pool) => {
           nome VARCHAR(255) NOT NULL,
           codigo VARCHAR(100) NOT NULL UNIQUE,
           cor_identificacao VARCHAR(7) DEFAULT '#3B82F6',
+          logo_url VARCHAR(500) DEFAULT NULL,
           ativa TINYINT(1) DEFAULT 1,
           created_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
           updated_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -120,6 +121,26 @@ const criarTabelaOrganizacoes = async (pool) => {
         console.log('✅ Coluna codigo adicionada com sucesso');
       } else {
         console.log('✅ Coluna codigo já existe, nenhuma migração necessária');
+      }
+
+      // Verificar se precisa adicionar coluna logo_url
+      const logoUrlCheck = await pool.query(`
+        SELECT COLUMN_NAME 
+        FROM information_schema.COLUMNS 
+        WHERE TABLE_SCHEMA = DATABASE() 
+        AND TABLE_NAME = 'organizacoes' 
+        AND COLUMN_NAME = 'logo_url'
+      `);
+      
+      const logoUrlArray = Array.isArray(logoUrlCheck) ? logoUrlCheck : (logoUrlCheck && logoUrlCheck[0] ? (Array.isArray(logoUrlCheck[0]) ? logoUrlCheck[0] : [logoUrlCheck[0]]) : []);
+      const hasLogoUrl = logoUrlArray.length > 0;
+      
+      if (!hasLogoUrl) {
+        console.log('🔄 Adicionando coluna logo_url...');
+        await pool.query(`ALTER TABLE organizacoes ADD COLUMN logo_url VARCHAR(500) DEFAULT NULL AFTER cor_identificacao`);
+        console.log('✅ Coluna logo_url adicionada com sucesso');
+      } else {
+        console.log('✅ Coluna logo_url já existe');
       }
     } catch (migrationError) {
       console.error('⚠️ Erro ao verificar/migrar colunas (continuando):', migrationError.message);
@@ -244,6 +265,7 @@ exports.listarOrganizacoes = async (req, res) => {
           o.codigo,
           o.cor_identificacao,
           o.ativa,
+          o.logo_url,
           o.created_at,
           o.updated_at,
           (SELECT COUNT(*) FROM usuarios_cassems u WHERE u.organizacao = o.codigo) as total_usuarios
@@ -361,7 +383,7 @@ exports.criarOrganizacao = async (req, res) => {
       });
     }
 
-    const { nome, codigo, cor_identificacao } = req.body;
+    const { nome, codigo, cor_identificacao, logo_url } = req.body;
 
     if (!nome || !codigo) {
       return res.status(400).json({
@@ -400,9 +422,9 @@ exports.criarOrganizacao = async (req, res) => {
     const cor = cor_identificacao || '#6366F1';
 
     const result = await pool.query(`
-      INSERT INTO organizacoes (nome, codigo, cor_identificacao, ativa)
-      VALUES (?, ?, ?, 1)
-    `, [nome, codigoNormalizado, cor]);
+      INSERT INTO organizacoes (nome, codigo, cor_identificacao, logo_url, ativa)
+      VALUES (?, ?, ?, ?, 1)
+    `, [nome, codigoNormalizado, cor, logo_url || null]);
 
     const insertId = result.insertId ? result.insertId : (Array.isArray(result) && result[0]?.insertId) || result[0]?.insertId;
 
@@ -453,7 +475,7 @@ exports.atualizarOrganizacao = async (req, res) => {
       });
     }
 
-    const { nome, codigo, cor_identificacao, ativa } = req.body;
+    const { nome, codigo, cor_identificacao, logo_url, ativa } = req.body;
 
     ({ pool, server } = await getDbPoolWithTunnel());
 
@@ -522,6 +544,11 @@ exports.atualizarOrganizacao = async (req, res) => {
     if (cor_identificacao !== undefined) {
       updates.push('cor_identificacao = ?');
       params.push(cor_identificacao);
+    }
+
+    if (logo_url !== undefined) {
+      updates.push('logo_url = ?');
+      params.push(logo_url || null);
     }
 
     if (ativa !== undefined) {

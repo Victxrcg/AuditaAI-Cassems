@@ -46,17 +46,23 @@ exports.listarCronogramas = async (req, res) => {
     `;
     
     let params = [];
+    const orgFiltro = req.query.organizacao;
     
     // Se não for Portes, filtrar apenas cronogramas da mesma organização
-    // Portes vê TODOS os cronogramas de todas as organizações
     if (userOrganization && userOrganization !== 'portes') {
       query += ` WHERE c.organizacao = ?`;
       params.push(userOrganization);
       console.log(`🔍 Filtro aplicado para organização: "${userOrganization}"`);
-    } else {
-      console.log(`🔍 Usuário Portes - sem filtro de organização`);
+    } else if (userOrganization === 'portes') {
+      // Portes pode ver todas ou filtrar por uma específica
+      if (orgFiltro && orgFiltro !== 'todos') {
+        query += ` WHERE c.organizacao = ?`;
+        params.push(orgFiltro);
+        console.log(`🔍 Usuário Portes - filtrando por organização: "${orgFiltro}"`);
+      } else {
+        console.log(`🔍 Usuário Portes - sem filtro de organização (todos)`);
+      }
     }
-    // Se for Portes, não aplica filtro - vê tudo
     
     query += ` ORDER BY c.prioridade DESC, c.data_inicio ASC, c.created_at DESC`;
     
