@@ -1,10 +1,48 @@
 // backend/src/controllers/organizacoesController.js
 const { getDbPoolWithTunnel, executeQueryWithRetry } = require('../lib/db');
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
 
 // Função helper para verificar se usuário é Portes
 const isPortesUser = (userOrganization) => {
   return userOrganization && userOrganization.toLowerCase() === 'portes';
 };
+
+// Configurar multer para upload de logos
+const logosDir = path.join(process.cwd(), 'backend', 'uploads', 'logos');
+fs.mkdirSync(logosDir, { recursive: true });
+
+const storage = multer.diskStorage({
+  destination: (_req, _file, cb) => {
+    cb(null, logosDir);
+  },
+  filename: (_req, file, cb) => {
+    const unique = Date.now() + '-' + Math.round(Math.random() * 1e9);
+    const ext = path.extname(file.originalname);
+    const safeName = file.originalname.replace(/[^a-zA-Z0-9_.-]/g, '_').replace(ext, '');
+    cb(null, `logo-${unique}-${safeName}${ext}`);
+  }
+});
+
+exports.uploadLogo = multer({
+  storage,
+  limits: {
+    fileSize: 15 * 1024 * 1024 // 15MB
+  },
+  fileFilter: (_req, file, cb) => {
+    // Aceitar apenas imagens
+    const allowedTypes = /jpeg|jpg|png|gif|webp|svg/;
+    const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
+    const mimetype = allowedTypes.test(file.mimetype);
+    
+    if (extname && mimetype) {
+      cb(null, true);
+    } else {
+      cb(new Error('Apenas arquivos de imagem são permitidos (jpeg, jpg, png, gif, webp, svg)'));
+    }
+  }
+});
 
 // Função helper para converter BigInt para Number (necessário para JSON.stringify)
 const convertBigIntToNumber = (obj) => {
@@ -599,6 +637,63 @@ exports.atualizarOrganizacao = async (req, res) => {
         console.error('⚠️ Erro ao fechar server (ignorando):', closeError.message);
       }
     }
+  }
+};
+
+// Upload de logo da organização
+exports.uploadLogoOrganizacao = async (req, res) => {
+  let pool, server;
+  try {
+    const userOrganization = req.headers['x-user-organization'] || req.query.organizacao;
+    
+    // Apenas Portes pode fazer upload de logos
+    if (!isPortesUser(userOrganization)) {
+      return res.status(403).json({
+        error: 'Acesso negado',
+        details: 'Apenas usuários Portes podem fazer upload de logos'
+      });
+    }
+
+    if (!req.file) {
+      return res.status(400).json({
+        error: 'Nenhum arquivo enviado',
+        details: 'Por favor, selecione uma imagem para fazer upload'
+      });
+    }
+
+    // Construir URL relativa para acessar o arquivo
+    // A URL será acessível via uma rota de serviço estático
+    const logoUrl = `/api/organizacoes/logos/${req.file.filename}`;
+
+    res.json({
+      success: true,
+      message: 'Logo enviada com sucesso',
+      logo_url: logoUrl,
+      filename: req.file.filename
+    });
+  } catch (error) {
+    console.error('❌ Erro ao fazer upload de logo:', error);
+    res.status(500).json({
+      error: 'Erro ao fazer upload de logo',
+      details: error.message
+    });
+  }
+};
+
+// Servir logos estáticas
+exports.servirLogo = async (req, res) => {
+  try {
+    const { filename } = req.params;
+    const filePath = path.join(logosDir, filename);
+    
+    if (!fs.existsSync(filePath)) {
+      return res.status(404).json({ error: 'Logo não encontrada' });
+    }
+
+    res.sendFile(filePath);
+  } catch (error) {
+    console.error('❌ Erro ao servir logo:', error);
+    res.status(500).json({ error: 'Erro ao servir logo' });
   }
 };
 

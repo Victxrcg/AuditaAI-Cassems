@@ -7,6 +7,12 @@ const router = express.Router();
 // Listar todas as organizações
 router.get('/', organizacoesController.listarOrganizacoes);
 
+// Upload de logo (antes de rotas com :id para evitar conflito)
+router.post('/upload-logo', organizacoesController.uploadLogo.single('logo'), organizacoesController.uploadLogoOrganizacao);
+
+// Servir logos estáticas
+router.get('/logos/:filename', organizacoesController.servirLogo);
+
 // Buscar organização por ID
 router.get('/:id', organizacoesController.buscarOrganizacao);
 
