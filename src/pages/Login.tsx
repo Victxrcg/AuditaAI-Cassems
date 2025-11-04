@@ -43,6 +43,8 @@ const Login = () => {
           // Usuário ativo: login direto
           localStorage.setItem('isAuthenticated', 'true');
           localStorage.setItem('user', JSON.stringify(data.user));
+          // Salvar timestamp do login para detectar novo login
+          localStorage.setItem('ultimo_login_timestamp', Date.now().toString());
           navigate('/dashboard');
           toast({ title: 'Login realizado com sucesso!' });
         } else if (data.error === 'Usuário inativo' || (data.error && data.error.toLowerCase().includes('inativo'))) {
@@ -71,6 +73,8 @@ const Login = () => {
           if (res.ok && data.success) {
             localStorage.setItem('isAuthenticated', 'true');
             localStorage.setItem('user', JSON.stringify(data.user));
+            // Salvar timestamp do login para detectar novo login
+            localStorage.setItem('ultimo_login_timestamp', Date.now().toString());
           }
           navigate('/dashboard');
           toast({ title: 'Email confirmado!', description: 'Acesso autorizado.' });

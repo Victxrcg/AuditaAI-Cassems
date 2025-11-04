@@ -61,7 +61,8 @@ import {
   GripVertical,
   CheckSquare,
   Download,
-  ChevronDown
+  ChevronDown,
+  ArrowLeft
 } from 'lucide-react';
 
 interface CronogramaItem {
@@ -115,8 +116,16 @@ const Cronograma = () => {
   const [selectedOrganizationForPDF, setSelectedOrganizationForPDF] = useState<string>('todos');
   const [selectedStatusForPDF, setSelectedStatusForPDF] = useState<string>('todos');
   const [selectedStatusForNonPortesPDF, setSelectedStatusForNonPortesPDF] = useState<string>('todos');
+  const [selectedMes, setSelectedMes] = useState<string>('');
+  const [selectedAno, setSelectedAno] = useState<string>('');
+  const [tipoOverview, setTipoOverview] = useState<'geral' | 'por_mes'>('geral');
   const [usarIA, setUsarIA] = useState(false);
   const [loadingIA, setLoadingIA] = useState(false);
+  const [loadingMesIA, setLoadingMesIA] = useState(false);
+  const [organizacoes, setOrganizacoes] = useState<any[]>([]);
+  const [organizacaoSelecionada, setOrganizacaoSelecionada] = useState<string | null>(null);
+  const [mostrarSelecaoEmpresa, setMostrarSelecaoEmpresa] = useState(false);
+  const [loadingOrganizacoes, setLoadingOrganizacoes] = useState(false);
   const initialFormData = () => ({
     titulo: '',
     descricao: '',
@@ -141,7 +150,84 @@ const Cronograma = () => {
   useEffect(() => {
     const user = JSON.parse(localStorage.getItem('user') || '{}');
     setCurrentUser(user);
+    
+    // Se for usuário Portes, verificar se houve novo login
+    if (user?.organizacao === 'portes') {
+      const ultimoLoginTimestamp = localStorage.getItem('ultimo_login_timestamp');
+      const ultimoAcessoTimestamp = localStorage.getItem('ultimo_acesso_cronograma_timestamp');
+      
+      // Verificar se houve novo login (timestamp de login é mais recente que último acesso)
+      const houveNovoLogin = ultimoLoginTimestamp && 
+        (!ultimoAcessoTimestamp || parseInt(ultimoLoginTimestamp) > parseInt(ultimoAcessoTimestamp));
+      
+      if (houveNovoLogin) {
+        // Novo login: sempre mostrar cards primeiro
+        setMostrarSelecaoEmpresa(true);
+        setOrganizacaoSelecionada(null);
+        // Limpar seleção salva ao relogar
+        localStorage.removeItem('cronograma-empresa-selecionada');
+      } else {
+        // Navegação normal: carregar empresa selecionada salva
+        const empresaSalva = localStorage.getItem('cronograma-empresa-selecionada');
+        if (empresaSalva) {
+          setOrganizacaoSelecionada(empresaSalva);
+          setMostrarSelecaoEmpresa(false);
+        } else {
+          // Se não tem empresa salva, mostrar cards
+          setMostrarSelecaoEmpresa(true);
+          setOrganizacaoSelecionada(null);
+        }
+      }
+      
+      // Salvar timestamp do acesso atual
+      localStorage.setItem('ultimo_acesso_cronograma_timestamp', Date.now().toString());
+    } else {
+      // Usuários não-Portes vão direto para o cronograma da sua organização
+      setOrganizacaoSelecionada(user?.organizacao || 'cassems');
+      setMostrarSelecaoEmpresa(false);
+    }
   }, []);
+
+  // Buscar organizações cadastradas
+  useEffect(() => {
+    const fetchOrganizacoes = async () => {
+      // Só buscar se for usuário Portes
+      if (currentUser?.organizacao !== 'portes') {
+        return;
+      }
+
+      setLoadingOrganizacoes(true);
+      try {
+        const res = await fetch(`${API_BASE}/organizacoes`, {
+          headers: {
+            'x-user-organization': currentUser?.organizacao || 'portes'
+          }
+        });
+        
+        if (res.ok) {
+          const response = await res.json();
+          // A API pode retornar { success: true, data: [...] } ou diretamente um array
+          const data = response.data || response;
+          const organizacoesArray = Array.isArray(data) ? data : [];
+          // Filtrar apenas organizações ativas
+          const organizacoesAtivas = organizacoesArray.filter((org: any) => org.ativa !== false);
+          setOrganizacoes(organizacoesAtivas);
+        } else {
+          console.error('Erro ao buscar organizações:', res.status);
+          setOrganizacoes([]);
+        }
+      } catch (error) {
+        console.error('Erro ao buscar organizações:', error);
+        setOrganizacoes([]);
+      } finally {
+        setLoadingOrganizacoes(false);
+      }
+    };
+
+    if (currentUser?.organizacao === 'portes') {
+      fetchOrganizacoes();
+    }
+  }, [currentUser, API_BASE]);
 
   // Carregar ordem salva das demandas
   useEffect(() => {
@@ -156,12 +242,20 @@ const Cronograma = () => {
   }, []);
 
   // Carregar cronogramas
-  const fetchCronogramas = async () => {
+  const fetchCronogramas = async (org?: string) => {
     setLoading(true);
     try {
+      // Se for Portes e tiver organização selecionada, usar ela
+      // Se não for Portes, usar a organização do usuário
+      let orgParaBuscar: string;
+      if (currentUser?.organizacao === 'portes') {
+        orgParaBuscar = org || organizacaoSelecionada || 'todos';
+      } else {
+        orgParaBuscar = currentUser?.organizacao || 'cassems';
+      }
       const userOrg = currentUser?.organizacao || 'cassems';
       
-      const res = await fetch(`${API_BASE}/cronograma?organizacao=${userOrg}`, {
+      const res = await fetch(`${API_BASE}/cronograma?organizacao=${orgParaBuscar}`, {
         headers: {
           'x-user-organization': userOrg
         }
@@ -642,11 +736,6 @@ const Cronograma = () => {
       }
       
       yPosition += 5;
-      // Legenda de cores
-      addText('Legenda:', 12, true, [0, 51, 102]);
-      addText('[OK] Concluído', 11, true, [15, 157, 88]); // #0F9D58
-      addText('[PENDENTE] Pendente/Atrasado', 11, true, [217, 48, 37]); // #D93025
-      yPosition += 3;
 
       // Seção: Status Atual do Projeto com barras de progresso
       // Função auxiliar para barras
@@ -694,26 +783,7 @@ const Cronograma = () => {
         drawProgress(`${m.mes}`, pct);
       });
 
-      // Tabela compacta por mês (totais + duração média + responsável mais ativo)
-      if (Array.isArray(resumoMensalDetalhado) && resumoMensalDetalhado.length > 0) {
-        addText('TABELA DE STATUS POR MÊS', 13, true, [0, 51, 102]);
-        const ultimos = resumoMensalDetalhado.slice(-6);
-        ultimos.forEach((r: any) => {
-          const linha = `${r.mesLabel}: Total ${r.totalDemandas || 0} | Concluídas ${r.concluidas || 0} | Atrasadas ${r.atrasadas || 0} | Pendentes ${r.pendentes || 0}`;
-          addText(linha, 10);
-          if (r.duracaoMediaDias || r.responsavelMaisAtivo) {
-            addText(`  Duração média: ${r.duracaoMediaDias ?? '-'} dia(s) | Responsável mais ativo: ${r.responsavelMaisAtivo || '-'}`, 9);
-          }
-        });
-      }
-
-      // Ranking de responsáveis (top 5)
-      if (Array.isArray(topResponsaveis) && topResponsaveis.length > 0) {
-        addText('RANKING DE RESPONSÁVEIS (TOP 5)', 13, true, [0, 51, 102]);
-        topResponsaveis.slice(0,5).forEach((p:any, idx:number) => {
-          addText(`${idx+1}. ${p.nome}: ${p.concluidas || 0} concluídas, ${p.atrasadas || 0} atrasadas`, 10);
-        });
-      }
+      // Seções removidas conforme solicitado: TABELA DE STATUS POR MÊS e RANKING DE RESPONSÁVEIS
 
       const analiseLinhas = analise.split('\n');
       analiseLinhas.forEach((linha: string) => {
@@ -814,15 +884,9 @@ const Cronograma = () => {
     }
   };
 
-  // Função para confirmar e baixar PDF após seleção no modal
+  // Função para confirmar e baixar PDF após seleção no modal (mantida para compatibilidade)
   const confirmarDownloadPDF = () => {
-    setIsOrganizationModalOpen(false);
-    if (usarIA) {
-      gerarOverviewPDFComIA(selectedOrganizationForPDF, selectedStatusForPDF);
-    } else {
-      gerarOverviewPDF(selectedOrganizationForPDF, selectedStatusForPDF);
-    }
-    setUsarIA(false);
+    confirmarDownloadPDFAtualizado();
   };
 
   // Função para confirmar e baixar PDF para usuários não-Portes (apenas status)
@@ -834,6 +898,207 @@ const Cronograma = () => {
       gerarOverviewPDF(undefined, selectedStatusForNonPortesPDF);
     }
     setUsarIA(false);
+  };
+
+  // Função para gerar PDF com análise por mês específico
+  const gerarOverviewPorMesPDF = async (organizacaoSelecionada?: string, ano?: string, mes?: string) => {
+    let loadingToastRef: { dismiss: () => void } | null = null;
+    try {
+      if (!ano || !mes) {
+        toast({
+          title: "Erro",
+          description: "Por favor, selecione ano e mês",
+          variant: "destructive"
+        });
+        return;
+      }
+
+      setLoadingMesIA(true);
+      const orgParaFiltrar = organizacaoSelecionada || filtroOrganizacao;
+
+      const baseUrl = API_BASE.endsWith('/api') ? API_BASE : `${API_BASE}/api`;
+      const url = `${baseUrl}/pdf/analisar-cronograma-por-mes-ia`;
+
+      loadingToastRef = toast({
+        title: "Analisando com IA",
+        description: `Analisando demandas e checklists do mês ${mes}/${ano}...`,
+        duration: Infinity,
+      });
+
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-user-organization': currentUser?.organizacao || 'cassems',
+          'x-user-id': currentUser?.id || '',
+        },
+        body: JSON.stringify({
+          organizacao: orgParaFiltrar,
+          status: 'todos',
+          ano: parseInt(ano),
+          mes: parseInt(mes)
+        })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || 'Erro ao analisar cronograma por mês com IA');
+      }
+
+      const data = await response.json();
+
+      if (!data.success) {
+        throw new Error(data.error || 'Erro ao processar análise');
+      }
+
+      const { analise, mes: mesNome, estatisticas } = data.data;
+
+      const pdf = new jsPDF({
+        orientation: 'p',
+        unit: 'mm',
+        format: 'a4',
+        compress: true
+      });
+
+      pdf.setFont('helvetica');
+      const pageWidth = pdf.internal.pageSize.getWidth();
+      const margin = 20;
+      const contentWidth = pageWidth - (margin * 2);
+      let yPosition = margin;
+
+      const addText = (text: string, fontSize: number = 12, isBold: boolean = false, color: [number, number, number] = [0, 0, 0]) => {
+        const cleanText = text
+          .normalize('NFC')
+          .replace(/\s+/g, ' ')
+          .trim();
+
+        pdf.setFontSize(fontSize);
+        pdf.setTextColor(color[0], color[1], color[2]);
+        if (isBold) {
+          pdf.setFont('helvetica', 'bold');
+        } else {
+          pdf.setFont('helvetica', 'normal');
+        }
+
+        const lines = pdf.splitTextToSize(cleanText, contentWidth);
+        lines.forEach((line: string) => {
+          if (yPosition > pdf.internal.pageSize.getHeight() - margin - 10) {
+            pdf.addPage();
+            yPosition = margin;
+          }
+          pdf.text(line, margin, yPosition);
+          yPosition += fontSize * 0.5 + 3;
+        });
+        yPosition += 5;
+      };
+
+      addText(`OVERVIEW DO CRONOGRAMA - ${mesNome.toUpperCase()}`, 20, true, [0, 51, 102]);
+      addText(`Gerado em: ${new Date().toLocaleDateString('pt-BR')} às ${new Date().toLocaleTimeString('pt-BR')}`, 10);
+      addText(`Organização: ${currentUser?.nome_empresa || currentUser?.organizacao_nome || currentUser?.organizacao || 'Sistema'}`, 12, true);
+      
+      if (orgParaFiltrar !== 'todos' && currentUser?.organizacao === 'portes') {
+        addText(`Filtro: ${orgParaFiltrar.toUpperCase()}`, 12, true);
+      }
+      
+      yPosition += 5;
+      addText('ESTATÍSTICAS DO MÊS', 14, true, [0, 51, 102]);
+      addText(`Total de Demandas Iniciadas no Mês: ${estatisticas.totalDemandas}`, 11);
+      addText(`Demandas Concluídas no Mês: ${estatisticas.demandasConcluidas}`, 11);
+      addText(`Demandas Iniciadas no Mês, Concluídas Depois: ${estatisticas.demandasIniciadasConcluidasDepois || 0}`, 11);
+      addText(`Demandas em Andamento: ${estatisticas.demandasEmAndamento}`, 11);
+      addText(`Checklists Concluídos: ${estatisticas.checklistsConcluidos}`, 11);
+      yPosition += 5;
+
+      const analiseLinhas = analise.split('\n');
+      analiseLinhas.forEach((linha: string) => {
+        const t = linha.trim();
+        if (t.startsWith('### ')) {
+          addText(t.replace(/^###\s+/, ''), 13, true, [0, 102, 204]);
+          return;
+        }
+        if (t.startsWith('## ')) {
+          addText(t.replace(/^##\s+/, ''), 14, true, [0, 102, 204]);
+          return;
+        }
+        if (t.startsWith('[OK]')) {
+          addText(linha, 12, true, [15, 157, 88]);
+          return;
+        }
+        if (t.startsWith('[PENDENTE]') || t.startsWith('[EM ANDAMENTO]')) {
+          addText(linha, 12, true, [217, 48, 37]);
+          return;
+        }
+        addText(linha, 11);
+      });
+
+      const totalPages = pdf.internal.pages.length - 1;
+      for (let i = 1; i <= totalPages; i++) {
+        pdf.setPage(i);
+        pdf.setFontSize(8);
+        pdf.setTextColor(100, 100, 100);
+        pdf.text(`Página ${i} de ${totalPages}`, pageWidth - 30, pdf.internal.pageSize.getHeight() - 10);
+      }
+
+      const escopoNome = orgParaFiltrar === 'todos' ? 'todas-organizacoes' : orgParaFiltrar.toLowerCase().replace(/\s+/g, '-');
+      const fileName = `overview-cronograma-${mesNome.toLowerCase().replace(/\s+/g, '-')}-${escopoNome}-${new Date().toISOString().split('T')[0]}.pdf`;
+      pdf.save(fileName);
+
+      if (loadingToastRef) {
+        try {
+          loadingToastRef.dismiss();
+          await new Promise(resolve => setTimeout(resolve, 100));
+        } catch (e) {}
+      }
+
+      toast({
+        title: "Sucesso!",
+        description: `PDF gerado com sucesso para ${mesNome}`,
+      });
+
+    } catch (error: any) {
+      console.error('Erro ao gerar PDF por mês:', error);
+      if (loadingToastRef) {
+        try {
+          loadingToastRef.dismiss();
+        } catch (e) {}
+      }
+      toast({
+        title: "Erro",
+        description: error.message || 'Erro ao gerar PDF por mês',
+        variant: "destructive"
+      });
+    } finally {
+      setLoadingMesIA(false);
+    }
+  };
+
+  // Função para confirmar download PDF (modificada para suportar ambos os tipos)
+  const confirmarDownloadPDFAtualizado = () => {
+    setIsOrganizationModalOpen(false);
+    setIsStatusModalOpen(false); // Also close status modal for non-Portes
+    
+    // Se houver organização selecionada, usar ela; caso contrário, usar a selecionada no modal
+    const orgParaUsar = organizacaoSelecionada || selectedOrganizationForPDF;
+    
+    if (tipoOverview === 'por_mes') {
+      if (!selectedAno || !selectedMes) {
+        toast({
+          title: "Erro",
+          description: "Por favor, selecione ano e mês",
+          variant: "destructive"
+        });
+        return;
+      }
+      gerarOverviewPorMesPDF(orgParaUsar, selectedAno, selectedMes);
+    } else {
+      if (usarIA) {
+        gerarOverviewPDFComIA(orgParaUsar, selectedStatusForPDF);
+      } else {
+        gerarOverviewPDF(orgParaUsar, selectedStatusForPDF);
+      }
+    }
+    setUsarIA(false);
+    setTipoOverview('geral');
   };
 
   // Função para carregar itens do checklist
@@ -1003,12 +1268,12 @@ const Cronograma = () => {
   };
 
   useEffect(() => {
-    if (currentUser) {
+    if (currentUser && organizacaoSelecionada) {
       fetchCronogramas();
       fetchEstatisticas();
       fetchUsuarios();
     }
-  }, [currentUser]);
+  }, [currentUser, organizacaoSelecionada]);
 
   // Expandir automaticamente meses com demandas quando os dados ou filtros mudarem
   useEffect(() => {
@@ -1151,6 +1416,17 @@ const Cronograma = () => {
     }
   }, [formData.status]);
 
+  // Função para normalizar organização (igual ao backend) - DEVE ESTAR ANTES DO USO
+  const normalizeOrganization = (org: string) => {
+    if (!org) return '';
+    const s = String(org).toLowerCase().trim();
+    if (s.includes('maraj') || s.includes('rede frota') || s.includes('rede_frota')) return 'rede_frota';
+    if (s.includes('cassems')) return 'cassems';
+    if (s.includes('porte')) return 'portes';
+    // fallback: trocar espaços por underscore
+    return s.replace(/\s+/g, '_');
+  };
+
   // Obter organizações únicas para filtro (apenas para Portes)
   const organizacoesUnicas = [...new Set(cronogramas.map(c => c.organizacao))];
 
@@ -1158,7 +1434,14 @@ const Cronograma = () => {
   const cronogramasFiltrados = cronogramas.filter(cronograma => {
     const statusMatch = filtroStatus === 'todos' || cronograma.status === filtroStatus;
     const prioridadeMatch = filtroPrioridade === 'todos' || cronograma.prioridade === filtroPrioridade;
-    const organizacaoMatch = filtroOrganizacao === 'todos' || cronograma.organizacao === filtroOrganizacao;
+    // Se houver organização selecionada, filtrar por ela (normalizada)
+    let organizacaoMatch = true;
+    if (organizacaoSelecionada && currentUser?.organizacao === 'portes') {
+      const orgNormalizada = normalizeOrganization(cronograma.organizacao || '');
+      organizacaoMatch = orgNormalizada === normalizeOrganization(organizacaoSelecionada);
+    } else if (filtroOrganizacao !== 'todos') {
+      organizacaoMatch = normalizeOrganization(cronograma.organizacao || '') === normalizeOrganization(filtroOrganizacao);
+    }
     return statusMatch && prioridadeMatch && organizacaoMatch;
   });
 
@@ -1434,16 +1717,7 @@ const Cronograma = () => {
     };
   }, [isResizing]);
   
-  // Função para normalizar organização (igual ao backend)
-  const normalizeOrganization = (org: string) => {
-    if (!org) return '';
-    const s = String(org).toLowerCase().trim();
-    if (s.includes('maraj') || s.includes('rede frota') || s.includes('rede_frota')) return 'rede_frota';
-    if (s.includes('cassems')) return 'cassems';
-    if (s.includes('porte')) return 'portes';
-    // fallback: trocar espaços por underscore
-    return s.replace(/\s+/g, '_');
-  };
+  // Função normalizeOrganization movida para cima (antes do filtro)
 
   // Somente usuários da PORTES podem reordenar na timeline
   const podeReordenar = (currentUser?.organizacao || '').toLowerCase() === 'portes';
@@ -2499,20 +2773,142 @@ const Cronograma = () => {
     }
   };
 
+  // Função para selecionar empresa
+  const handleSelecionarEmpresa = (organizacao: any) => {
+    setOrganizacaoSelecionada(organizacao.codigo);
+    setMostrarSelecaoEmpresa(false);
+    // Salvar seleção no localStorage para persistir
+    localStorage.setItem('cronograma-empresa-selecionada', organizacao.codigo);
+  };
+
+  // Se for usuário Portes e ainda não selecionou empresa, mostrar tela de seleção
+  if (mostrarSelecaoEmpresa && currentUser?.organizacao === 'portes') {
+    return (
+      <ErrorBoundary>
+        <div className="p-3 sm:p-4 lg:p-6">
+          <div className="max-w-6xl mx-auto">
+            <div className="mb-8">
+              <h1 className="text-3xl lg:text-4xl font-bold text-gray-900 mb-2">
+                Selecione uma Empresa
+              </h1>
+              <p className="text-gray-600 text-base lg:text-lg">
+                Escolha a empresa para visualizar o cronograma de demandas
+              </p>
+            </div>
+
+            {loadingOrganizacoes ? (
+              <div className="flex justify-center items-center py-20">
+                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+              </div>
+            ) : organizacoes.length === 0 ? (
+              <div className="text-center py-20">
+                <Building className="h-16 w-16 mx-auto text-gray-400 mb-4" />
+                <p className="text-gray-600 text-lg">Nenhuma organização cadastrada</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {organizacoes.map((org) => (
+                  <Card
+                    key={org.id}
+                    className="cursor-pointer hover:shadow-lg transition-all duration-300 hover:scale-105 border-2 hover:border-blue-500"
+                    onClick={() => handleSelecionarEmpresa(org)}
+                  >
+                    <CardContent className="p-6">
+                      <div className="flex items-start gap-4">
+                        <div
+                          className="w-16 h-16 rounded-lg flex items-center justify-center flex-shrink-0 overflow-hidden"
+                          style={{
+                            backgroundColor: org.logo_url ? 'transparent' : (org.cor_identificacao || '#3B82F6'),
+                            opacity: org.logo_url ? 1 : 0.1
+                          }}
+                        >
+                          {org.logo_url ? (
+                            <img
+                              src={(() => {
+                                if (org.logo_url.startsWith('http')) {
+                                  return org.logo_url;
+                                }
+                                // Se logo_url começa com /api, remover /api para evitar duplicação
+                                const logoPath = org.logo_url.startsWith('/api') 
+                                  ? org.logo_url.substring(4)
+                                  : org.logo_url;
+                                return `${API_BASE}${logoPath}`;
+                              })()}
+                              alt={`Logo ${org.nome}`}
+                              className="w-full h-full object-cover"
+                              onError={(e) => {
+                                // Se a imagem falhar ao carregar, esconder e mostrar o ícone
+                                const target = e.currentTarget;
+                                target.style.display = 'none';
+                                const parent = target.parentElement;
+                                if (parent) {
+                                  // Criar ícone Building como fallback
+                                  const iconWrapper = document.createElement('div');
+                                  iconWrapper.innerHTML = `
+                                    <svg class="h-8 w-8" style="color: ${org.cor_identificacao || '#3B82F6'}" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"></path>
+                                    </svg>
+                                  `;
+                                  parent.appendChild(iconWrapper.firstElementChild);
+                                }
+                              }}
+                            />
+                          ) : (
+                            <Building
+                              className="h-8 w-8"
+                              style={{
+                                color: org.cor_identificacao || '#3B82F6'
+                              }}
+                            />
+                          )}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <h3 className="text-xl font-bold text-gray-900 mb-1 truncate">
+                            {org.nome}
+                          </h3>
+                          <p className="text-sm text-gray-500 mb-2">
+                            {org.codigo.toUpperCase()}
+                          </p>
+                          <div className="flex items-center gap-2 mt-4">
+                            <span className="text-xs font-medium text-blue-600 bg-blue-50 px-3 py-1 rounded-full">
+                              Acessar Cronograma
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      </ErrorBoundary>
+    );
+  }
+
   return (
     <ErrorBoundary>
       <div className="p-3 sm:p-4 lg:p-6 space-y-4 lg:space-y-6">
       {/* Header */}
       <div className="flex flex-col lg:flex-row lg:justify-between lg:items-center space-y-4 lg:space-y-0">
         <div className="flex-1">
-          <h1 className="text-2xl lg:text-3xl font-bold">Cronograma de Demandas</h1>
+          <div className="flex items-center gap-3 mb-2">
+            <h1 className="text-2xl lg:text-3xl font-bold">Cronograma de Demandas</h1>
+          </div>
           <p className="text-sm lg:text-base text-gray-600 mt-1">
-            {currentUser?.organizacao === 'portes' 
-              ? 'Gerencie todas as demandas de todas as organizações' 
+            {currentUser?.organizacao === 'portes' && organizacaoSelecionada
+              ? `Demandas da ${organizacoes.find(o => o.codigo === organizacaoSelecionada)?.nome || organizacaoSelecionada.toUpperCase()}`
+              : currentUser?.organizacao === 'portes'
+              ? 'Selecione uma empresa para visualizar o cronograma'
               : `Demandas da ${currentUser?.nome_empresa || currentUser?.organizacao_nome || 'sua organização'}`
             }
           </p>
-          {currentUser?.organizacao === 'portes' ? (
+          {currentUser?.organizacao === 'portes' && organizacaoSelecionada ? (
+            <p className="text-xs lg:text-sm text-green-600 mt-1">
+              Visualizando cronograma da empresa selecionada.
+            </p>
+          ) : currentUser?.organizacao === 'portes' ? (
             <p className="text-xs lg:text-sm text-green-600 mt-1">
               Acesso completo a todos os cronogramas do sistema.
             </p>
@@ -2578,7 +2974,7 @@ const Cronograma = () => {
             <Button 
               variant="outline" 
               onClick={handleOverviewPDFClick} 
-              disabled={loading} 
+              disabled={loading || loadingMesIA} 
               className="text-xs lg:text-sm font-medium border-gray-300 hover:bg-gray-50 hover:border-gray-400 transition-all duration-200"
             >
               <Download className="h-4 w-4 lg:h-5 lg:w-5 mr-1.5 lg:mr-2" />
@@ -3355,45 +3751,55 @@ const Cronograma = () => {
               Configurar Overview PDF
             </DialogTitle>
             <DialogDescription className="text-sm lg:text-base">
-              Escolha a organização e o status das demandas para incluir no overview PDF.
+              Escolha o tipo de overview e configure os filtros desejados.
             </DialogDescription>
           </DialogHeader>
           
           <div className="space-y-4 lg:space-y-6">
+            {/* Tipo de Overview */}
             <div className="space-y-2 lg:space-y-3">
-              <Label htmlFor="org-pdf-select" className="text-sm lg:text-base font-medium">Organização</Label>
-              <Select value={selectedOrganizationForPDF} onValueChange={setSelectedOrganizationForPDF}>
+              <Label htmlFor="tipo-overview-select" className="text-sm lg:text-base font-medium">Tipo de Overview</Label>
+              <Select value={tipoOverview} onValueChange={(value: 'geral' | 'por_mes') => {
+                setTipoOverview(value);
+                // Preencher com mês atual se selecionar por mês
+                if (value === 'por_mes') {
+                  const hoje = new Date();
+                  if (!selectedAno) setSelectedAno(hoje.getFullYear().toString());
+                  if (!selectedMes) setSelectedMes((hoje.getMonth() + 1).toString());
+                }
+              }}>
                 <SelectTrigger className="h-10 lg:h-12">
-                  <SelectValue placeholder="Selecione uma organização" />
+                  <SelectValue placeholder="Selecione o tipo" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="todos">Todas as organizações</SelectItem>
-                  {organizacoesUnicas.map(org => (
-                    <SelectItem key={org} value={org}>
-                      {org.toUpperCase()}
-                    </SelectItem>
-                  ))}
+                  <SelectItem value="geral">Overview Geral</SelectItem>
+                  <SelectItem value="por_mes">Overview por Mês</SelectItem>
                 </SelectContent>
               </Select>
             </div>
+
+            {/* Seleção de organização - apenas se não houver organização já selecionada */}
+            {!organizacaoSelecionada && (
+              <div className="space-y-2 lg:space-y-3">
+                <Label htmlFor="org-pdf-select" className="text-sm lg:text-base font-medium">Organização</Label>
+                <Select value={selectedOrganizationForPDF} onValueChange={setSelectedOrganizationForPDF}>
+                  <SelectTrigger className="h-10 lg:h-12">
+                    <SelectValue placeholder="Selecione uma organização" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="todos">Todas as organizações</SelectItem>
+                    {organizacoesUnicas.map(org => (
+                      <SelectItem key={org} value={org}>
+                        {org.toUpperCase()}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
             
-            <div className="space-y-3">
-              <Label htmlFor="status-pdf-select" className="text-base font-medium">Status das Demandas</Label>
-              <Select value={selectedStatusForPDF} onValueChange={setSelectedStatusForPDF}>
-                <SelectTrigger className="h-12">
-                  <SelectValue placeholder="Selecione um status" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="todos">Todas as demandas</SelectItem>
-                  <SelectItem value="concluido">Concluídas</SelectItem>
-                  <SelectItem value="em_andamento">Em andamento</SelectItem>
-                  <SelectItem value="pendente">Pendentes</SelectItem>
-                  <SelectItem value="atrasado">Atrasadas</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            
-            {selectedOrganizationForPDF !== 'todos' && (
+            {/* Informação quando organização já está selecionada */}
+            {organizacaoSelecionada && (
               <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
                 <div className="flex items-start gap-3">
                   <div className="flex-shrink-0">
@@ -3401,42 +3807,102 @@ const Cronograma = () => {
                   </div>
                   <div>
                     <p className="text-base font-medium text-blue-800">
-                      Overview específico para: {selectedOrganizationForPDF.toUpperCase()}
+                      Overview da empresa selecionada: {organizacoes.find(o => o.codigo === organizacaoSelecionada)?.nome || organizacaoSelecionada.toUpperCase()}
                     </p>
                     <p className="text-sm text-blue-600 mt-2">
-                      Será gerado um PDF contendo apenas as demandas desta organização.
-                      {selectedStatusForPDF !== 'todos' && (
-                        <span className="block mt-1">
-                          <strong>Status filtrado:</strong> {selectedStatusForPDF === 'concluido' ? 'Concluídas' : 
-                                                          selectedStatusForPDF === 'em_andamento' ? 'Em Andamento' :
-                                                          selectedStatusForPDF === 'pendente' ? 'Pendentes' :
-                                                          selectedStatusForPDF === 'atrasado' ? 'Atrasadas' : selectedStatusForPDF}
-                        </span>
-                      )}
+                      O overview será gerado apenas para a empresa selecionada no cronograma.
                     </p>
                   </div>
                 </div>
               </div>
             )}
+
+            {/* Campos condicionais baseados no tipo */}
+            {tipoOverview === 'geral' ? (
+              <div className="space-y-3">
+                <Label htmlFor="status-pdf-select" className="text-base font-medium">Status das Demandas</Label>
+                <Select value={selectedStatusForPDF} onValueChange={setSelectedStatusForPDF}>
+                  <SelectTrigger className="h-12">
+                    <SelectValue placeholder="Selecione um status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="todos">Todas as demandas</SelectItem>
+                    <SelectItem value="concluido">Concluídas</SelectItem>
+                    <SelectItem value="em_andamento">Em andamento</SelectItem>
+                    <SelectItem value="pendente">Pendentes</SelectItem>
+                    <SelectItem value="atrasado">Atrasadas</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2 lg:space-y-3">
+                  <Label htmlFor="ano-select" className="text-sm lg:text-base font-medium">Ano</Label>
+                  <Select value={selectedAno} onValueChange={setSelectedAno}>
+                    <SelectTrigger className="h-10 lg:h-12">
+                      <SelectValue placeholder="Selecione o ano" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {Array.from({ length: 5 }, (_, i) => {
+                        const ano = new Date().getFullYear() - 2 + i;
+                        return (
+                          <SelectItem key={ano} value={ano.toString()}>
+                            {ano}
+                          </SelectItem>
+                        );
+                      })}
+                    </SelectContent>
+                  </Select>
+                </div>
+                
+                <div className="space-y-2 lg:space-y-3">
+                  <Label htmlFor="mes-select" className="text-sm lg:text-base font-medium">Mês</Label>
+                  <Select value={selectedMes} onValueChange={setSelectedMes}>
+                    <SelectTrigger className="h-10 lg:h-12">
+                      <SelectValue placeholder="Selecione o mês" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {[
+                        { value: '1', label: 'Janeiro' },
+                        { value: '2', label: 'Fevereiro' },
+                        { value: '3', label: 'Março' },
+                        { value: '4', label: 'Abril' },
+                        { value: '5', label: 'Maio' },
+                        { value: '6', label: 'Junho' },
+                        { value: '7', label: 'Julho' },
+                        { value: '8', label: 'Agosto' },
+                        { value: '9', label: 'Setembro' },
+                        { value: '10', label: 'Outubro' },
+                        { value: '11', label: 'Novembro' },
+                        { value: '12', label: 'Dezembro' }
+                      ].map(mes => (
+                        <SelectItem key={mes.value} value={mes.value}>
+                          {mes.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            )}
             
-            {selectedOrganizationForPDF === 'todos' && (
-              <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+            {/* Informações do overview selecionado */}
+            {tipoOverview === 'por_mes' && selectedAno && selectedMes && (
+              <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
                 <div className="flex items-start gap-3">
                   <div className="flex-shrink-0">
-                    <Building className="h-5 w-5 text-green-600 mt-0.5" />
+                    <TrendingUp className="h-5 w-5 text-purple-600 mt-0.5" />
                   </div>
                   <div>
-                    <p className="text-base font-medium text-green-800">
-                      Overview completo de todas as organizações
+                    <p className="text-base font-medium text-purple-800">
+                      Análise Inteligente por Mês
                     </p>
-                    <p className="text-sm text-green-600 mt-2">
-                      Será gerado um PDF contendo todas as demandas de todas as organizações.
-                      {selectedStatusForPDF !== 'todos' && (
+                    <p className="text-sm text-purple-600 mt-2">
+                      A IA irá analisar todas as demandas e checklists do mês {selectedMes}/{selectedAno}, 
+                      incluindo análises detalhadas das descrições e listando todos os pontos concluídos.
+                      {selectedOrganizationForPDF !== 'todos' && (
                         <span className="block mt-1">
-                          <strong>Status filtrado:</strong> {selectedStatusForPDF === 'concluido' ? 'Concluídas' : 
-                                                          selectedStatusForPDF === 'em_andamento' ? 'Em Andamento' :
-                                                          selectedStatusForPDF === 'pendente' ? 'Pendentes' :
-                                                          selectedStatusForPDF === 'atrasado' ? 'Atrasadas' : selectedStatusForPDF}
+                          <strong>Organização:</strong> {selectedOrganizationForPDF.toUpperCase()}
                         </span>
                       )}
                     </p>
@@ -3445,29 +3911,85 @@ const Cronograma = () => {
               </div>
             )}
 
-            {/* Opção de IA */}
-            <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-start gap-3 flex-1">
-                  <div className="flex-shrink-0">
-                    <TrendingUp className="h-5 w-5 text-purple-600 mt-0.5" />
+            {tipoOverview === 'geral' && (
+              <>
+                {selectedOrganizationForPDF !== 'todos' && (
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                    <div className="flex items-start gap-3">
+                      <div className="flex-shrink-0">
+                        <Building className="h-5 w-5 text-blue-600 mt-0.5" />
+                      </div>
+                      <div>
+                        <p className="text-base font-medium text-blue-800">
+                          Overview específico para: {selectedOrganizationForPDF.toUpperCase()}
+                        </p>
+                        <p className="text-sm text-blue-600 mt-2">
+                          Será gerado um PDF contendo apenas as demandas desta organização.
+                          {selectedStatusForPDF !== 'todos' && (
+                            <span className="block mt-1">
+                              <strong>Status filtrado:</strong> {selectedStatusForPDF === 'concluido' ? 'Concluídas' : 
+                                                              selectedStatusForPDF === 'em_andamento' ? 'Em Andamento' :
+                                                              selectedStatusForPDF === 'pendente' ? 'Pendentes' :
+                                                              selectedStatusForPDF === 'atrasado' ? 'Atrasadas' : selectedStatusForPDF}
+                            </span>
+                          )}
+                        </p>
+                      </div>
+                    </div>
                   </div>
-                  <div className="flex-1">
-                    <p className="text-base font-medium text-purple-800">
-                      Análise Inteligente com IA
-                    </p>
-                    <p className="text-sm text-purple-600 mt-1">
-                      Ative para gerar um relatório com análise mensal inteligente do que foi feito e o que falta fazer, incluindo análise de checklists.
-                    </p>
+                )}
+                
+                {selectedOrganizationForPDF === 'todos' && (
+                  <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                    <div className="flex items-start gap-3">
+                      <div className="flex-shrink-0">
+                        <Building className="h-5 w-5 text-green-600 mt-0.5" />
+                      </div>
+                      <div>
+                        <p className="text-base font-medium text-green-800">
+                          Overview completo de todas as organizações
+                        </p>
+                        <p className="text-sm text-green-600 mt-2">
+                          Será gerado um PDF contendo todas as demandas de todas as organizações.
+                          {selectedStatusForPDF !== 'todos' && (
+                            <span className="block mt-1">
+                              <strong>Status filtrado:</strong> {selectedStatusForPDF === 'concluido' ? 'Concluídas' : 
+                                                              selectedStatusForPDF === 'em_andamento' ? 'Em Andamento' :
+                                                              selectedStatusForPDF === 'pendente' ? 'Pendentes' :
+                                                              selectedStatusForPDF === 'atrasado' ? 'Atrasadas' : selectedStatusForPDF}
+                            </span>
+                          )}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Opção de IA apenas para overview geral */}
+                <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-start gap-3 flex-1">
+                      <div className="flex-shrink-0">
+                        <TrendingUp className="h-5 w-5 text-purple-600 mt-0.5" />
+                      </div>
+                      <div className="flex-1">
+                        <p className="text-base font-medium text-purple-800">
+                          Análise Inteligente com IA
+                        </p>
+                        <p className="text-sm text-purple-600 mt-1">
+                          Ative para gerar um relatório com análise mensal inteligente do que foi feito e o que falta fazer, incluindo análise de checklists.
+                        </p>
+                      </div>
+                    </div>
+                    <Switch
+                      checked={usarIA}
+                      onCheckedChange={setUsarIA}
+                      className="ml-4"
+                    />
                   </div>
                 </div>
-                <Switch
-                  checked={usarIA}
-                  onCheckedChange={setUsarIA}
-                  className="ml-4"
-                />
-              </div>
-            </div>
+              </>
+            )}
           </div>
 
           <div className="flex justify-end gap-4 pt-6 border-t">
@@ -3476,25 +3998,31 @@ const Cronograma = () => {
               onClick={() => {
                 setIsOrganizationModalOpen(false);
                 setUsarIA(false);
+                setTipoOverview('geral');
               }}
               className="px-6"
-              disabled={loadingIA}
+              disabled={loadingIA || loadingMesIA}
             >
               Cancelar
             </Button>
             <Button 
-              onClick={confirmarDownloadPDF}
-              className={usarIA ? "bg-purple-600 hover:bg-purple-700 px-6" : "bg-blue-600 hover:bg-blue-700 px-6"}
-              disabled={loadingIA}
+              onClick={confirmarDownloadPDFAtualizado}
+              className={tipoOverview === 'por_mes' || usarIA ? "bg-purple-600 hover:bg-purple-700 px-6" : "bg-blue-600 hover:bg-blue-700 px-6"}
+              disabled={loadingIA || loadingMesIA || (tipoOverview === 'por_mes' && (!selectedAno || !selectedMes))}
             >
-              {loadingIA ? (
+              {loadingIA || loadingMesIA ? (
                 <>
                   <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
                   Analisando IA...
                 </>
               ) : (
                 <>
-                  {usarIA ? (
+                  {tipoOverview === 'por_mes' ? (
+                    <>
+                      <Calendar className="h-4 w-4 mr-2" />
+                      Gerar Overview
+                    </>
+                  ) : usarIA ? (
                     <>
                       <TrendingUp className="h-4 w-4 mr-2" />
                       Baixar Overview com IA
@@ -3632,6 +4160,7 @@ const Cronograma = () => {
           </div>
         </DialogContent>
       </Dialog>
+
       </div>
     </ErrorBoundary>
   );

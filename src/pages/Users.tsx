@@ -8,7 +8,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Plus, RefreshCw, User, Users as UsersIcon, Mail, Shield, CheckCircle, XCircle, Key, Calendar, Clock, Building, Edit, Save, X, Trash2, Filter, FileText, HelpCircle, LayoutDashboard, Lock } from 'lucide-react';
+import { Plus, RefreshCw, User, Users as UsersIcon, Mail, Shield, CheckCircle, XCircle, Key, Calendar, Clock, Building, Edit, Save, X, Trash2, Filter, FileText, HelpCircle, LayoutDashboard, Lock, Upload, Image as ImageIcon } from 'lucide-react';
 import { toast } from '@/components/ui/use-toast';
 
 interface UserRow {
@@ -30,6 +30,7 @@ interface Organizacao {
   nome: string;
   codigo: string;
   cor_identificacao: string;
+  logo_url?: string;
   ativa: number;
   total_usuarios?: number;
   created_at?: string;
@@ -50,6 +51,10 @@ const Users = () => {
   const [editingOrg, setEditingOrg] = useState<Organizacao | null>(null);
   const [isOrgDialogOpen, setIsOrgDialogOpen] = useState(false);
   const [isCreatingOrg, setIsCreatingOrg] = useState(false);
+  const [logoFile, setLogoFile] = useState<File | null>(null);
+  const [logoPreview, setLogoPreview] = useState<string | null>(null);
+  const [uploadingLogo, setUploadingLogo] = useState(false);
+  const [logoError, setLogoError] = useState<{ [key: number]: boolean }>({});
 
   // Estados para filtros
   const [filtroOrganizacao, setFiltroOrganizacao] = useState<string>('todas');
@@ -359,7 +364,12 @@ const Users = () => {
       }
       
       const data = await res.json();
-      setOrganizacoes(data.data || data || []);
+      const organizacoesData = data.data || data || [];
+      console.log('🔍 Organizações recebidas:', organizacoesData);
+      console.log('🔍 Logo URLs:', organizacoesData.map((o: any) => ({ id: o.id, nome: o.nome, logo_url: o.logo_url })));
+      setOrganizacoes(organizacoesData);
+      // Limpar erros de logo ao recarregar
+      setLogoError({});
     } catch (error) {
       console.error('Erro na requisição de organizações:', error);
       setOrganizacoes([]);
@@ -489,32 +499,156 @@ const Users = () => {
   };
 
   const openCreateOrgDialog = () => {
-    setEditingOrg({ id: 0, nome: '', codigo: '', cor_identificacao: '#6366F1', ativa: 1 } as Organizacao);
+    setEditingOrg({ id: 0, nome: '', codigo: '', cor_identificacao: '#6366F1', logo_url: '', ativa: 1 } as Organizacao);
+    setLogoFile(null);
+    setLogoPreview(null);
     setIsCreatingOrg(true);
     setIsOrgDialogOpen(true);
   };
 
   const openEditOrgDialog = (org: Organizacao) => {
+    console.log('🔍 Abrindo diálogo para editar organização:', {
+      id: org.id,
+      nome: org.nome,
+      logo_url: org.logo_url
+    });
     setEditingOrg({ ...org });
+    setLogoFile(null);
+    setLogoPreview(org.logo_url || null);
     setIsCreatingOrg(false);
     setIsOrgDialogOpen(true);
   };
 
-  const handleSaveOrg = () => {
-    if (!editingOrg) return;
+  const handleLogoFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Validar tipo de arquivo
+    const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp', 'image/svg+xml'];
+    if (!allowedTypes.includes(file.type)) {
+      toast({
+        title: "Erro",
+        description: "Apenas arquivos de imagem são permitidos (jpeg, jpg, png, gif, webp, svg)",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Validar tamanho (15MB)
+    if (file.size > 15 * 1024 * 1024) {
+      toast({
+        title: "Erro",
+        description: "Arquivo muito grande. Tamanho máximo: 15MB",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setLogoFile(file);
+    
+    // Criar preview
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setLogoPreview(reader.result as string);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleUploadLogo = async (): Promise<string | null> => {
+    if (!logoFile) return null;
+
+    setUploadingLogo(true);
+    try {
+      const formData = new FormData();
+      formData.append('logo', logoFile);
+
+      const response = await fetch(`${API_BASE}/organizacoes/upload-logo`, {
+        method: 'POST',
+        headers: {
+          'x-user-organization': 'portes'
+        },
+        body: formData
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || 'Erro ao fazer upload da logo');
+      }
+
+      const data = await response.json();
+      return data.logo_url || null;
+    } catch (error: any) {
+      console.error('Erro ao fazer upload da logo:', error);
+      toast({
+        title: "Erro",
+        description: error.message || "Erro ao fazer upload da logo",
+        variant: "destructive",
+      });
+      return null;
+    } finally {
+      setUploadingLogo(false);
+    }
+  };
+
+  const handleSaveOrg = async () => {
+    if (!editingOrg) {
+      console.error('❌ editingOrg é null!');
+      return;
+    }
+    
+    // Verificar se o ID ainda está presente antes de salvar
+    if (editingOrg.id && editingOrg.id > 0) {
+      console.log('✅ ID válido encontrado antes de salvar:', editingOrg.id);
+    } else {
+      console.log('⚠️ ID não encontrado ou inválido antes de salvar:', editingOrg.id);
+    }
+
+    // Se houver arquivo de logo selecionado, fazer upload primeiro
+    let logoUrl = editingOrg.logo_url || null;
+    if (logoFile) {
+      const uploadedUrl = await handleUploadLogo();
+      if (uploadedUrl) {
+        logoUrl = uploadedUrl;
+      } else {
+        // Se o upload falhar, não continuar
+        return;
+      }
+    }
 
     const orgData = {
       nome: editingOrg.nome,
       codigo: editingOrg.codigo,
       cor_identificacao: editingOrg.cor_identificacao,
+      logo_url: logoUrl,
       ativa: editingOrg.ativa ? 1 : 0
     };
 
-    if (isCreatingOrg) {
-      criarOrganizacao(orgData);
-    } else {
+    // Verificar se é criação ou atualização baseado APENAS no ID
+    // Se editingOrg.id existe e é maior que 0, SEMPRE é uma atualização
+    const hasValidId = editingOrg.id && editingOrg.id > 0;
+    
+    console.log('🔍 Salvando organização:', {
+      id: editingOrg.id,
+      isCreatingOrg,
+      hasValidId,
+      nome: editingOrg.nome,
+      logoUrl,
+      editingOrgCompleto: editingOrg
+    });
+
+    if (hasValidId) {
+      // SEMPRE atualizar se tiver ID válido, independente de isCreatingOrg
+      console.log('✅ Atualizando organização existente (ID:', editingOrg.id, ')');
       atualizarOrganizacao(editingOrg.id, orgData);
+    } else {
+      // Criar nova organização apenas se não tiver ID válido
+      console.log('✅ Criando nova organização');
+      criarOrganizacao(orgData);
     }
+
+    // Limpar estados após salvar
+    setLogoFile(null);
+    setLogoPreview(null);
   };
 
   const isPortes = currentUser?.organizacao === 'portes';
@@ -808,13 +942,54 @@ const Users = () => {
                         <div className="flex flex-col lg:flex-row lg:items-center gap-4 lg:gap-6">
                           <div className="flex items-center gap-3 min-w-0 flex-1">
                             <div 
-                              className="w-12 h-12 rounded-full flex items-center justify-center flex-shrink-0"
-                              style={{ backgroundColor: org.cor_identificacao + '20' }}
+                              className="w-12 h-12 rounded-full flex items-center justify-center flex-shrink-0 overflow-hidden"
+                              style={{ 
+                                backgroundColor: (org.logo_url && !logoError[org.id]) ? 'transparent' : (org.cor_identificacao + '20')
+                              }}
                             >
-                              <Building 
-                                className="h-6 w-6" 
-                                style={{ color: org.cor_identificacao }}
-                              />
+                              {org.logo_url && !logoError[org.id] ? (
+                                <img
+                                  src={(() => {
+                                    // Se já é URL completa, usar diretamente
+                                    if (org.logo_url.startsWith('http')) {
+                                      return org.logo_url;
+                                    }
+                                    // Se logo_url começa com /api, remover /api para evitar duplicação
+                                    // porque API_BASE já contém /api
+                                    const logoPath = org.logo_url.startsWith('/api') 
+                                      ? org.logo_url.substring(4) // Remove '/api' do início
+                                      : org.logo_url;
+                                    return `${API_BASE}${logoPath}`;
+                                  })()}
+                                  alt={`Logo ${org.nome}`}
+                                  className="w-full h-full object-cover"
+                                  style={{ borderRadius: '50%' }}
+                                  onLoad={() => {
+                                    console.log('✅ Logo carregada com sucesso:', org.nome, org.logo_url);
+                                  }}
+                                  onError={(e) => {
+                                    const logoUrl = (() => {
+                                      if (org.logo_url.startsWith('http')) {
+                                        return org.logo_url;
+                                      }
+                                      const logoPath = org.logo_url.startsWith('/api') 
+                                        ? org.logo_url.substring(4)
+                                        : org.logo_url;
+                                      return `${API_BASE}${logoPath}`;
+                                    })();
+                                    console.error('❌ Erro ao carregar logo:', org.nome);
+                                    console.error('❌ URL original:', org.logo_url);
+                                    console.error('❌ URL tentada:', logoUrl);
+                                    // Se a imagem falhar, marcar como erro para mostrar o ícone
+                                    setLogoError(prev => ({ ...prev, [org.id]: true }));
+                                  }}
+                                />
+                              ) : (
+                                <Building 
+                                  className="h-6 w-6" 
+                                  style={{ color: org.cor_identificacao }}
+                                />
+                              )}
                             </div>
                             <div className="min-w-0 flex-1">
                               <div className="font-semibold text-base sm:text-lg truncate">{org.nome}</div>
@@ -1305,7 +1480,17 @@ const Users = () => {
       </Dialog>
 
       {/* Dialog de Edição/Criação de Organização - Fora do container principal */}
-      <Dialog open={isOrgDialogOpen} onOpenChange={setIsOrgDialogOpen}>
+      <Dialog open={isOrgDialogOpen} onOpenChange={(open) => {
+        setIsOrgDialogOpen(open);
+        if (!open) {
+          // Limpar estados ao fechar
+          console.log('🔍 Fechando diálogo de organização');
+          setLogoFile(null);
+          setLogoPreview(null);
+          setEditingOrg(null);
+          setIsCreatingOrg(false);
+        }
+      }}>
         <DialogContent className="max-w-md mx-4 sm:mx-auto">
           <DialogHeader>
             <DialogTitle>{isCreatingOrg ? 'Criar Organização' : 'Editar Organização'}</DialogTitle>
@@ -1322,7 +1507,10 @@ const Users = () => {
                 <Input
                   id="org-nome"
                   value={editingOrg.nome}
-                  onChange={(e) => setEditingOrg({ ...editingOrg, nome: e.target.value })}
+                  onChange={(e) => {
+                    if (!editingOrg) return;
+                    setEditingOrg({ ...editingOrg, nome: e.target.value });
+                  }}
                   placeholder="Ex: SENAC"
                   required
                 />
@@ -1333,14 +1521,27 @@ const Users = () => {
                 <Input
                   id="org-codigo"
                   value={editingOrg.codigo}
-                  onChange={(e) => setEditingOrg({ 
-                    ...editingOrg, 
-                    codigo: e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '_')
-                  })}
+                  onChange={(e) => {
+                    if (!editingOrg) return;
+                    // Se estiver editando (tem ID), manter o código original sem normalizar
+                    // Se estiver criando (não tem ID ou ID é 0), normalizar o código
+                    const newCodigo = isCreatingOrg 
+                      ? e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '_')
+                      : e.target.value; // Manter código original ao editar
+                    setEditingOrg({ 
+                      ...editingOrg, 
+                      codigo: newCodigo
+                    });
+                  }}
                   placeholder="Ex: senac"
                   required
+                  disabled={!isCreatingOrg} // Desabilitar edição do código quando estiver editando
                 />
-                <p className="text-xs text-gray-500">Usado como identificador único (apenas letras, números e _)</p>
+                <p className="text-xs text-gray-500">
+                  {isCreatingOrg 
+                    ? 'Usado como identificador único (apenas letras, números e _)' 
+                    : 'O código não pode ser alterado após a criação da organização'}
+                </p>
               </div>
 
               <div className="space-y-2">
@@ -1363,6 +1564,86 @@ const Users = () => {
               </div>
 
               <div className="space-y-2">
+                <Label htmlFor="org-logo">Logo da Organização</Label>
+                <div className="space-y-3">
+                  <div className="flex items-center gap-3">
+                    <label
+                      htmlFor="logo-upload"
+                      className="flex-1 cursor-pointer"
+                    >
+                      <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 hover:border-blue-500 hover:bg-blue-50 transition-colors">
+                        <div className="flex flex-col items-center justify-center gap-2">
+                          {uploadingLogo ? (
+                            <>
+                              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                              <p className="text-sm text-gray-600">Enviando...</p>
+                            </>
+                          ) : logoPreview ? (
+                            <>
+                              <img
+                                src={logoPreview.startsWith('data:') || logoPreview.startsWith('http') ? logoPreview : `${API_BASE}${logoPreview}`}
+                                alt="Preview logo"
+                                className="w-16 h-16 object-cover rounded-lg"
+                                onError={(e) => {
+                                  e.currentTarget.style.display = 'none';
+                                }}
+                              />
+                              <p className="text-xs text-gray-600">Clique para alterar</p>
+                            </>
+                          ) : (
+                            <>
+                              <Upload className="h-8 w-8 text-gray-400" />
+                              <p className="text-sm text-gray-600">Clique para fazer upload</p>
+                              <p className="text-xs text-gray-400">PNG, JPG, GIF até 15MB</p>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                      <input
+                        id="logo-upload"
+                        type="file"
+                        accept="image/jpeg,image/jpg,image/png,image/gif,image/webp,image/svg+xml"
+                        onChange={handleLogoFileSelect}
+                        className="hidden"
+                        disabled={uploadingLogo}
+                      />
+                    </label>
+                  </div>
+                  {logoFile && (
+                    <div className="flex items-center justify-between p-2 bg-blue-50 rounded-lg">
+                      <div className="flex items-center gap-2">
+                        <ImageIcon className="h-4 w-4 text-blue-600" />
+                        <span className="text-sm text-gray-700">{logoFile.name}</span>
+                        <span className="text-xs text-gray-500">
+                          ({(logoFile.size / 1024 / 1024).toFixed(2)} MB)
+                        </span>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => {
+                          setLogoFile(null);
+                          setLogoPreview(editingOrg.logo_url || null);
+                          const input = document.getElementById('logo-upload') as HTMLInputElement;
+                          if (input) input.value = '';
+                        }}
+                        className="h-6 px-2 text-xs"
+                      >
+                        <X className="h-3 w-3" />
+                      </Button>
+                    </div>
+                  )}
+                  {!logoPreview && !logoFile && (
+                    <div className="w-16 h-16 rounded-lg overflow-hidden border-2 border-gray-200 flex items-center justify-center bg-gray-50">
+                      <Building className="h-8 w-8 text-gray-400" />
+                    </div>
+                  )}
+                </div>
+                <p className="text-xs text-gray-500">Faça upload da logo da organização (máximo 15MB)</p>
+              </div>
+
+              <div className="space-y-2">
                 <Label>Status</Label>
                 <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
                   <div className="flex items-center gap-2">
@@ -1377,7 +1658,10 @@ const Users = () => {
                   </div>
                   <Switch
                     checked={editingOrg.ativa === 1}
-                    onCheckedChange={(checked) => setEditingOrg({ ...editingOrg, ativa: checked ? 1 : 0 })}
+                    onCheckedChange={(checked) => {
+                      if (!editingOrg) return;
+                      setEditingOrg({ ...editingOrg, ativa: checked ? 1 : 0 });
+                    }}
                   />
                 </div>
               </div>
@@ -1386,22 +1670,35 @@ const Users = () => {
                 <Button
                   variant="outline"
                   onClick={() => {
+                    console.log('🔍 Cancelando edição/criação de organização');
                     setIsOrgDialogOpen(false);
                     setEditingOrg(null);
                     setIsCreatingOrg(false);
+                    setLogoFile(null);
+                    setLogoPreview(null);
                   }}
                   className="w-full sm:w-auto"
+                  disabled={uploadingLogo}
                 >
                   <X className="h-4 w-4 mr-2" />
                   Cancelar
                 </Button>
                 <Button
                   onClick={handleSaveOrg}
-                  disabled={!editingOrg.nome || !editingOrg.codigo}
+                  disabled={!editingOrg.nome || !editingOrg.codigo || uploadingLogo}
                   className="w-full sm:w-auto"
                 >
-                  <Save className="h-4 w-4 mr-2" />
-                  {isCreatingOrg ? 'Criar' : 'Salvar Alterações'}
+                  {uploadingLogo ? (
+                    <>
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                      Enviando...
+                    </>
+                  ) : (
+                    <>
+                      <Save className="h-4 w-4 mr-2" />
+                      {isCreatingOrg ? 'Criar' : 'Salvar Alterações'}
+                    </>
+                  )}
                 </Button>
               </div>
             </div>

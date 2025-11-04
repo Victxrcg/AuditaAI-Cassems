@@ -570,13 +570,43 @@ exports.atualizarOrganizacao = async (req, res) => {
     }
 
     if (codigo !== undefined) {
-      const codigoNormalizado = codigo.toLowerCase()
-        .replace(/[^a-z0-9\s-]/g, '')
-        .replace(/\s+/g, '_')
-        .replace(/-+/g, '_')
-        .substring(0, 100);
-      updates.push('codigo = ?');
-      params.push(codigoNormalizado);
+      // Verificar se o código está sendo alterado
+      const codigoAtual = existentesArray[0].codigo;
+      
+      if (codigo !== codigoAtual) {
+        // Se o código está mudando, normalizar apenas para verificar conflitos
+        const codigoNormalizado = codigo.toLowerCase()
+          .replace(/[^a-z0-9\s-]/g, '')
+          .replace(/\s+/g, '_')
+          .replace(/-+/g, '_')
+          .substring(0, 100);
+
+        const conflito = await pool.query(
+          'SELECT id FROM organizacoes WHERE codigo = ? AND id != ?',
+          [codigoNormalizado, id]
+        );
+        
+        const conflitoArray = Array.isArray(conflito) ? conflito : (conflito && conflito[0] ? [conflito[0]] : []);
+
+        if (conflitoArray.length > 0) {
+          return res.status(400).json({
+            error: 'Código já existe',
+            details: 'Já existe outra organização com este código'
+          });
+        }
+
+        // Atualizar codigo na tabela usuarios_cassems também
+        await pool.query(
+          'UPDATE usuarios_cassems SET organizacao = ? WHERE organizacao = ?',
+          [codigoNormalizado, codigoAtual]
+        );
+        
+        updates.push('codigo = ?');
+        params.push(codigoNormalizado);
+      } else {
+        // Se o código não mudou, NÃO atualizar (manter o código original)
+        console.log('🔍 Código não alterado, mantendo código original:', codigoAtual);
+      }
     }
 
     if (cor_identificacao !== undefined) {
