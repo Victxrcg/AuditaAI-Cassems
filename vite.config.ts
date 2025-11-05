@@ -24,7 +24,9 @@ export default defineConfig(({ mode }) => {
         'api-compliance.portes.com.br'
       ],
       fs: {
-        allow: ['..', '../.env']
+        allow: ['..', '../.env'],
+        // Excluir diretório .git do servidor de desenvolvimento
+        deny: ['.git']
       }
     },
   };
