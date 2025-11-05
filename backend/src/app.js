@@ -38,6 +38,23 @@ app.use(cors({
   ]
 }));
 
+// Normalizar charset de JSON para evitar erros do iconv-lite/raw-body
+app.use((req, _res, next) => {
+  const ct = req.headers['content-type'];
+  if (ct && typeof ct === 'string' && ct.toLowerCase().includes('application/json')) {
+    // Força charset utf-8 quando vier algo inesperado/exótico
+    if (!/charset\s*=\s*utf-8/i.test(ct)) {
+      req.headers['content-type'] = 'application/json; charset=utf-8';
+    }
+  }
+  next();
+});
+
+// Aquecer iconv-lite para garantir encodings básicos carregados
+try {
+  require('iconv-lite').encodingExists('utf-8');
+} catch (_) {}
+
 // Middleware para lidar com preflight requests
 app.options('*', (req, res) => {
   res.header('Access-Control-Allow-Origin', req.headers.origin || '*');
