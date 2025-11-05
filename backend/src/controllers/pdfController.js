@@ -514,62 +514,67 @@ const analisarCronogramaComIA = async (cronogramasFormatados, organizacoes, user
     // Montar prompt para a IA
     const isComparativo = userOrg === 'portes' && organizacaoFiltro === 'todos';
     
-    let prompt = `Você é um especialista em análise de cronogramas e gestão de projetos. Analise os dados e gere um relatório claro para pessoas leigas, em pt-BR, seguindo EXATAMENTE o formato abaixo em Markdown.
+    // Preparar dados completos de demandas para análise
+    const demandasCompletas = cronogramasFormatados.map(d => ({
+      titulo: d.titulo,
+      descricao: d.descricao || 'Sem descrição',
+      responsavel: d.responsavel_nome || 'Não definido',
+      status: d.status,
+      dataInicio: d.data_inicio,
+      dataFim: d.data_fim,
+      motivoAtraso: d.motivo_atraso || null,
+      checklists: d.checklists || [],
+      faseAtual: d.fase_atual || null
+    }));
 
-PERÍODO ANALISADO: ${primeiraData.toLocaleDateString('pt-BR')} até ${ultimaData.toLocaleDateString('pt-BR')}
+    let prompt = `Você é um especialista em análise de cronogramas. Gere um relatório SIMPLES, DIRETO e RÁPIDO em pt-BR, seguindo EXATAMENTE este formato:
 
-${isComparativo ? `VISUALIZANDO DADOS DE MÚLTIPLAS ORGANIZAÇÕES: ${organizacoesList.join(', ')}` : `ORGANIZAÇÃO: ${organizacoesList[0] || 'N/A'}`}
+PERÍODO: ${primeiraData.toLocaleDateString('pt-BR')} até ${ultimaData.toLocaleDateString('pt-BR')}
 
-DADOS POR MÊS (JSON):
-${JSON.stringify(resumoMensal, null, 2)}
+${isComparativo ? `ORGANIZAÇÕES: ${organizacoesList.join(', ')}` : `ORGANIZAÇÃO: ${organizacoesList[0] || 'N/A'}`}
 
-${isComparativo ? `COMPARAÇÃO ENTRE ORGANIZAÇÕES (JSON):
-${JSON.stringify(statsPorOrganizacao, null, 2)}` : ''}
+DADOS COMPLETOS DAS DEMANDAS:
+${JSON.stringify(demandasCompletas, null, 2)}
 
-REQUISITOS DE FORMATO (OBRIGATÓRIO):
-- Use Markdown com os seguintes títulos/seções fixas:
-  # OVERVIEW DO CRONOGRAMA – ANÁLISE INTELIGENTE
-  ## Resumo Executivo
-  - Veredito geral do período (satisfatório, moderado, crítico, instável) e por quê.
-  ## Período
-  ## Por Mês
-    ### Mês/Ano (ex.: março/2025)
-      O QUE FOI FEITO
-      O QUE ESTÁ EM ANDAMENTO
-      O QUE NÃO FOI FEITO
-      Checklists
-      Tendência (uma linha): comportamento do mês (ex.: mais atrasos, melhora de produtividade, estabilidade)
-  ## Estatísticas Resumidas
-  ${isComparativo ? '## Comparativo\n' : ''}
-- Nas listas de cada mês, prefixe os bullets exatamente com:
-(Nao mostrar a legenda de [OK] e [PENDENTE])
-  - [OK] para itens concluídos
-  - [PENDENTE] para itens pendentes/atrasados
-- Limite a no máximo 5 bullets por lista; se houver mais, escreva: "e mais X itens".
-- Não invente dados; use somente o conteúdo fornecido.
-- Linguagem simples, objetiva, sem jargões.
+FORMATO OBRIGATÓRIO (Markdown):
 
-CONTEÚDO ESPERADO:
-1) Resumo Executivo: 3–5 linhas sobre o período.
-2) Período: datas inicial e final.
-3) Por Mês: para cada mês presente no JSON, inclua:
-   - O QUE FOI FEITO: com [OK] "Demanda — Responsável". Se houver campos de duração (início/fim), indique entre parênteses: "(de INÍCIO a FIM — DURACAO dias)".
-   - O QUE NÃO FOI FEITO: até 5 bullets com [PENDENTE] "Demanda — Responsável". Para demandas atrasadas, SEMPRE incluir o motivo do atraso se disponível: "(motivo: MOTIVO)".
-   - Checklists: informe totais concluídos vs pendentes.
-   - Tendência: 1 frase simples.
-4) Estatísticas Resumidas: números agregados do período.
-${isComparativo ? '5) Comparativo entre Organizações: ranking e destaques.\n' : ''}5) Recomendações: 3–5 ações objetivas.
+## Resumo do Período
+[Máximo 5 linhas. Resumo geral do que aconteceu no período, sem enrolação.]
 
-Exemplo (ilustrativo do formato, não invente dados):
-## Por Mês
-### janeiro/2025
-O QUE FOI FEITO
-- [OK] Ajuste do módulo X — Maria
-O QUE NÃO FOI FEITO
-- [EM ANDAMENTO] Integração Y — João
-- [PENDENTE] Integração Z — João (motivo: MOTIVO) *As vezes ainda nao tem inicio definido, ou ainda nao se iniciou*
-Checklists
-- Concluídos: 3 | Pendentes: 1`;
+## Demandas
+
+Para CADA demanda, use EXATAMENTE este formato:
+
+### [Nome da Demanda] - ([Responsável])
+
+**Status:** [concluída/em andamento/atrasada/pendente]
+
+**Descrição:** [Breve resumo da demanda em 1-2 linhas]
+
+[Se concluída:]
+- Concluída em: [data de conclusão]
+- Checklists concluídos: [resumo dos checklists concluídos, listando apenas os que foram concluídos]
+
+[Se em andamento:]
+- Ainda em andamento. [Breve explicação do status atual]
+- Checklists: [resumo dos checklists - quais concluídos e quais pendentes]
+
+[Se atrasada:]
+- Atrasada. Motivo: [motivo do atraso se disponível]
+- Checklists: [resumo dos checklists - quais concluídos e quais pendentes]
+
+[Se pendente:]
+- Pendente. [Breve explicação]
+- Checklists: [resumo dos checklists pendentes]
+
+REGRAS IMPORTANTES:
+- Seja DIRETO. Sem enrolação.
+- Máximo 3-4 linhas por demanda.
+- Se a demanda tem data_inicio, ela JÁ INICIOU. Nunca diga "ainda não iniciou" se tiver data_inicio.
+- Para checklists concluídos, liste apenas os títulos em 1 linha: "Checklists concluídos: X, Y, Z"
+- Para checklists pendentes, liste apenas os títulos em 1 linha: "Checklists pendentes: X, Y, Z"
+- Use linguagem simples e objetiva.
+- NÃO invente dados. Use apenas o que está no JSON.`;
 
     // Chamar OpenAI
     const completion = await openai.chat.completions.create({
@@ -577,7 +582,7 @@ Checklists
       messages: [
         {
           role: "system",
-          content: "Você gera relatórios em pt-BR, para leigos, sempre em Markdown determinístico com títulos H1/H2/H3, bullets prefixados com [OK]/[PENDENTE], sem emojis, sem jargões."
+          content: "Você gera relatórios SIMPLES, DIRETOS e RÁPIDOS em pt-BR, para leigos, sempre em Markdown determinístico. Sem enrolação. Foco em clareza e objetividade. Use apenas os dados fornecidos."
         },
         { role: "user", content: prompt }
       ],
@@ -942,131 +947,77 @@ const analisarCronogramaPorMesComIA = async (cronogramasFormatados, organizacoes
     const isComparativo = userOrg === 'portes' && organizacaoFiltro === 'todos';
     const organizacoesList = Object.keys(organizacoes);
     
-    let prompt = `Você é um especialista em análise de cronogramas e gestão de projetos. Analise os dados e gere um relatório claro e detalhado para pessoas leigas, em pt-BR, seguindo EXATAMENTE o formato abaixo em Markdown.
+    // Preparar dados completos das demandas do mês
+    const demandasCompletasMes = cronogramasDoMes.map(d => ({
+      titulo: d.titulo,
+      descricao: d.descricao || 'Sem descrição',
+      responsavel: d.responsavel_nome || 'Não definido',
+      status: d.status,
+      dataInicio: d.data_inicio,
+      dataFim: d.data_fim,
+      motivoAtraso: d.motivo_atraso || null,
+      checklists: d.checklists || [],
+      faseAtual: d.fase_atual || null,
+      concluidaNoMes: demandasConcluidasNoMes.some(c => c.id === d.id),
+      concluidaDepois: demandasIniciadasNoMesConcluidasDepois.some(c => c.id === d.id),
+      mesConclusao: d.data_fim ? new Date(d.data_fim).toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' }) : null
+    }));
+
+    let prompt = `Você é um especialista em análise de cronogramas. Gere um relatório SIMPLES, DIRETO e RÁPIDO em pt-BR, seguindo EXATAMENTE este formato:
 
 MÊS ANALISADO: ${nomeMes} (${mesCode})
 
-${isComparativo ? `VISUALIZANDO DADOS DE MÚLTIPLAS ORGANIZAÇÕES: ${organizacoesList.join(', ')}` : `ORGANIZAÇÃO: ${organizacoesList[0] || 'N/A'}`}
-
-DADOS DO MÊS (JSON):
-${JSON.stringify({
-  mes: nomeMes,
-  mesCodigo: mesCode,
-  totalDemandasIniciadasNoMes: cronogramasDoMes.length,
-  demandasConcluidasNoMes: demandasConcluidasNoMes.map(d => ({
-    titulo: d.titulo,
-    descricao: d.descricao || 'Sem descrição',
-    responsavel: d.responsavel_nome || 'Não definido',
-    organizacao: d.organizacao,
-    dataInicio: d.data_inicio,
-    dataFim: d.data_fim,
-    status: 'concluida_no_mes',
-    checklists: d.checklists?.map(c => ({
-      titulo: c.titulo,
-      descricao: c.descricao,
-      concluido: c.concluido,
-      concluidoNoMes: c.concluido && (c.updated_at ? (new Date(c.updated_at) >= inicioMes && new Date(c.updated_at) <= fimMes) : false)
-    })) || []
-  })),
-  demandasIniciadasNoMesConcluidasDepois: demandasIniciadasNoMesConcluidasDepois.map(d => ({
-    titulo: d.titulo,
-    descricao: d.descricao || 'Sem descrição',
-    responsavel: d.responsavel_nome || 'Não definido',
-    organizacao: d.organizacao,
-    dataInicio: d.data_inicio,
-    dataFim: d.data_fim,
-    status: 'concluida_depois',
-    mesConclusao: d.data_fim ? new Date(d.data_fim).toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' }) : null,
-    checklists: d.checklists?.map(c => ({
-      titulo: c.titulo,
-      descricao: c.descricao,
-      concluido: c.concluido,
-      concluidoNoMes: c.concluido && (c.updated_at ? (new Date(c.updated_at) >= inicioMes && new Date(c.updated_at) <= fimMes) : false)
-    })) || []
-  })),
-  demandasEmAndamento: demandasEmAndamentoNoMes.map(d => ({
-    titulo: d.titulo,
-    descricao: d.descricao || 'Sem descrição',
-    responsavel: d.responsavel_nome || 'Não definido',
-    organizacao: d.organizacao,
-    dataInicio: d.data_inicio,
-    dataFim: d.data_fim,
-    status: d.status,
-    faseAtual: d.fase_atual,
-    checklists: d.checklists?.map(c => ({
-      titulo: c.titulo,
-      descricao: c.descricao,
-      concluido: c.concluido,
-      concluidoNoMes: c.concluido && (c.updated_at ? (new Date(c.updated_at) >= inicioMes && new Date(c.updated_at) <= fimMes) : false)
-    })) || []
-  })),
-  checklistsConcluidos: checklistsConcluidosNoMes.map(c => ({
-    titulo: c.titulo,
-    descricao: c.descricao || 'Sem descrição',
-    demanda: c.demanda,
-    demandaDescricao: c.demandaDescricao || 'Sem descrição'
-  })),
-  resumo: {
-    totalIniciadasNoMes: cronogramasDoMes.length,
-    concluidasNoMes: demandasConcluidasNoMes.length,
-    concluidasDepoisDoMes: demandasIniciadasNoMesConcluidasDepois.length,
-    emAndamento: demandasEmAndamentoNoMes.length,
-    pendentes: demandasPendentesNoMes.length,
-    atrasadas: demandasAtrasadasNoMes.length,
-    totalChecklistsConcluidos: checklistsConcluidosNoMes.length
-  }
-}, null, 2)}
+${isComparativo ? `ORGANIZAÇÕES: ${organizacoesList.join(', ')}` : `ORGANIZAÇÃO: ${organizacoesList[0] || 'N/A'}`}
 
 IMPORTANTE: Este relatório analisa APENAS demandas que INICIARAM no mês ${nomeMes}. 
 Demandas que iniciaram em outros meses mas estiveram ativas neste mês NÃO são incluídas.
 
-REQUISITOS DE FORMATO (OBRIGATÓRIO):
-- Use Markdown com os seguintes títulos/seções fixas:
-  # OVERVIEW DO CRONOGRAMA – ${nomeMes.toUpperCase()}
-  ## Resumo Executivo
-  - Veredito geral do mês (satisfatório, moderado, crítico, instável) e por quê.
-  - Mencione quantas demandas iniciaram no mês e o status atual delas.
-  ## DEMANDAS QUE INICIARAM NESTE MÊS
-    - Liste TODAS as demandas que iniciaram no mês ${nomeMes}
-    - Para cada demanda, explique claramente:
-      * Se foi concluída no mesmo mês: "[OK] Nome da demanda - Concluída em ${nomeMes}"
-      * Se foi concluída depois: "[OK] Nome da demanda - Iniciada em ${nomeMes}, concluída em [MÊS DE CONCLUSÃO]"
-      * Se ainda está em andamento: "[EM ANDAMENTO] Nome da demanda - Status atual"
-      * Se está pendente: "[PENDENTE] Nome da demanda - Status atual"
-      * Se está atrasada: "[ATRASADA] Nome da demanda - Status atual"
-  ## O QUE FOI FEITO NESTE MÊS
-    - Liste apenas os pontos concluídos DENTRO do mês ${nomeMes}:
-      * Demandas concluídas no mês (com descrição detalhada)
-      * Checklists concluídos no mês (com descrição detalhada)
-      * Para cada item, analise a descrição e explique o que foi realizado
-  ## STATUS DAS DEMANDAS INICIADAS NO MÊS
-    - Explique claramente o status de cada demanda que iniciou no mês:
-      * Quantas iniciaram e foram concluídas no mesmo mês
-      * Quantas iniciaram no mês mas foram concluídas depois (especifique em qual mês)
-      * Quantas ainda estão em andamento
-      * Quantas estão pendentes ou atrasadas
-  ## Análise Detalhada
-    - Analise as descrições das demandas e checklists concluídos
-    - Explique o impacto e importância de cada conclusão
-    - Destaque se houve demandas que se estenderam além do mês e por quê
-  ## Estatísticas do Mês
-- Nas listas, prefixe os bullets exatamente com:
-  - [OK] para itens concluídos
-  - [EM ANDAMENTO] para itens em andamento
-  - [PENDENTE] para itens pendentes
-  - [ATRASADA] para itens atrasados
-- NÃO invente dados; use somente o conteúdo fornecido.
-- Linguagem simples, objetiva, sem jargões.
-- Seja detalhado na análise das descrições e checklists.
-- SEMPRE explique quando uma demanda iniciou no mês mas foi concluída depois, mencionando o mês de conclusão.
+DADOS COMPLETOS DAS DEMANDAS DO MÊS:
+${JSON.stringify(demandasCompletasMes, null, 2)}
 
-CONTEÚDO ESPERADO:
-1) Resumo Executivo: 3–5 linhas sobre o mês, mencionando quantas demandas iniciaram e seus status.
-2) DEMANDAS QUE INICIARAM NESTE MÊS: lista completa de todas as demandas que iniciaram, com status claro de cada uma.
-3) O QUE FOI FEITO NESTE MÊS: apenas itens concluídos dentro do mês ${nomeMes}.
-4) STATUS DAS DEMANDAS INICIADAS NO MÊS: explicação clara de quantas iniciaram, quantas concluíram no mês, quantas concluíram depois e quantas ainda estão em andamento.
-5) Análise Detalhada: análise profunda das descrições e impacto das conclusões.
-6) Estatísticas do Mês: números agregados do mês.`;
+FORMATO OBRIGATÓRIO (Markdown):
+
+## Resumo do Mês
+[Máximo 5 linhas. Resumo geral do que aconteceu no mês ${nomeMes}, sem enrolação.]
+
+## Demandas
+
+Para CADA demanda que iniciou no mês ${nomeMes}, use EXATAMENTE este formato:
+
+### [Nome da Demanda] - ([Responsável])
+
+**Status:** [concluída/em andamento/atrasada/pendente]
+
+**Descrição:** [Breve resumo da demanda em 1-2 linhas]
+
+[Se concluída no mesmo mês:]
+- Concluída em: ${nomeMes}
+- Checklists concluídos: [resumo dos checklists concluídos no mês, listando apenas os que foram concluídos]
+
+[Se concluída depois do mês:]
+- Iniciada em ${nomeMes}, concluída em: [mês de conclusão]
+- Checklists concluídos: [resumo dos checklists concluídos, listando apenas os que foram concluídos]
+
+[Se em andamento:]
+- Ainda em andamento. [Breve explicação do status atual]
+- Checklists: [resumo dos checklists - quais concluídos e quais pendentes]
+
+[Se atrasada:]
+- Atrasada. Motivo: [motivo do atraso se disponível]
+- Checklists: [resumo dos checklists - quais concluídos e quais pendentes]
+
+[Se pendente:]
+- Pendente. [Breve explicação]
+- Checklists: [resumo dos checklists pendentes]
+
+REGRAS IMPORTANTES:
+- Seja DIRETO. Sem enrolação.
+- Máximo 3-4 linhas por demanda.
+- Se a demanda tem data_inicio no mês ${nomeMes}, ela JÁ INICIOU. Nunca diga "ainda não iniciou".
+- Para checklists concluídos, liste apenas os títulos em 1 linha: "Checklists concluídos: X, Y, Z"
+- Para checklists pendentes, liste apenas os títulos em 1 linha: "Checklists pendentes: X, Y, Z"
+- Use linguagem simples e objetiva.
+- NÃO invente dados. Use apenas o que está no JSON.`;
 
     // Chamar OpenAI
     const completion = await openai.chat.completions.create({
@@ -1074,7 +1025,7 @@ CONTEÚDO ESPERADO:
       messages: [
         {
           role: "system",
-          content: "Você gera relatórios detalhados em pt-BR, para leigos, sempre em Markdown determinístico com títulos H1/H2/H3, bullets prefixados com [OK]/[EM ANDAMENTO], sem emojis, sem jargões. Analise profundamente as descrições e checklists."
+          content: "Você gera relatórios SIMPLES, DIRETOS e RÁPIDOS em pt-BR, para leigos, sempre em Markdown determinístico. Sem enrolação. Foco em clareza e objetividade. Use apenas os dados fornecidos."
         },
         { role: "user", content: prompt }
       ],
