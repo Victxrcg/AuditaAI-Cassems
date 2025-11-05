@@ -866,23 +866,59 @@ const analisarCronogramaPorMesComIA = async (cronogramasFormatados, organizacoes
     
     // Preparar dados detalhados para a IA
     // Demandas que iniciaram no mês e foram concluídas no mesmo mês
+    // Usar updated_at (data real de conclusão) quando status é 'concluido'
     const demandasConcluidasNoMes = cronogramasDoMes.filter(d => {
       if (d.status !== 'concluido') return false;
-      if (d.data_fim) {
-        const df = new Date(d.data_fim);
-        return df >= inicioMes && df <= fimMes;
+      
+      // Usar updated_at como data de conclusão real
+      if (!d.updated_at) return false;
+      
+      const dataConclusao = new Date(d.updated_at);
+      
+      // Verificar se a data de conclusão está dentro do período de data_inicio/data_fim
+      const di = d.data_inicio ? new Date(d.data_inicio) : null;
+      const df = d.data_fim ? new Date(d.data_fim) : null;
+      
+      // Se tem data_inicio, verificar se a conclusão está depois do início
+      if (di && dataConclusao < di) return false;
+      
+      // Se tem data_fim, verificar se a conclusão está antes do fim (ou no mesmo dia)
+      if (df) {
+        const dfEnd = new Date(df);
+        dfEnd.setHours(23, 59, 59, 999);
+        if (dataConclusao > dfEnd) return false;
       }
-      return false;
+      
+      // Verificar se a conclusão foi no mês especificado
+      return dataConclusao >= inicioMes && dataConclusao <= fimMes;
     });
     
     // Demandas que iniciaram no mês mas foram concluídas depois do mês
+    // Usar updated_at (data real de conclusão) quando status é 'concluido'
     const demandasIniciadasNoMesConcluidasDepois = cronogramasDoMes.filter(d => {
       if (d.status !== 'concluido') return false;
-      if (d.data_fim) {
-        const df = new Date(d.data_fim);
-        return df > fimMes;
+      
+      // Usar updated_at como data de conclusão real
+      if (!d.updated_at) return false;
+      
+      const dataConclusao = new Date(d.updated_at);
+      
+      // Verificar se a data de conclusão está dentro do período de data_inicio/data_fim
+      const di = d.data_inicio ? new Date(d.data_inicio) : null;
+      const df = d.data_fim ? new Date(d.data_fim) : null;
+      
+      // Se tem data_inicio, verificar se a conclusão está depois do início
+      if (di && dataConclusao < di) return false;
+      
+      // Se tem data_fim, verificar se a conclusão está antes do fim (ou no mesmo dia)
+      if (df) {
+        const dfEnd = new Date(df);
+        dfEnd.setHours(23, 59, 59, 999);
+        if (dataConclusao > dfEnd) return false;
       }
-      return false;
+      
+      // Verificar se a conclusão foi depois do mês especificado
+      return dataConclusao > fimMes;
     });
     
     // Demandas que iniciaram no mês e ainda estão em andamento
