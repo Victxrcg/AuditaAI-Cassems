@@ -3797,26 +3797,7 @@ const Cronograma = () => {
                 </Select>
               </div>
             )}
-            
-            {/* Informação quando organização já está selecionada */}
-            {organizacaoSelecionada && (
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                <div className="flex items-start gap-3">
-                  <div className="flex-shrink-0">
-                    <Building className="h-5 w-5 text-blue-600 mt-0.5" />
-                  </div>
-                  <div>
-                    <p className="text-base font-medium text-blue-800">
-                      Overview da empresa selecionada: {organizacoes.find(o => o.codigo === organizacaoSelecionada)?.nome || organizacaoSelecionada.toUpperCase()}
-                    </p>
-                    <p className="text-sm text-blue-600 mt-2">
-                      O overview será gerado apenas para a empresa selecionada no cronograma.
-                    </p>
-                  </div>
-                </div>
-              </div>
-            )}
-
+      
             {/* Campos condicionais baseados no tipo */}
             {tipoOverview === 'geral' ? (
               <div className="space-y-3">

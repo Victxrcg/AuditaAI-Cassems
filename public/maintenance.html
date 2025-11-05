@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Compliance App - Sistema em Manutenção</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Helvetica Neue', sans-serif;
+            background: linear-gradient(180deg, #f0f0f0 0%, #e8e8e8 100%);
+            color: #202124;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .container {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            max-width: 1200px;
+            width: 100%;
+            gap: 60px;
+        }
+
+        .content {
+            flex: 1;
+            min-width: 300px;
+        }
+
+        .logo {
+            font-size: 32px;
+            font-weight: 600;
+            margin-bottom: 20px;
+            color: #202124;
+            letter-spacing: -0.5px;
+        }
+
+        .logo-text {
+            color: #4285f4;
+        }
+
+        .error-code {
+            font-size: 96px;
+            font-weight: 300;
+            color: #5f6368;
+            line-height: 1;
+            margin-bottom: 10px;
+        }
+
+        .error-message {
+            font-size: 24px;
+            color: #5f6368;
+            margin-bottom: 30px;
+            font-weight: 400;
+        }
+
+        .description {
+            font-size: 16px;
+            color: #5f6368;
+            line-height: 1.6;
+            margin-bottom: 40px;
+            max-width: 500px;
+        }
+
+        .description strong {
+            color: #202124;
+        }
+
+        .action-buttons {
+            display: flex;
+            gap: 20px;
+            flex-wrap: wrap;
+        }
+
+        .btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 4px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            text-decoration: none;
+            display: inline-block;
+            transition: all 0.3s ease;
+            font-family: inherit;
+        }
+
+        .btn-primary {
+            background: #4285f4;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #3367d6;
+            box-shadow: 0 2px 8px rgba(66, 133, 244, 0.3);
+        }
+
+        .btn-secondary {
+            background: white;
+            color: #4285f4;
+            border: 1px solid #dadce0;
+        }
+
+        .btn-secondary:hover {
+            background: #f8f9fa;
+            border-color: #4285f4;
+        }
+
+        .illustration {
+            flex: 1;
+            min-width: 300px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .robot-image {
+            max-width: 100%;
+            height: auto;
+            max-height: 400px;
+        }
+
+        @keyframes float {
+            0%, 100% {
+                transform: translateY(0px);
+            }
+            50% {
+                transform: translateY(-20px);
+            }
+        }
+
+        .footer {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            font-size: 12px;
+            color: #9aa0a6;
+        }
+
+        .footer a {
+            color: #4285f4;
+            text-decoration: none;
+        }
+
+        .footer a:hover {
+            text-decoration: underline;
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                flex-direction: column;
+                gap: 40px;
+            }
+
+            .logo {
+                font-size: 24px;
+            }
+
+            .error-code {
+                font-size: 48px;
+            }
+
+            .error-message {
+                font-size: 18px;
+            }
+
+            .description {
+                font-size: 14px;
+            }
+
+            .robot-image {
+                max-height: 300px;
+            }
+
+            .illustration {
+                order: -1;
+            }
+        }
+    </style>
+    <meta http-equiv="Cache-Control" content="no-store" />
+</head>
+<body>
+    <div class="container">
+        <div class="content">
+            <div class="logo">
+                <span class="logo-text">Compliance</span> App
+            </div>
+
+            <div class="error-code">503</div>
+
+            <div class="error-message">Sistema em manutenção.</div>
+
+            <div class="description">
+                O <strong>Compliance App</strong> está passando por uma manutenção programada. <strong>Voltaremos em breve.</strong>
+            </div>
+
+            <div class="action-buttons">
+                <button class="btn btn-primary" onclick="location.reload()">Tentar Novamente</button>
+            </div>
+        </div>
+
+        <div class="illustration">
+            <img src="robo.png" alt="Robô em manutenção" class="robot-image">
+        </div>
+    </div>
+
+    <div class="footer">
+        <a href="#">Ajuda</a> | <a href="#">Privacidade</a> | <a href="#">Termos</a>
+    </div>
+</body>
+</html>
