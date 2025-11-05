@@ -239,94 +239,101 @@ export const Checklist: React.FC<ChecklistProps> = ({ cronogramaId, isOpen, onCl
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-2xl max-h-[80vh] overflow-hidden flex flex-col">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <CheckCircle className="h-5 w-5" />
-            Checklist da Demanda
-          </DialogTitle>
-          <DialogDescription>
-            Gerencie as tarefas e marque o progresso da demanda
-          </DialogDescription>
-          {demandaPrincipal && (demandaPrincipal.data_inicio || demandaPrincipal.data_fim) && (
-            <div className="flex items-center gap-2 mt-2 text-sm text-gray-600">
-              <Calendar className="h-4 w-4" />
-              <span>
-                {demandaPrincipal.data_inicio && demandaPrincipal.data_fim
-                  ? `Período: ${formatDateBR(demandaPrincipal.data_inicio)} a ${formatDateBR(demandaPrincipal.data_fim)}`
-                  : demandaPrincipal.data_inicio
-                  ? `Início: ${formatDateBR(demandaPrincipal.data_inicio)}`
-                  : demandaPrincipal.data_fim
-                  ? `Fim: ${formatDateBR(demandaPrincipal.data_fim)}`
-                  : null
-                }
-              </span>
-            </div>
-          )}
-        </DialogHeader>
+      <DialogContent className="w-[95vw] sm:w-full max-w-2xl max-h-[95vh] sm:max-h-[85vh] flex flex-col p-0 overflow-hidden">
+        <div className="flex-shrink-0 p-3 sm:p-4 md:p-6 pb-2 sm:pb-3">
+          <DialogHeader className="pb-2 sm:pb-3">
+            <DialogTitle className="flex items-center gap-2 text-sm sm:text-base md:text-lg">
+              <CheckCircle className="h-4 w-4 sm:h-5 sm:w-5 flex-shrink-0" />
+              <span className="break-words">Checklist da Demanda</span>
+            </DialogTitle>
+            <DialogDescription className="text-xs sm:text-sm mt-1">
+              Gerencie as tarefas e marque o progresso da demanda
+            </DialogDescription>
+            {demandaPrincipal && (demandaPrincipal.data_inicio || demandaPrincipal.data_fim) && (
+              <div className="flex items-start sm:items-center gap-2 mt-2 text-xs sm:text-sm text-gray-600">
+                <Calendar className="h-3 w-3 sm:h-4 sm:w-4 flex-shrink-0 mt-0.5 sm:mt-0" />
+                <span className="break-words">
+                  {demandaPrincipal.data_inicio && demandaPrincipal.data_fim
+                    ? `Período: ${formatDateBR(demandaPrincipal.data_inicio)} a ${formatDateBR(demandaPrincipal.data_fim)}`
+                    : demandaPrincipal.data_inicio
+                    ? `Início: ${formatDateBR(demandaPrincipal.data_inicio)}`
+                    : demandaPrincipal.data_fim
+                    ? `Fim: ${formatDateBR(demandaPrincipal.data_fim)}`
+                    : null
+                  }
+                </span>
+              </div>
+            )}
+          </DialogHeader>
+        </div>
 
-        <div className="flex-1 overflow-hidden flex flex-col space-y-4">
+        <div className="flex-1 overflow-y-auto flex flex-col min-h-0 px-3 sm:px-4 md:px-6">
+          <div className="flex flex-col space-y-2 sm:space-y-3 md:space-y-4 pb-2 sm:pb-3">
 
           {/* Controles */}
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2 flex-shrink-0">
             <Button
               variant="outline"
               size="sm"
               onClick={() => setHideCompleted(!hideCompleted)}
-              className={hideCompleted ? "bg-gray-100" : ""}
+              className={`text-xs sm:text-sm w-full sm:w-auto ${hideCompleted ? "bg-gray-100" : ""}`}
             >
-              {hideCompleted ? "Mostrar concluídos" : "Ocultar concluídos"}
+              <span className="hidden sm:inline">{hideCompleted ? "Mostrar concluídos" : "Ocultar concluídos"}</span>
+              <span className="sm:hidden">{hideCompleted ? "Mostrar" : "Ocultar"}</span>
             </Button>
             
             <Button
               onClick={() => setShowNewItemForm(true)}
-              className="bg-blue-600 hover:bg-blue-700"
+              className="bg-blue-600 hover:bg-blue-700 text-xs sm:text-sm w-full sm:w-auto"
+              size="sm"
             >
-              <Plus className="h-4 w-4 mr-2" />
-              Adicionar Item
+              <Plus className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
+              <span className="hidden sm:inline">Adicionar Item</span>
+              <span className="sm:hidden">Adicionar</span>
             </Button>
           </div>
 
           {/* Formulário de novo item */}
           {showNewItemForm && (
-            <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
-              <h3 className="font-medium text-blue-900 mb-3">Novo Item</h3>
-              <div className="space-y-3">
+            <div className="bg-blue-50 p-2.5 sm:p-3 md:p-4 rounded-lg border border-blue-200 flex-shrink-0">
+              <h3 className="font-medium text-blue-900 mb-2 sm:mb-3 text-xs sm:text-sm md:text-base">Novo Item</h3>
+              <div className="space-y-2 sm:space-y-2.5 md:space-y-3">
                 <Input
                   placeholder="Título do item"
                   value={newItemTitle}
                   onChange={(e) => setNewItemTitle(e.target.value)}
-                  className="w-full"
+                  className="w-full text-xs sm:text-sm h-9 sm:h-10"
                 />
                 <Textarea
                   placeholder="Descrição (opcional)"
                   value={newItemDescription}
                   onChange={(e) => setNewItemDescription(e.target.value)}
                   rows={2}
+                  className="text-xs sm:text-sm resize-none"
                 />
-                <div className="grid grid-cols-2 gap-2">
-                  <div>
-                    <label className="text-sm font-medium text-gray-700 mb-1 block">Data Início (opcional)</label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3">
+                  <div className="space-y-1">
+                    <label className="text-xs sm:text-sm font-medium text-gray-700 block">Data Início (opcional)</label>
                     <Input
                       type="date"
                       value={newItemDataInicio}
                       onChange={(e) => setNewItemDataInicio(e.target.value)}
-                      className="w-full"
+                      className="w-full text-xs sm:text-sm h-9 sm:h-10"
                     />
                   </div>
-                  <div>
-                    <label className="text-sm font-medium text-gray-700 mb-1 block">Data Fim (opcional)</label>
+                  <div className="space-y-1">
+                    <label className="text-xs sm:text-sm font-medium text-gray-700 block">Data Fim (opcional)</label>
                     <Input
                       type="date"
                       value={newItemDataFim}
                       onChange={(e) => setNewItemDataFim(e.target.value)}
-                      className="w-full"
+                      className="w-full text-xs sm:text-sm h-9 sm:h-10"
                     />
                   </div>
                 </div>
-                <div className="flex gap-2">
-                  <Button onClick={handleCreateItem} size="sm">
-                    <Check className="h-4 w-4 mr-1" />
+                <div className="flex flex-col sm:flex-row gap-2 pt-1">
+                  <Button onClick={handleCreateItem} size="sm" className="text-xs sm:text-sm w-full sm:w-auto h-9 sm:h-10">
+                    <Check className="h-3 w-3 sm:h-4 sm:w-4 mr-1" />
                     Adicionar
                   </Button>
                   <Button 
@@ -339,8 +346,9 @@ export const Checklist: React.FC<ChecklistProps> = ({ cronogramaId, isOpen, onCl
                       setNewItemDataInicio('');
                       setNewItemDataFim('');
                     }}
+                    className="text-xs sm:text-sm w-full sm:w-auto h-9 sm:h-10"
                   >
-                    <X className="h-4 w-4 mr-1" />
+                    <X className="h-3 w-3 sm:h-4 sm:w-4 mr-1" />
                     Cancelar
                   </Button>
                 </div>
@@ -349,7 +357,7 @@ export const Checklist: React.FC<ChecklistProps> = ({ cronogramaId, isOpen, onCl
           )}
 
           {/* Lista de itens */}
-          <div className="flex-1 overflow-y-auto space-y-2">
+          <div className="space-y-2">
             {loading ? (
               <div className="text-center py-8">
                 <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
@@ -364,83 +372,85 @@ export const Checklist: React.FC<ChecklistProps> = ({ cronogramaId, isOpen, onCl
               visibleItems.map((item) => (
                 <div
                   key={item.id}
-                  className={`bg-white border rounded-lg p-4 transition-all ${
+                  className={`bg-white border rounded-lg p-2.5 sm:p-3 md:p-4 transition-all ${
                     item.concluido ? 'opacity-75 bg-green-50 border-green-200' : 'hover:shadow-sm'
                   }`}
                 >
                   {editingItem?.id === item.id ? (
                     // Modo de edição
-                    <div className="space-y-3">
+                    <div className="space-y-2 sm:space-y-3">
                       <Input
                         value={editTitle}
                         onChange={(e) => setEditTitle(e.target.value)}
                         placeholder="Título do item"
+                        className="text-sm"
                       />
                       <Textarea
                         value={editDescription}
                         onChange={(e) => setEditDescription(e.target.value)}
                         placeholder="Descrição (opcional)"
                         rows={2}
+                        className="text-sm"
                       />
-                      <div className="grid grid-cols-2 gap-2">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                         <div>
-                          <label className="text-sm font-medium text-gray-700 mb-1 block">Data Início (opcional)</label>
+                          <label className="text-xs sm:text-sm font-medium text-gray-700 mb-1 block">Data Início (opcional)</label>
                           <Input
                             type="date"
                             value={editDataInicio}
                             onChange={(e) => setEditDataInicio(e.target.value)}
-                            className="w-full"
+                            className="w-full text-sm"
                           />
                         </div>
                         <div>
-                          <label className="text-sm font-medium text-gray-700 mb-1 block">Data Fim (opcional)</label>
+                          <label className="text-xs sm:text-sm font-medium text-gray-700 mb-1 block">Data Fim (opcional)</label>
                           <Input
                             type="date"
                             value={editDataFim}
                             onChange={(e) => setEditDataFim(e.target.value)}
-                            className="w-full"
+                            className="w-full text-sm"
                           />
                         </div>
                       </div>
-                      <div className="flex gap-2">
-                        <Button onClick={handleEditItem} size="sm">
-                          <Check className="h-4 w-4 mr-1" />
+                      <div className="flex flex-col sm:flex-row gap-2">
+                        <Button onClick={handleEditItem} size="sm" className="text-xs sm:text-sm">
+                          <Check className="h-3 w-3 sm:h-4 sm:w-4 mr-1" />
                           Salvar
                         </Button>
-                        <Button variant="outline" size="sm" onClick={cancelEditing}>
-                          <X className="h-4 w-4 mr-1" />
+                        <Button variant="outline" size="sm" onClick={cancelEditing} className="text-xs sm:text-sm">
+                          <X className="h-3 w-3 sm:h-4 sm:w-4 mr-1" />
                           Cancelar
                         </Button>
                       </div>
                     </div>
                   ) : (
                     // Modo de visualização
-                    <div className="flex items-start gap-3">
+                    <div className="flex items-start gap-2 sm:gap-3">
                       <button
                         onClick={() => handleToggleItem(item)}
-                        className={`mt-1 transition-colors ${
+                        className={`mt-1 transition-colors flex-shrink-0 ${
                           item.concluido ? 'text-green-600' : 'text-gray-400 hover:text-green-600'
                         }`}
                       >
                         {item.concluido ? (
-                          <CheckCircle className="h-5 w-5" />
+                          <CheckCircle className="h-4 w-4 sm:h-5 sm:w-5" />
                         ) : (
-                          <Circle className="h-5 w-5" />
+                          <Circle className="h-4 w-4 sm:h-5 sm:w-5" />
                         )}
                       </button>
                       
                       <div className="flex-1 min-w-0">
-                        <h4 className={`font-medium ${item.concluido ? 'line-through text-gray-500' : 'text-gray-900'}`}>
+                        <h4 className={`font-medium text-sm sm:text-base ${item.concluido ? 'line-through text-gray-500' : 'text-gray-900'}`}>
                           {item.titulo}
                         </h4>
                         {item.descricao && (
-                          <p className={`text-sm mt-1 ${item.concluido ? 'text-gray-400' : 'text-gray-600'}`}>
+                          <p className={`text-xs sm:text-sm mt-1 ${item.concluido ? 'text-gray-400' : 'text-gray-600'}`}>
                             {item.descricao}
                           </p>
                         )}
                         {(item.data_inicio || item.data_fim) && (
-                          <div className={`flex items-center gap-3 mt-2 text-xs ${item.concluido ? 'text-gray-400' : 'text-gray-500'}`}>
-                            <Clock className="h-3 w-3" />
+                          <div className={`flex flex-wrap items-center gap-2 sm:gap-3 mt-2 text-xs ${item.concluido ? 'text-gray-400' : 'text-gray-500'}`}>
+                            <Clock className="h-3 w-3 flex-shrink-0" />
                             {item.data_inicio && (
                               <span>Início: {formatDateBR(item.data_inicio)}</span>
                             )}
@@ -451,22 +461,22 @@ export const Checklist: React.FC<ChecklistProps> = ({ cronogramaId, isOpen, onCl
                         )}
                       </div>
 
-                      <div className="flex items-center gap-1">
+                      <div className="flex items-center gap-0.5 sm:gap-1 flex-shrink-0">
                         <Button
                           variant="ghost"
                           size="sm"
                           onClick={() => startEditing(item)}
-                          className="h-8 w-8 p-0"
+                          className="h-7 w-7 sm:h-8 sm:w-8 p-0"
                         >
-                          <Edit className="h-4 w-4" />
+                          <Edit className="h-3 w-3 sm:h-4 sm:w-4" />
                         </Button>
                         <Button
                           variant="ghost"
                           size="sm"
                           onClick={() => handleDeleteItem(item)}
-                          className="h-8 w-8 p-0 text-red-500 hover:text-red-700 hover:bg-red-50"
+                          className="h-7 w-7 sm:h-8 sm:w-8 p-0 text-red-500 hover:text-red-700 hover:bg-red-50"
                         >
-                          <Trash2 className="h-4 w-4" />
+                          <Trash2 className="h-3 w-3 sm:h-4 sm:w-4" />
                         </Button>
                       </div>
                     </div>
@@ -475,13 +485,16 @@ export const Checklist: React.FC<ChecklistProps> = ({ cronogramaId, isOpen, onCl
               ))
             )}
           </div>
+          </div>
         </div>
 
         {/* Footer */}
-        <div className="flex justify-end pt-4 border-t">
-          <Button onClick={onClose} variant="outline">
-            Fechar
-          </Button>
+        <div className="flex-shrink-0 border-t p-3 sm:p-4 md:p-6 pt-2 sm:pt-3 md:pt-4">
+          <div className="flex justify-end">
+            <Button onClick={onClose} variant="outline" size="sm" className="text-xs sm:text-sm w-full sm:w-auto h-9 sm:h-10">
+              Fechar
+            </Button>
+          </div>
         </div>
       </DialogContent>
     </Dialog>

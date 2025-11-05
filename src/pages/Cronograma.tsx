@@ -1,6 +1,18 @@
 ﻿import { useState, useEffect } from 'react';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
+import {
+  addHeader,
+  addFooter,
+  addSectionTitle,
+  addBodyText,
+  addListItem,
+  addDivider,
+  addTable,
+  addLayoutBackgroundToAllPages,
+  LAYOUT_COLORS,
+  LAYOUT_CONFIG
+} from '@/utils/pdfLayoutUtils';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -407,122 +419,32 @@ const Cronograma = () => {
       // Configurar fonte que suporta melhor os caracteres especiais
       pdf.setFont('helvetica');
       
-      // Configurações do PDF
-      const pageWidth = pdf.internal.pageSize.getWidth();
-      const margin = 20;
-      const contentWidth = pageWidth - (margin * 2);
-      
-      let yPosition = margin;
-      
-      // Função para adicionar texto com quebra de linha e suporte melhorado para Unicode
-      const addText = (text: string, fontSize: number = 12, isBold: boolean = false) => {
-        // Preservar acentuação; apenas normalizar e reduzir espaços
-        const cleanText = text
-          .normalize('NFC')
-          .replace(/\s+/g, ' ')
-          .trim();
-        
-        pdf.setFontSize(fontSize);
-        if (isBold) {
-          pdf.setFont('helvetica', 'bold');
-        } else {
-          pdf.setFont('helvetica', 'normal');
-        }
-        
-        // Usar splitTextToSize para quebra de linha automática
-        const lines = pdf.splitTextToSize(cleanText, contentWidth);
-        
-        // Adicionar cada linha ao PDF
-        lines.forEach((line: string) => {
-          pdf.text(line, margin, yPosition);
-          yPosition += fontSize * 0.5 + 3; // Aumentar espaçamento entre linhas
-          
-          // Verificar se precisa de nova página
-          if (yPosition > pdf.internal.pageSize.getHeight() - margin) {
-            pdf.addPage();
-            yPosition = margin;
-          }
-        });
-        
-        yPosition += 5; // Aumentar espaço adicional após o texto
-      };
-      
-      // Função para adicionar uma linha de tabela simples com larguras dinâmicas
-      const addTableRow = (items: string[], fontSize: number = 10) => {
-        pdf.setFontSize(fontSize);
-        
-        // Calcular larguras dinâmicas baseadas no conteúdo
-        const textWidths = items.map(item => {
-          const cleanItem = item
-            .replace(/[^\x00-\x7F\u00C0-\u017F\u0100-\u017F\u0180-\u024F\u1E00-\u1EFF\u2000-\u206F\u20A0-\u20CF\u2190-\u21FF]/g, '')
-            .replace(/\s+/g, ' ')
-            .trim();
-          return pdf.getTextWidth(cleanItem);
-        });
-        
-        // Calcular larguras proporcionais
-        const totalTextWidth = textWidths.reduce((sum, width) => sum + width, 0);
-        const availableWidth = contentWidth - (items.length - 1) * 10; // 10mm de espaçamento entre colunas
-        
-        const colWidths = textWidths.map(width => (width / totalTextWidth) * availableWidth);
-        
-        // Adicionar cada item com sua largura calculada
-        let currentX = margin;
-        items.forEach((item, index) => {
-          const cleanItem = item
-            .replace(/[^\x00-\x7F\u00C0-\u017F\u0100-\u017F\u0180-\u024F\u1E00-\u1EFF\u2000-\u206F\u20A0-\u20CF\u2190-\u21FF]/g, '')
-            .replace(/\s+/g, ' ')
-            .trim();
-          
-          // Verificar se o texto cabe na coluna, se não, truncar
-          const maxWidth = colWidths[index];
-          const textWidth = pdf.getTextWidth(cleanItem);
-          
-          let displayText = cleanItem;
-          if (textWidth > maxWidth) {
-            // Truncar texto para caber na coluna
-            let truncatedText = cleanItem;
-            while (pdf.getTextWidth(truncatedText + '...') > maxWidth && truncatedText.length > 0) {
-              truncatedText = truncatedText.slice(0, -1);
-            }
-            displayText = truncatedText + '...';
-          }
-          
-          pdf.text(displayText, currentX, yPosition);
-          currentX += colWidths[index] + 10; // 10mm de espaçamento entre colunas
-        });
-        
-        yPosition += fontSize * 0.6 + 8; // Aumentar espaçamento vertical
-        
-        // Verificar se precisa de nova página
-        if (yPosition > pdf.internal.pageSize.getHeight() - margin) {
-          pdf.addPage();
-          yPosition = margin;
-        }
-      };
-      
-      // Cabeçalho
-      addText('OVERVIEW DO CRONOGRAMA DE DEMANDAS', 22, true);
-      addText(`Gerado em: ${new Date().toLocaleDateString('pt-BR')} às ${new Date().toLocaleTimeString('pt-BR')}`, 12);
-      addText(`Organização: ${currentUser?.nome_empresa || currentUser?.organizacao_nome || 'Sistema'}`, 14, true);
-      
-      // Mostrar escopo do relatório
-      if (orgParaFiltrar === 'todos') {
-        addText('Escopo: Todas as organizações', 14, true);
-      } else {
-        addText(`Escopo: ${orgParaFiltrar.toUpperCase()}`, 14, true);
+      // IMPORTANTE: Adicionar background PRIMEIRO (antes de qualquer conteúdo)
+      // Isso garante que o layout fique atrás e o conteúdo seja escrito por cima
+      try {
+        pdf.addImage('/layout-background.png', 'PNG', 0, 0, pdf.internal.pageSize.getWidth(), pdf.internal.pageSize.getHeight(), undefined, 'FAST');
+      } catch (error) {
+        console.warn('Erro ao carregar background, continuando sem ele:', error);
       }
       
-      // Mostrar filtro de status se aplicável
-      if (statusParaFiltrar !== 'todos') {
-        const statusLabel = statusParaFiltrar === 'concluido' ? 'Concluídas' : 
-                           statusParaFiltrar === 'em_andamento' ? 'Em Andamento' :
-                           statusParaFiltrar === 'pendente' ? 'Pendentes' :
-                           statusParaFiltrar === 'atrasado' ? 'Atrasadas' : statusParaFiltrar;
-        addText(`Filtro de Status: ${statusLabel}`, 14, true);
-      }
+      // Adicionar cabeçalho com layout do documento Word
+      let yPosition = addHeader(pdf);
       
-      addText('', 5); // Espaço
+      // Título principal
+      yPosition = addSectionTitle(pdf, 'OVERVIEW DO CRONOGRAMA DE DEMANDAS', yPosition, 1);
+      
+      // Informações do documento
+      yPosition = addBodyText(pdf, `Gerado em: ${new Date().toLocaleDateString('pt-BR')} às ${new Date().toLocaleTimeString('pt-BR')}`, yPosition, {
+        fontSize: 11,
+        color: LAYOUT_COLORS.lightGray
+      });
+      
+      yPosition = addBodyText(pdf, `Organização: ${currentUser?.nome_empresa || currentUser?.organizacao_nome || 'Sistema'}`, yPosition, {
+        fontSize: 12,
+        isBold: true
+      });
+      
+      yPosition = addDivider(pdf, yPosition);
       
       // Estatísticas gerais
       if (statusParaFiltrar !== 'todos') {
@@ -530,95 +452,113 @@ const Cronograma = () => {
                            statusParaFiltrar === 'em_andamento' ? 'Em Andamento' :
                            statusParaFiltrar === 'pendente' ? 'Pendentes' :
                            statusParaFiltrar === 'atrasado' ? 'Atrasadas' : statusParaFiltrar;
-        addText(`RESUMO - DEMANDAS ${statusLabel.toUpperCase()}`, 16, true);
+        yPosition = addSectionTitle(pdf, `RESUMO - DEMANDAS ${statusLabel.toUpperCase()}`, yPosition, 2);
       } else {
-        addText('RESUMO GERAL', 16, true);
+        yPosition = addSectionTitle(pdf, 'RESUMO GERAL', yPosition, 2);
       }
       
-      addTableRow([
-        `Total: ${resumo.totalDemandas}`,
-        `Concluídas: ${resumo.demandasConcluidas}`,
-        `Em Andamento: ${resumo.demandasEmAndamento}`,
-        `Pendentes: ${resumo.demandasPendentes}`,
-        `Atrasadas: ${resumo.demandasAtrasadas}`
-      ], 14); // Aumentar tamanho da fonte
+      // Tabela de estatísticas
+      const headers = ['Total', 'Concluídas', 'Em Andamento', 'Pendentes', 'Atrasadas'];
+      const statsRow = [
+        resumo.totalDemandas.toString(),
+        resumo.demandasConcluidas.toString(),
+        resumo.demandasEmAndamento.toString(),
+        resumo.demandasPendentes.toString(),
+        resumo.demandasAtrasadas.toString()
+      ];
       
-      addText('', 5); // Espaço adicional após estatísticas
+      yPosition = addTable(pdf, headers, [statsRow], yPosition, {
+        fontSize: 11
+      });
       
       if (statusParaFiltrar !== 'todos') {
-        addText(`Todas as ${resumo.totalDemandas} demandas são ${statusParaFiltrar === 'concluido' ? 'concluídas' : 
-                                                               statusParaFiltrar === 'em_andamento' ? 'em andamento' :
-                                                               statusParaFiltrar === 'pendente' ? 'pendentes' :
-                                                               statusParaFiltrar === 'atrasado' ? 'atrasadas' : statusParaFiltrar}`, 12, true);
+        yPosition = addBodyText(pdf, 
+          `Todas as ${resumo.totalDemandas} demandas são ${statusParaFiltrar === 'concluido' ? 'concluídas' : 
+                                                           statusParaFiltrar === 'em_andamento' ? 'em andamento' :
+                                                           statusParaFiltrar === 'pendente' ? 'pendentes' :
+                                                           statusParaFiltrar === 'atrasado' ? 'atrasadas' : statusParaFiltrar}`, 
+          yPosition, {
+          fontSize: 12,
+          isBold: true
+        });
       } else {
-        addText(`Percentual de Conclusão: ${resumo.percentualConclusao}%`, 14, true);
+        yPosition = addBodyText(pdf, `Percentual de Conclusão: ${resumo.percentualConclusao}%`, yPosition, {
+          fontSize: 12,
+          isBold: true,
+          color: LAYOUT_COLORS.primary
+        });
       }
       
-      addText('', 5); // Espaço
+      yPosition = addDivider(pdf, yPosition);
       
       // Detalhes por organização
       Object.keys(organizacoes).forEach(organizacao => {
         const demandasOrg = organizacoes[organizacao];
         
-        addText(`ORGANIZAÇÃO: ${organizacao.toUpperCase()}`, 16, true);
+        yPosition = addSectionTitle(pdf, `ORGANIZAÇÃO: ${organizacao.toUpperCase()}`, yPosition, 2);
         
         const concluidasOrg = demandasOrg.filter(c => c.status === 'concluido').length;
         const emAndamentoOrg = demandasOrg.filter(c => c.status === 'em_andamento').length;
         const pendentesOrg = demandasOrg.filter(c => c.status === 'pendente').length;
         const atrasadasOrg = demandasOrg.filter(c => c.status === 'atrasado').length;
         
-        addTableRow([
-          `Total: ${demandasOrg.length}`,
-          `Concluídas: ${concluidasOrg}`,
-          `Em Andamento: ${emAndamentoOrg}`,
-          `Pendentes: ${pendentesOrg}`,
-          `Atrasadas: ${atrasadasOrg}`
-        ], 12); // Aumentar tamanho da fonte
+        const orgHeaders = ['Total', 'Concluídas', 'Em Andamento', 'Pendentes', 'Atrasadas'];
+        const orgStatsRow = [
+          demandasOrg.length.toString(),
+          concluidasOrg.toString(),
+          emAndamentoOrg.toString(),
+          pendentesOrg.toString(),
+          atrasadasOrg.toString()
+        ];
         
-        addText('', 3); // Espaço adicional após estatísticas
-        
-        // Listar demandas da organização (usando dados da API já limpos)
-        demandasOrg.forEach((demanda, index) => {
-          const statusEmoji = {
-            'concluido': '✅',
-            'em_andamento': '🔄',
-            'pendente': '⏳',
-            'atrasado': '❌'
-          }[demanda.status] || '❓';
-          
-          // Usar o título já limpo pela API
-          addText(`${statusEmoji} ${index + 1}. ${demanda.titulo}`, 14);
-          if (demanda.descricao) {
-            addText(`   Descrição: ${demanda.descricao}`, 12);
-          }
-          addText(`   Responsável: ${demanda.responsavel_nome || 'Não definido'}`, 12);
-          addText(`   Prazo: ${demanda.data_fim ? new Date(demanda.data_fim).toLocaleDateString('pt-BR') : 'Não definido'}`, 12);
-          
-          // Incluir checklists (já formatados pela API)
-          if (demanda.checklists && demanda.checklists.length > 0) {
-            addText(`   Checklist (${demanda.checklists.length} itens):`, 12);
-            demanda.checklists.forEach((item, itemIndex) => {
-              const itemStatus = item.concluido ? '✓' : '○';
-              // Usar títulos já limpos pela API
-              addText(`     ${itemIndex + 1}. ${itemStatus} ${item.titulo}`, 11);
-              if (item.descricao) {
-                addText(`        ${item.descricao}`, 10);
-              }
-            });
-          }
-          
-          addText('', 3); // Espaço pequeno
+        yPosition = addTable(pdf, orgHeaders, [orgStatsRow], yPosition, {
+          fontSize: 10
         });
         
-        addText('', 5); // Espaço entre organizações
+        // Listar demandas da organização
+        const demandasList: string[] = [];
+        demandasOrg.forEach((demanda, index) => {
+          const statusLabel = {
+            'concluido': '[OK]',
+            'em_andamento': '[EM ANDAMENTO]',
+            'pendente': '[PENDENTE]',
+            'atrasado': '[ATRASADA]'
+          }[demanda.status] || '[?]';
+          
+          let itemText = `${statusLabel} ${index + 1}. ${demanda.titulo}`;
+          if (demanda.descricao) {
+            itemText += ` - ${demanda.descricao}`;
+          }
+          itemText += ` | Responsável: ${demanda.responsavel_nome || 'Não definido'}`;
+          if (demanda.data_fim) {
+            itemText += ` | Prazo: ${new Date(demanda.data_fim).toLocaleDateString('pt-BR')}`;
+          }
+          
+          demandasList.push(itemText);
+          
+          // Incluir checklists
+          if (demanda.checklists && demanda.checklists.length > 0) {
+            demanda.checklists.forEach((item) => {
+              const itemStatus = item.concluido ? '[OK]' : '[PENDENTE]';
+              demandasList.push(`  ${itemStatus} ${item.titulo}${item.descricao ? ` - ${item.descricao}` : ''}`);
+            });
+          }
+        });
+        
+        yPosition = addListItem(pdf, demandasList, yPosition, {
+          fontSize: 10,
+          indent: 5
+        });
+        
+        yPosition = addDivider(pdf, yPosition);
       });
       
-      // Rodapé
-      const totalPages = pdf.internal.pages.length - 1; // jsPDF usa array 0-indexed
+      // Rodapé em todas as páginas
+      // (O background já foi adicionado no início de cada página, antes do conteúdo)
+      const totalPages = pdf.internal.pages.length - 1;
       for (let i = 1; i <= totalPages; i++) {
         pdf.setPage(i);
-        pdf.setFontSize(10);
-        pdf.text(`Página ${i} de ${totalPages}`, pageWidth - 30, pdf.internal.pageSize.getHeight() - 10);
+        addFooter(pdf, i, totalPages);
       }
       
       // Salvar o PDF
@@ -635,6 +575,8 @@ const Cronograma = () => {
 
   // Função para lidar com o clique no botão de overview PDF
   const handleOverviewPDFClick = () => {
+    // Ativar IA por padrão ao abrir o modal
+    setUsarIA(true);
     if (currentUser?.organizacao === 'portes') {
       // Usuário Portes: abrir modal de seleção de organização e status
       setIsOrganizationModalOpen(true);
@@ -695,50 +637,45 @@ const Cronograma = () => {
       });
 
       pdf.setFont('helvetica');
-      const pageWidth = pdf.internal.pageSize.getWidth();
-      const margin = 20;
-      const contentWidth = pageWidth - (margin * 2);
-      let yPosition = margin;
-
-      const addText = (text: string, fontSize: number = 12, isBold: boolean = false, color: [number, number, number] = [0, 0, 0]) => {
-        const cleanText = text
-          .normalize('NFC')
-          .replace(/\s+/g, ' ')
-          .trim();
-
-        pdf.setFontSize(fontSize);
-        pdf.setTextColor(color[0], color[1], color[2]);
-        if (isBold) {
-          pdf.setFont('helvetica', 'bold');
-        } else {
-          pdf.setFont('helvetica', 'normal');
-        }
-
-        const lines = pdf.splitTextToSize(cleanText, contentWidth);
-        lines.forEach((line: string) => {
-          if (yPosition > pdf.internal.pageSize.getHeight() - margin - 10) {
-            pdf.addPage();
-            yPosition = margin;
-          }
-          pdf.text(line, margin, yPosition);
-          yPosition += fontSize * 0.5 + 3;
-        });
-        yPosition += 5;
-      };
-
-      addText('OVERVIEW DO CRONOGRAMA - ANÁLISE INTELIGENTE', 20, true, [0, 51, 102]);
-      addText(`Gerado em: ${new Date().toLocaleDateString('pt-BR')} às ${new Date().toLocaleTimeString('pt-BR')}`, 10);
-      addText(`Período analisado: ${periodo.inicioFormatado} até ${periodo.fimFormatado}`, 11, true);
-      addText(`Organização: ${currentUser?.nome_empresa || currentUser?.organizacao_nome || currentUser?.organizacao || 'Sistema'}`, 12, true);
       
-      if (orgParaFiltrar !== 'todos' && currentUser?.organizacao === 'portes') {
-        addText(`Filtro: ${orgParaFiltrar.toUpperCase()}`, 12, true);
+      // IMPORTANTE: Adicionar background PRIMEIRO (antes de qualquer conteúdo)
+      // Isso garante que o layout fique atrás e o conteúdo seja escrito por cima
+      try {
+        pdf.addImage('/layout-background.png', 'PNG', 0, 0, pdf.internal.pageSize.getWidth(), pdf.internal.pageSize.getHeight(), undefined, 'FAST');
+      } catch (error) {
+        console.warn('Erro ao carregar background, continuando sem ele:', error);
       }
       
-      yPosition += 5;
+      // Adicionar cabeçalho com layout do documento Word
+      let yPosition = addHeader(pdf);
+
+      // Título principal
+      yPosition = addSectionTitle(pdf, 'OVERVIEW DO CRONOGRAMA - ANÁLISE INTELIGENTE', yPosition, 1);
+      
+      // Informações do documento
+      yPosition = addBodyText(pdf, `Gerado em: ${new Date().toLocaleDateString('pt-BR')} às ${new Date().toLocaleTimeString('pt-BR')}`, yPosition, {
+        fontSize: 10,
+        color: LAYOUT_COLORS.lightGray
+      });
+      
+      yPosition = addBodyText(pdf, `Período analisado: ${periodo.inicioFormatado} até ${periodo.fimFormatado}`, yPosition, {
+        fontSize: 11,
+        isBold: true
+      });
+      
+      yPosition = addBodyText(pdf, `Organização: ${currentUser?.nome_empresa || currentUser?.organizacao_nome || currentUser?.organizacao || 'Sistema'}`, yPosition, {
+        fontSize: 12,
+        isBold: true
+      });
+      
+      yPosition = addDivider(pdf, yPosition);
 
       // Seção: Status Atual do Projeto com barras de progresso
-      // Função auxiliar para barras
+      const pageWidth = pdf.internal.pageSize.getWidth();
+      const margin = LAYOUT_CONFIG.margin;
+      const contentWidth = pageWidth - (margin * 2);
+      
+      // Função auxiliar para barras de progresso
       const drawProgress = (label: string, percent: number) => {
         const barWidth = contentWidth;
         const barHeight = 6;
@@ -747,16 +684,21 @@ const Cronograma = () => {
         const pct = Math.max(0, Math.min(100, Math.round(percent)));
 
         // Título
-        addText(`${label}  ${pct}%`, 11, true, [0, 51, 102]);
+        yPosition = addBodyText(pdf, `${label}  ${pct}%`, yPosition, {
+          fontSize: 11,
+          isBold: true,
+          color: LAYOUT_COLORS.primary
+        });
+        yPosition -= 8; // Ajustar para posicionar a barra
 
         // Fundo
-        pdf.setDrawColor(220, 225, 235);
+        pdf.setDrawColor(...LAYOUT_COLORS.border);
         pdf.setFillColor(235, 238, 245);
         pdf.rect(barX, barY, barWidth, barHeight, 'FD');
 
         // Progresso
         const fillWidth = (barWidth * pct) / 100;
-        pdf.setFillColor(59, 76, 202); // azul
+        pdf.setFillColor(...LAYOUT_COLORS.secondary);
         pdf.rect(barX, barY, fillWidth, barHeight, 'F');
 
         yPosition = barY + barHeight + 8;
@@ -772,7 +714,7 @@ const Cronograma = () => {
       const totalPeriodo = totalFeitosPeriodo + totalPendentesPeriodo;
       const pctGeral = totalPeriodo > 0 ? (totalFeitosPeriodo / totalPeriodo) * 100 : 0;
 
-      addText('STATUS ATUAL DO PROJETO', 14, true, [0, 51, 102]);
+      yPosition = addSectionTitle(pdf, 'STATUS ATUAL DO PROJETO', yPosition, 2);
       drawProgress('Progresso Geral', pctGeral);
 
       // Barras por mês (mostra últimos 6 meses do resumo retornado)
@@ -783,67 +725,97 @@ const Cronograma = () => {
         drawProgress(`${m.mes}`, pct);
       });
 
-      // Seções removidas conforme solicitado: TABELA DE STATUS POR MÊS e RANKING DE RESPONSÁVEIS
+      yPosition = addDivider(pdf, yPosition);
 
+      // Processar análise da IA
       const analiseLinhas = analise.split('\n');
       analiseLinhas.forEach((linha: string) => {
         const t = linha.trim();
         // Cabeçalhos Markdown
         if (t.startsWith('### ')) {
-          addText(t.replace(/^###\s+/, ''), 13, true, [0, 102, 204]);
+          yPosition = addSectionTitle(pdf, t.replace(/^###\s+/, ''), yPosition, 3);
           return;
         }
         if (t.startsWith('## ')) {
-          addText(t.replace(/^##\s+/, ''), 14, true, [0, 102, 204]);
+          yPosition = addSectionTitle(pdf, t.replace(/^##\s+/, ''), yPosition, 2);
           return;
         }
         // Marcadores de status
         if (t.startsWith('[OK]')) {
-          addText(linha, 12, true, [15, 157, 88]); // verde
+          yPosition = addBodyText(pdf, linha, yPosition, {
+            fontSize: 12,
+            isBold: true,
+            color: LAYOUT_COLORS.accent
+          });
           return;
         }
         if (t.startsWith('[PENDENTE]')) {
-          addText(linha, 12, true, [217, 48, 37]); // vermelho
+          yPosition = addBodyText(pdf, linha, yPosition, {
+            fontSize: 12,
+            isBold: true,
+            color: LAYOUT_COLORS.warning
+          });
           return;
         }
         // Fallback para emojis antigos, caso venham
         if (linha.includes('✅') || t.includes('O QUE FOI FEITO')) {
-          addText(linha, 12, true, [15, 157, 88]);
+          yPosition = addBodyText(pdf, linha, yPosition, {
+            fontSize: 12,
+            isBold: true,
+            color: LAYOUT_COLORS.accent
+          });
         } else if (linha.includes('⏳') || t.includes('O QUE NÃO FOI FEITO')) {
-          addText(linha, 12, true, [217, 48, 37]);
+          yPosition = addBodyText(pdf, linha, yPosition, {
+            fontSize: 12,
+            isBold: true,
+            color: LAYOUT_COLORS.warning
+          });
         } else {
-          addText(linha, 11);
+          yPosition = addBodyText(pdf, linha, yPosition, {
+            fontSize: 11
+          });
         }
       });
 
-      yPosition += 5;
+      yPosition = addDivider(pdf, yPosition);
 
       if (isComparativo && statsPorOrganizacao) {
-        addText('COMPARAÇÃO ENTRE ORGANIZAÇÕES', 16, true, [0, 51, 102]);
+        yPosition = addSectionTitle(pdf, 'COMPARAÇÃO ENTRE ORGANIZAÇÕES', yPosition, 2);
+        const comparacaoRows: string[][] = [];
         Object.entries(statsPorOrganizacao).forEach(([org, stats]: [string, any]) => {
-          addText(`${org.toUpperCase()}:`, 12, true);
-          addText(`  Total: ${stats.total} | Concluídas: ${stats.concluidas} (${stats.percentualConclusao}%)`, 10);
-          addText(`  Checklists: ${stats.checklistsConcluidos}/${stats.checklistsTotal} (${stats.percentualChecklists}%)`, 10);
-          yPosition += 3;
+          comparacaoRows.push([
+            org.toUpperCase(),
+            stats.total.toString(),
+            `${stats.concluidas} (${stats.percentualConclusao}%)`,
+            `${stats.checklistsConcluidos}/${stats.checklistsTotal} (${stats.percentualChecklists}%)`
+          ]);
         });
+        const comparacaoHeaders = ['Organização', 'Total', 'Concluídas', 'Checklists'];
+        yPosition = addTable(pdf, comparacaoHeaders, comparacaoRows, yPosition, {
+          fontSize: 10
+        });
+        yPosition = addDivider(pdf, yPosition);
       }
 
-      yPosition += 5;
-      addText('ESTATÍSTICAS RESUMIDAS', 14, true, [0, 51, 102]);
-      addText(`Total de Demandas: ${metadata.totalDemandas}`, 11);
+      yPosition = addSectionTitle(pdf, 'ESTATÍSTICAS RESUMIDAS', yPosition, 2);
+      const statsList: string[] = [];
+      statsList.push(`Total de Demandas: ${metadata.totalDemandas}`);
       if (resumoMensal.length > 0) {
         const totalConcluido = resumoMensal.reduce((sum, m) => sum + m.totalConcluido, 0);
         const totalPendente = resumoMensal.reduce((sum, m) => sum + m.totalPendente, 0);
-        addText(`Itens concluídos no período: ${totalConcluido}`, 11);
-        addText(`Itens pendentes no período: ${totalPendente}`, 11);
+        statsList.push(`Itens concluídos no período: ${totalConcluido}`);
+        statsList.push(`Itens pendentes no período: ${totalPendente}`);
       }
+      yPosition = addListItem(pdf, statsList, yPosition, {
+        fontSize: 11
+      });
 
+      // Rodapé em todas as páginas
+      // (O background já foi adicionado no início de cada página, antes do conteúdo)
       const totalPages = pdf.internal.pages.length - 1;
       for (let i = 1; i <= totalPages; i++) {
         pdf.setPage(i);
-        pdf.setFontSize(8);
-        pdf.setTextColor(100, 100, 100);
-        pdf.text(`Página ${i} de ${totalPages}`, pageWidth - 30, pdf.internal.pageSize.getHeight() - 10);
+        addFooter(pdf, i, totalPages);
       }
 
       const escopoNome = orgParaFiltrar === 'todos' ? 'todas-organizacoes' : orgParaFiltrar.toLowerCase().replace(/\s+/g, '-');
@@ -961,82 +933,84 @@ const Cronograma = () => {
       });
 
       pdf.setFont('helvetica');
-      const pageWidth = pdf.internal.pageSize.getWidth();
-      const margin = 20;
-      const contentWidth = pageWidth - (margin * 2);
-      let yPosition = margin;
-
-      const addText = (text: string, fontSize: number = 12, isBold: boolean = false, color: [number, number, number] = [0, 0, 0]) => {
-        const cleanText = text
-          .normalize('NFC')
-          .replace(/\s+/g, ' ')
-          .trim();
-
-        pdf.setFontSize(fontSize);
-        pdf.setTextColor(color[0], color[1], color[2]);
-        if (isBold) {
-          pdf.setFont('helvetica', 'bold');
-        } else {
-          pdf.setFont('helvetica', 'normal');
-        }
-
-        const lines = pdf.splitTextToSize(cleanText, contentWidth);
-        lines.forEach((line: string) => {
-          if (yPosition > pdf.internal.pageSize.getHeight() - margin - 10) {
-            pdf.addPage();
-            yPosition = margin;
-          }
-          pdf.text(line, margin, yPosition);
-          yPosition += fontSize * 0.5 + 3;
-        });
-        yPosition += 5;
-      };
-
-      addText(`OVERVIEW DO CRONOGRAMA - ${mesNome.toUpperCase()}`, 20, true, [0, 51, 102]);
-      addText(`Gerado em: ${new Date().toLocaleDateString('pt-BR')} às ${new Date().toLocaleTimeString('pt-BR')}`, 10);
-      addText(`Organização: ${currentUser?.nome_empresa || currentUser?.organizacao_nome || currentUser?.organizacao || 'Sistema'}`, 12, true);
       
-      if (orgParaFiltrar !== 'todos' && currentUser?.organizacao === 'portes') {
-        addText(`Filtro: ${orgParaFiltrar.toUpperCase()}`, 12, true);
+      // IMPORTANTE: Adicionar background PRIMEIRO (antes de qualquer conteúdo)
+      // Isso garante que o layout fique atrás e o conteúdo seja escrito por cima
+      try {
+        pdf.addImage('/layout-background.png', 'PNG', 0, 0, pdf.internal.pageSize.getWidth(), pdf.internal.pageSize.getHeight(), undefined, 'FAST');
+      } catch (error) {
+        console.warn('Erro ao carregar background, continuando sem ele:', error);
       }
       
-      yPosition += 5;
-      addText('ESTATÍSTICAS DO MÊS', 14, true, [0, 51, 102]);
-      addText(`Total de Demandas Iniciadas no Mês: ${estatisticas.totalDemandas}`, 11);
-      addText(`Demandas Concluídas no Mês: ${estatisticas.demandasConcluidas}`, 11);
-      addText(`Demandas Iniciadas no Mês, Concluídas Depois: ${estatisticas.demandasIniciadasConcluidasDepois || 0}`, 11);
-      addText(`Demandas em Andamento: ${estatisticas.demandasEmAndamento}`, 11);
-      addText(`Checklists Concluídos: ${estatisticas.checklistsConcluidos}`, 11);
-      yPosition += 5;
+      // Adicionar cabeçalho com layout do documento Word
+      let yPosition = addHeader(pdf);
 
+      // Título principal - formato compacto
+      const tituloCompacto = `OVERVIEW DO CRONOGRAMA - ${mesNome.toUpperCase()}`;
+      yPosition = addSectionTitle(pdf, tituloCompacto, yPosition, 1);
+      
+      // Informações do documento serão adicionadas no footer
+      const infoTexto = `Gerado em: ${new Date().toLocaleDateString('pt-BR')} às ${new Date().toLocaleTimeString('pt-BR')} | Organização: ${currentUser?.nome_empresa || currentUser?.organizacao_nome || currentUser?.organizacao || 'Sistema'}`;
+      
+      yPosition += 2; // Espaço mínimo antes da seção
+      
+      // Estatísticas do mês - formato simplificado e compacto em uma linha
+      yPosition = addSectionTitle(pdf, 'ESTATÍSTICAS DO MÊS', yPosition, 2);
+      
+      // Formato compacto em uma linha única
+      const statsTexto = `Total Iniciadas: ${estatisticas.totalDemandas} | Concluídas no Mês: ${estatisticas.demandasConcluidas} | Em Andamento: ${estatisticas.demandasEmAndamento} | Checklists: ${estatisticas.checklistsConcluidos}`;
+      
+      yPosition = addBodyText(pdf, statsTexto, yPosition, {
+        fontSize: 10
+      });
+      
+      yPosition += 2; // Espaço mínimo antes da análise
+
+      // Processar análise da IA
       const analiseLinhas = analise.split('\n');
       analiseLinhas.forEach((linha: string) => {
         const t = linha.trim();
+        
+        // Ignorar linhas que são títulos duplicados do overview
+        if (t.includes('# OVERVIEW DO CRONOGRAMA') || t.match(/^#+\s*OVERVIEW/i)) {
+          return;
+        }
+        
         if (t.startsWith('### ')) {
-          addText(t.replace(/^###\s+/, ''), 13, true, [0, 102, 204]);
+          yPosition = addSectionTitle(pdf, t.replace(/^###\s+/, ''), yPosition, 3);
           return;
         }
         if (t.startsWith('## ')) {
-          addText(t.replace(/^##\s+/, ''), 14, true, [0, 102, 204]);
+          yPosition = addSectionTitle(pdf, t.replace(/^##\s+/, ''), yPosition, 2);
           return;
         }
         if (t.startsWith('[OK]')) {
-          addText(linha, 12, true, [15, 157, 88]);
+          yPosition = addBodyText(pdf, linha, yPosition, {
+            fontSize: 12,
+            isBold: true,
+            color: LAYOUT_COLORS.accent
+          });
           return;
         }
-        if (t.startsWith('[PENDENTE]') || t.startsWith('[EM ANDAMENTO]')) {
-          addText(linha, 12, true, [217, 48, 37]);
+        if (t.startsWith('[PENDENTE]') || t.startsWith('[EM ANDAMENTO]') || t.startsWith('[ATRASADA]')) {
+          yPosition = addBodyText(pdf, linha, yPosition, {
+            fontSize: 12,
+            isBold: true,
+            color: LAYOUT_COLORS.warning
+          });
           return;
         }
-        addText(linha, 11);
+        yPosition = addBodyText(pdf, linha, yPosition, {
+          fontSize: 11
+        });
       });
 
+      // Rodapé em todas as páginas
+      // (O background já foi adicionado no início de cada página, antes do conteúdo)
       const totalPages = pdf.internal.pages.length - 1;
       for (let i = 1; i <= totalPages; i++) {
         pdf.setPage(i);
-        pdf.setFontSize(8);
-        pdf.setTextColor(100, 100, 100);
-        pdf.text(`Página ${i} de ${totalPages}`, pageWidth - 30, pdf.internal.pageSize.getHeight() - 10);
+        addFooter(pdf, i, totalPages, infoTexto);
       }
 
       const escopoNome = orgParaFiltrar === 'todos' ? 'todas-organizacoes' : orgParaFiltrar.toLowerCase().replace(/\s+/g, '-');
@@ -1281,6 +1255,13 @@ const Cronograma = () => {
       expandirMesesComDemandas();
     }
   }, [cronogramas, filtroStatus, filtroPrioridade, filtroOrganizacao]);
+
+  // Ativar IA automaticamente quando os modais abrirem
+  useEffect(() => {
+    if (isOrganizationModalOpen || isStatusModalOpen) {
+      setUsarIA(true);
+    }
+  }, [isOrganizationModalOpen, isStatusModalOpen]);
 
   // Carregar checklist quando o modal de visualização abrir
   useEffect(() => {
@@ -3414,7 +3395,7 @@ const Cronograma = () => {
           </DialogHeader>
           
           {viewingCronograma && (
-            <div className="flex-1 overflow-hidden grid grid-cols-2 gap-6 min-h-0">
+            <div className="flex-1 overflow-hidden grid grid-cols-1 lg:grid-cols-2 gap-4 lg:gap-6 min-h-0">
               {/* Grid 1: Informações da Demanda */}
               <div className="flex flex-col overflow-hidden min-h-0">
                 {/* Área scrollável de conteúdo */}
@@ -3816,7 +3797,7 @@ const Cronograma = () => {
                 </Select>
               </div>
             ) : (
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-2 lg:space-y-3">
                   <Label htmlFor="ano-select" className="text-sm lg:text-base font-medium">Ano</Label>
                   <Select value={selectedAno} onValueChange={setSelectedAno}>

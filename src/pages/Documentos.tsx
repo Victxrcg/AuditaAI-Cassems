@@ -490,13 +490,13 @@ export default function Documentos() {
             {filteredDocs.map((d) => (
               <div 
                 key={d.id} 
-                className="flex items-center justify-between p-3 rounded border hover:bg-gray-50 transition-colors cursor-pointer"
+                className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-3 rounded border hover:bg-gray-50 transition-colors cursor-pointer gap-2 sm:gap-0"
               >
-                <div className="flex items-center gap-3 min-w-0">
-                  <FileText className="w-5 h-5 text-gray-600" />
-                  <div className="min-w-0">
+                <div className="flex items-center gap-3 min-w-0 flex-1 w-full sm:w-auto">
+                  <FileText className="w-4 h-4 sm:w-5 sm:h-5 text-gray-600 flex-shrink-0" />
+                  <div className="min-w-0 flex-1">
                     <div 
-                      className="font-medium truncate"
+                      className="font-medium text-sm sm:text-base truncate"
                       title={normalizeFileName(d.nome_arquivo)}
                     >
                       <span 
@@ -510,20 +510,24 @@ export default function Documentos() {
                     </div>
                     <div className="text-xs text-gray-500">{new Date(d.created_at).toLocaleString('pt-BR')}</div>
                   </div>
-                  <Badge className="ml-2">{Math.round((d.tamanho || 0) / 1024)} KB</Badge>
-                  <Badge variant="secondary" className="ml-2 flex items-center gap-1">
-                    <Building className="w-3 h-3" />{(d.organizacao || '').toUpperCase()}
-                  </Badge>
+                  <div className="flex items-center gap-1 sm:gap-2 flex-shrink-0">
+                    <Badge className="text-xs">{Math.round((d.tamanho || 0) / 1024)} KB</Badge>
+                    <Badge variant="secondary" className="text-xs flex items-center gap-1">
+                      <Building className="w-3 h-3" />{(d.organizacao || '').toUpperCase()}
+                    </Badge>
+                  </div>
                 </div>
-                <div className="flex gap-2 flex-shrink-0">
+                <div className="flex gap-1 sm:gap-2 flex-shrink-0 flex-wrap">
                   {d.mimetype === 'application/pdf' && (
                     <Button 
                       variant="default" 
                       size="sm" 
                       onClick={(e) => { e.stopPropagation(); setPdfDoc(d); }}
                       title="Visualizar PDF"
+                      className="text-xs"
                     >
-                      <Eye className="w-4 h-4 mr-1" /> Visualizar
+                      <Eye className="w-3 h-3 sm:w-4 sm:h-4 sm:mr-1" /> 
+                      <span className="hidden sm:inline">Visualizar</span>
                     </Button>
                   )}
                   {(d.mimetype?.includes('word') || d.mimetype?.includes('officedocument.wordprocessingml.document') || /\.docx$/i.test(d.nome_arquivo)) && (
@@ -532,8 +536,10 @@ export default function Documentos() {
                       size="sm" 
                       onClick={(e) => { e.stopPropagation(); setDocxDoc(d); }}
                       title="Visualizar DOCX"
+                      className="text-xs"
                     >
-                      <Eye className="w-4 h-4 mr-1" /> Visualizar
+                      <Eye className="w-3 h-3 sm:w-4 sm:h-4 sm:mr-1" /> 
+                      <span className="hidden sm:inline">Visualizar</span>
                     </Button>
                   )}
                   {d.mimetype && d.mimetype.startsWith('video/') && (
@@ -542,8 +548,10 @@ export default function Documentos() {
                       size="sm" 
                       onClick={(e) => { e.stopPropagation(); setPlayingDoc(d); }}
                       title="Assistir vídeo"
+                      className="text-xs"
                     >
-                      <Play className="w-4 h-4 mr-1" /> Assistir
+                      <Play className="w-3 h-3 sm:w-4 sm:h-4 sm:mr-1" /> 
+                      <span className="hidden sm:inline">Assistir</span>
                     </Button>
                   )}
                   <Button 
@@ -551,14 +559,15 @@ export default function Documentos() {
                     size="sm" 
                     onClick={() => setMovingDoc(d)}
                     title="Mover para outra pasta"
+                    className="h-8 w-8 sm:h-auto sm:w-auto p-0 sm:px-3"
                   >
-                    <Move className="w-4 h-4" />
+                    <Move className="w-3 h-3 sm:w-4 sm:h-4" />
                   </Button>
-                  <Button variant="outline" size="sm" onClick={() => downloadDocumento(d.id)}>
-                    <Download className="w-4 h-4" />
+                  <Button variant="outline" size="sm" onClick={() => downloadDocumento(d.id)} className="h-8 w-8 sm:h-auto sm:w-auto p-0 sm:px-3">
+                    <Download className="w-3 h-3 sm:w-4 sm:h-4" />
                   </Button>
-                  <Button variant="outline" size="sm" onClick={() => handleDeleteDocument(d)}>
-                    <Trash2 className="w-4 h-4" />
+                  <Button variant="outline" size="sm" onClick={() => handleDeleteDocument(d)} className="h-8 w-8 sm:h-auto sm:w-auto p-0 sm:px-3">
+                    <Trash2 className="w-3 h-3 sm:w-4 sm:h-4" />
                   </Button>
                 </div>
               </div>
@@ -577,32 +586,32 @@ export default function Documentos() {
 
       {/* Modal para mover documento */}
       {movingDoc && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <Card className="w-96">
-            <CardHeader>
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <Card className="w-full max-w-md">
+            <CardHeader className="p-4 sm:p-6">
               <div className="flex justify-between items-center">
-                <CardTitle>Mover Documento</CardTitle>
-                <Button variant="ghost" size="sm" onClick={() => setMovingDoc(null)}>
+                <CardTitle className="text-base sm:text-lg">Mover Documento</CardTitle>
+                <Button variant="ghost" size="sm" onClick={() => setMovingDoc(null)} className="h-8 w-8 p-0">
                   <X className="w-4 h-4" />
                 </Button>
               </div>
             </CardHeader>
-            <CardContent>
+            <CardContent className="p-4 sm:p-6">
               <div className="space-y-3">
-                <p className="text-sm text-gray-600">
+                <p className="text-xs sm:text-sm text-gray-600 break-words">
                   <strong>{movingDoc.nome_arquivo}</strong>
                 </p>
-                <div className="space-y-2">
+                <div className="space-y-2 max-h-[60vh] overflow-y-auto">
                   {/* Removido: opção Sem pasta */}
                   {pastas.map((pasta) => (
                     <Button 
                       key={pasta.id}
                       variant={movingDoc.pasta_id === pasta.id ? "default" : "outline"}
-                      className="w-full justify-start"
+                      className="w-full justify-start text-xs sm:text-sm"
                       onClick={() => handleMoveDocument(movingDoc.id, pasta.id)}
                     >
-                      <FolderOpen className="w-4 h-4 mr-2" />
-                      {pasta.titulo}
+                      <FolderOpen className="w-3 h-3 sm:w-4 sm:h-4 mr-2" />
+                      <span className="truncate">{pasta.titulo}</span>
                     </Button>
                   ))}
                 </div>
@@ -614,20 +623,20 @@ export default function Documentos() {
 
       {/* Modal do Player de Vídeo */}
       {playingDoc && (
-        <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50">
-          <Card className="w-[90vw] max-w-5xl">
-            <CardHeader>
-              <div className="flex justify-between items-center">
-                <CardTitle>Reproduzir vídeo</CardTitle>
-                <Button variant="ghost" size="sm" onClick={() => setPlayingDoc(null)}>
+        <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50 p-2 sm:p-4">
+          <Card className="w-full max-w-5xl max-h-[95vh] flex flex-col">
+            <CardHeader className="p-3 sm:p-6 flex-shrink-0">
+              <div className="flex justify-between items-center gap-2">
+                <CardTitle className="text-sm sm:text-lg truncate">Reproduzir vídeo</CardTitle>
+                <Button variant="ghost" size="sm" onClick={() => setPlayingDoc(null)} className="h-8 w-8 p-0 flex-shrink-0">
                   <X className="w-4 h-4" />
                 </Button>
               </div>
-              <CardDescription className="truncate" title={normalizeFileName(playingDoc.nome_arquivo)}>
+              <CardDescription className="truncate text-xs sm:text-sm" title={normalizeFileName(playingDoc.nome_arquivo)}>
                 {normalizeFileName(playingDoc.nome_arquivo)}
               </CardDescription>
             </CardHeader>
-            <CardContent>
+            <CardContent className="p-2 sm:p-6 flex-1 min-h-0">
               <div className="w-full aspect-video bg-black rounded overflow-hidden">
                 {/* Usar endpoint de stream com suporte a Range */}
                 <video
@@ -646,20 +655,20 @@ export default function Documentos() {
 
       {/* Modal do Visualizador de PDF */}
       {pdfDoc && (
-        <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50">
-          <Card className="w-[95vw] h-[90vh] max-w-7xl">
-            <CardHeader>
-              <div className="flex justify-between items-center">
-                <CardTitle>Visualizar PDF</CardTitle>
-                <Button variant="ghost" size="sm" onClick={() => setPdfDoc(null)}>
+        <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50 p-2 sm:p-4">
+          <Card className="w-full h-full sm:h-[90vh] sm:max-w-7xl flex flex-col">
+            <CardHeader className="p-3 sm:p-6 flex-shrink-0">
+              <div className="flex justify-between items-center gap-2">
+                <CardTitle className="text-sm sm:text-lg truncate">Visualizar PDF</CardTitle>
+                <Button variant="ghost" size="sm" onClick={() => setPdfDoc(null)} className="h-8 w-8 p-0 flex-shrink-0">
                   <X className="w-4 h-4" />
                 </Button>
               </div>
-              <CardDescription className="truncate" title={normalizeFileName(pdfDoc.nome_arquivo)}>
+              <CardDescription className="truncate text-xs sm:text-sm" title={normalizeFileName(pdfDoc.nome_arquivo)}>
                 {normalizeFileName(pdfDoc.nome_arquivo)}
               </CardDescription>
             </CardHeader>
-            <CardContent className="h-[calc(90vh-120px)]">
+            <CardContent className="p-2 sm:p-6 flex-1 min-h-0 h-[calc(100%-120px)] sm:h-[calc(90vh-120px)]">
               <div className="w-full h-full bg-white rounded overflow-hidden border">
                 <iframe
                   title="PDF"
@@ -674,20 +683,20 @@ export default function Documentos() {
 
       {/* Modal do Visualizador de DOCX */}
       {docxDoc && (
-        <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50">
-          <Card className="w-[95vw] h-[90vh] max-w-7xl">
-            <CardHeader>
-              <div className="flex justify-between items-center">
-                <CardTitle>Visualizar DOCX</CardTitle>
-                <Button variant="ghost" size="sm" onClick={() => setDocxDoc(null)}>
+        <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50 p-2 sm:p-4">
+          <Card className="w-full h-full sm:h-[90vh] sm:max-w-7xl flex flex-col">
+            <CardHeader className="p-3 sm:p-6 flex-shrink-0">
+              <div className="flex justify-between items-center gap-2">
+                <CardTitle className="text-sm sm:text-lg truncate">Visualizar DOCX</CardTitle>
+                <Button variant="ghost" size="sm" onClick={() => setDocxDoc(null)} className="h-8 w-8 p-0 flex-shrink-0">
                   <X className="w-4 h-4" />
                 </Button>
               </div>
-              <CardDescription className="truncate" title={normalizeFileName(docxDoc.nome_arquivo)}>
+              <CardDescription className="truncate text-xs sm:text-sm" title={normalizeFileName(docxDoc.nome_arquivo)}>
                 {normalizeFileName(docxDoc.nome_arquivo)}
               </CardDescription>
             </CardHeader>
-            <CardContent className="h-[calc(90vh-120px)]">
+            <CardContent className="p-2 sm:p-6 flex-1 min-h-0 h-[calc(100%-120px)] sm:h-[calc(90vh-120px)]">
               <div className="w-full h-full bg-white rounded overflow-hidden border">
                 {/* Visualizador online da Microsoft exige URL pública acessível. Em ambiente local pode não abrir. */}
                 <iframe
@@ -703,45 +712,48 @@ export default function Documentos() {
 
       {/* Modal de confirmação de exclusão de pasta */}
       {deletingPasta && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <Card className="w-96">
-            <CardHeader>
-              <div className="flex items-center gap-3">
-                <div className="p-2 bg-red-100 rounded-full">
-                  <AlertTriangle className="w-6 h-6 text-red-600" />
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <Card className="w-full max-w-md">
+            <CardHeader className="p-4 sm:p-6">
+              <div className="flex items-center gap-2 sm:gap-3">
+                <div className="p-2 bg-red-100 rounded-full flex-shrink-0">
+                  <AlertTriangle className="w-5 h-5 sm:w-6 sm:h-6 text-red-600" />
                 </div>
-                <div>
-                  <CardTitle className="text-red-800">Confirmar Exclusão</CardTitle>
-                  <CardDescription>Esta ação não pode ser desfeita</CardDescription>
+                <div className="min-w-0">
+                  <CardTitle className="text-red-800 text-sm sm:text-base">Confirmar Exclusão</CardTitle>
+                  <CardDescription className="text-xs sm:text-sm">Esta ação não pode ser desfeita</CardDescription>
                 </div>
               </div>
             </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
-                  <p className="text-sm text-red-800 font-medium mb-2">
+            <CardContent className="p-4 sm:p-6">
+              <div className="space-y-3 sm:space-y-4">
+                <div className="p-3 sm:p-4 bg-red-50 border border-red-200 rounded-lg">
+                  <p className="text-xs sm:text-sm text-red-800 font-medium mb-2 break-words">
                     Tem certeza que deseja remover a pasta <strong>"{deletingPasta.titulo}"</strong>?
                   </p>
-                  <p className="text-sm text-red-700">
+                  <p className="text-xs sm:text-sm text-red-700">
                     {deletingPasta.total_documentos > 0 
                       ? `Os ${deletingPasta.total_documentos} documento(s) dentro dela serão movidos para "Sem pasta".`
                       : 'A pasta está vazia e será removida permanentemente.'
                     }
                   </p>
                 </div>
-                <div className="flex gap-3 justify-end">
+                <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 justify-end">
                   <Button 
                     variant="outline" 
                     onClick={() => setDeletingPasta(null)}
+                    size="sm"
+                    className="text-xs sm:text-sm"
                   >
                     Cancelar
                   </Button>
                   <Button 
                     variant="destructive" 
                     onClick={confirmDeletePasta}
-                    className="bg-red-600 hover:bg-red-700"
+                    className="bg-red-600 hover:bg-red-700 text-xs sm:text-sm"
+                    size="sm"
                   >
-                    <Trash2 className="w-4 h-4 mr-2" />
+                    <Trash2 className="w-3 h-3 sm:w-4 sm:h-4 mr-1 sm:mr-2" />
                     Excluir Pasta
                   </Button>
                 </div>
@@ -753,42 +765,45 @@ export default function Documentos() {
 
       {/* Modal de confirmação de exclusão de documento */}
       {deletingDoc && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <Card className="w-96">
-            <CardHeader>
-              <div className="flex items-center gap-3">
-                <div className="p-2 bg-red-100 rounded-full">
-                  <AlertTriangle className="w-6 h-6 text-red-600" />
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <Card className="w-full max-w-md">
+            <CardHeader className="p-4 sm:p-6">
+              <div className="flex items-center gap-2 sm:gap-3">
+                <div className="p-2 bg-red-100 rounded-full flex-shrink-0">
+                  <AlertTriangle className="w-5 h-5 sm:w-6 sm:h-6 text-red-600" />
                 </div>
-                <div>
-                  <CardTitle className="text-red-800">Confirmar Exclusão</CardTitle>
-                  <CardDescription>Esta ação não pode ser desfeita</CardDescription>
+                <div className="min-w-0">
+                  <CardTitle className="text-red-800 text-sm sm:text-base">Confirmar Exclusão</CardTitle>
+                  <CardDescription className="text-xs sm:text-sm">Esta ação não pode ser desfeita</CardDescription>
                 </div>
               </div>
             </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
-                  <p className="text-sm text-red-800 font-medium mb-2">
+            <CardContent className="p-4 sm:p-6">
+              <div className="space-y-3 sm:space-y-4">
+                <div className="p-3 sm:p-4 bg-red-50 border border-red-200 rounded-lg">
+                  <p className="text-xs sm:text-sm text-red-800 font-medium mb-2 break-words">
                     Tem certeza que deseja remover o documento <strong>"{deletingDoc.nome_arquivo}"</strong>?
                   </p>
-                  <p className="text-sm text-red-700">
+                  <p className="text-xs sm:text-sm text-red-700">
                     O arquivo será removido permanentemente do servidor.
                   </p>
                 </div>
-                <div className="flex gap-3 justify-end">
+                <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 justify-end">
                   <Button 
                     variant="outline" 
                     onClick={() => setDeletingDoc(null)}
+                    size="sm"
+                    className="text-xs sm:text-sm"
                   >
                     Cancelar
                   </Button>
                   <Button 
                     variant="destructive" 
                     onClick={confirmDeleteDocument}
-                    className="bg-red-600 hover:bg-red-700"
+                    className="bg-red-600 hover:bg-red-700 text-xs sm:text-sm"
+                    size="sm"
                   >
-                    <Trash2 className="w-4 h-4 mr-2" />
+                    <Trash2 className="w-3 h-3 sm:w-4 sm:h-4 mr-1 sm:mr-2" />
                     Excluir Documento
                   </Button>
                 </div>
