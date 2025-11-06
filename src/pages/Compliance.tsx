@@ -305,13 +305,15 @@ const getEditIndicator = (item: ComplianceItem, cor?: string) => {
   }
 
   return (
-    <div className="text-xs text-gray-500 flex items-center gap-1">
+    <div className="text-xs text-gray-500 flex items-center gap-1 flex-wrap break-words">
       <div
-        className="w-2 h-2 rounded-full"
+        className="w-2 h-2 rounded-full flex-shrink-0"
         style={{ backgroundColor: org.cor }}
       />
-      Editado por {item.updatedBy} ({org.nome})
-      {item.lastUpdated && ` em ${formatDateTimeBR(item.lastUpdated)}`}
+      <span className="break-words">
+        Editado por {item.updatedBy} ({org.nome})
+        {item.lastUpdated && ` em ${formatDateTimeBR(item.lastUpdated)}`}
+      </span>
     </div>
   );
 };
@@ -496,41 +498,44 @@ const ComplianceItemCard = memo(({
   // Se o card não está expandido, mostrar apenas o resumo
   if (!item.isExpanded) {
     return (
-      <Card className={`mb-6 bg-white transition-shadow ${!canAccess ? 'opacity-50' : 'shadow-sm hover:shadow-lg'}`}>
-        <CardHeader>
-          <div className="flex justify-between items-start">
-            <div>
-              <CardTitle className={`text-lg ${!canAccess ? 'text-gray-400' : ''}`}>
-                {item.id === '1' && item.data
-                  ? formatCompetenciaTitle(item.data)
-                  : item.title
-                }
-              </CardTitle>
-              <CardDescription className={!canAccess ? 'text-gray-400' : ''}>
+      <Card className={`mb-6 bg-white transition-shadow ${!canAccess ? 'opacity-50' : 'shadow-sm hover:shadow-lg'} overflow-hidden`}>
+        <CardHeader className="p-4 sm:p-6">
+          <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-3 sm:gap-4">
+            <div className="flex-1 min-w-0">
+              <div className="flex flex-wrap items-center gap-2 mb-2">
+                <CardTitle className={`text-base sm:text-lg break-words ${!canAccess ? 'text-gray-400' : ''}`}>
+                  {item.id === '1' && item.data
+                    ? formatCompetenciaTitle(item.data)
+                    : item.title
+                  }
+                </CardTitle>
+                {getStatusBadge(item.status)}
+              </div>
+              <CardDescription className={`text-sm sm:text-base mt-1 break-words ${!canAccess ? 'text-gray-400' : ''}`}>
                 {item.description}
               </CardDescription>
               {!canAccess && (
-                <div className="text-xs text-orange-600 mt-1 font-medium">
+                <div className="text-xs text-orange-600 mt-1 font-medium break-words">
                   🔒 Complete a etapa anterior para desbloquear
                 </div>
               )}
               {item.lastUpdated && canAccess && (
-                <div className="text-xs text-gray-500 mt-1">
+                <div className="text-xs text-gray-500 mt-1 break-words">
                   Última atualização: {formatDateTimeBR(item.lastUpdated)} por {item.updatedBy}
                 </div>
               )}
             </div>
-            <div className="flex items-center gap-2">
-              {getStatusBadge(item.status)}
+            <div className="flex-shrink-0">
               <Button
                 onClick={() => onToggleExpanded(item.id)}
                 size="sm"
                 variant="outline"
                 disabled={!canAccess}
-                className={!canAccess ? 'cursor-not-allowed' : ''}
+                className={`text-xs sm:text-sm whitespace-nowrap ${!canAccess ? 'cursor-not-allowed' : ''}`}
               >
-                <Pencil className="h-4 w-4 mr-1" />
-                {canAccess ? 'Editar' : 'Bloqueado'}
+                <Pencil className="h-3 w-3 sm:h-4 sm:w-4 sm:mr-1" />
+                <span className="hidden sm:inline">{canAccess ? 'Editar' : 'Bloqueado'}</span>
+                <span className="sm:hidden">{canAccess ? 'Editar' : 'Bloq.'}</span>
               </Button>
             </div>
           </div>
@@ -542,51 +547,63 @@ const ComplianceItemCard = memo(({
   // Se for o Parecer Final, renderizar interface especial de IA
   if (item.id === '8') {
     return (
-      <Card className="mb-6 bg-white transition-shadow shadow-sm hover:shadow-lg">
-        <CardHeader>
+      <Card className="mb-6 bg-white transition-shadow shadow-sm hover:shadow-lg overflow-hidden">
+        <CardHeader className="p-4 sm:p-6">
           <div className="flex justify-between items-start">
-            <div>
-              <CardTitle className="text-lg flex items-center gap-2">
-                <MessageSquare className="h-5 w-5 text-blue-600" />
+            <div className="flex-1 min-w-0">
+              <CardTitle className="text-base sm:text-lg flex items-center gap-2 break-words">
+                <MessageSquare className="h-4 w-4 sm:h-5 sm:w-5 text-blue-600 flex-shrink-0" />
                 {item.title}
               </CardTitle>
-              <CardDescription>
+              <CardDescription className="text-xs sm:text-sm break-words">
                 {item.description} - Gerado automaticamente por IA
               </CardDescription>
             </div>
           </div>
         </CardHeader>
 
-        <CardContent className="space-y-4">
-          <div className="bg-gradient-to-r from-blue-50 to-indigo-50 p-6 rounded-lg border border-blue-200">
-            <div className="flex items-center justify-between">
-              <div>
-                <h3 className="text-lg font-semibold text-blue-900 mb-2">
+        <CardContent className="p-4 sm:p-6 space-y-4">
+          <div className="bg-gradient-to-r from-blue-50 to-indigo-50 p-4 sm:p-6 rounded-lg border border-blue-200 w-full">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+              <div className="flex-1 min-w-0">
+                <h3 className="text-base sm:text-lg font-semibold text-blue-900 mb-2 break-words">
                    Gerar Parecer com Inteligência Artificial
                 </h3>
-                <p className="text-blue-700 text-sm">
+                <p className="text-blue-700 text-xs sm:text-sm break-words">
                   A IA analisará todos os campos preenchidos e gerará um parecer completo.
                 </p>
               </div>
-              <div className="flex gap-2">
+              <div className="flex gap-2 flex-shrink-0">
                 {!item.observacoes ? (
                   // Se não há parecer gerado, mostrar botão para gerar
-                  <div className="flex flex-col gap-2">
+                  <div className="flex flex-col gap-2 w-full sm:w-auto">
                     <Button
                       onClick={() => gerarParecer(currentCompetenciaId || '')}
                       size="lg"
-                      className="bg-gradient-to-r from-gray-400 to-gray-500 hover:from-gray-500 hover:to-gray-600 text-white cursor-not-allowed opacity-60"
-                      disabled={true}
+                      className={`w-full sm:w-auto text-sm sm:text-base ${
+                        canGenerateAI && !loading
+                          ? 'bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white'
+                          : 'bg-gradient-to-r from-gray-400 to-gray-500 hover:from-gray-500 hover:to-gray-600 text-white cursor-not-allowed opacity-60'
+                      }`}
+                      disabled={!canGenerateAI || loading}
                     >
                       {loading ? (
                         <>
-                          <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2"></div>
-                          Gerando...
+                          <div className="animate-spin rounded-full h-4 w-4 sm:h-5 sm:w-5 border-b-2 border-white mr-2"></div>
+                          <span className="hidden sm:inline">Gerando...</span>
+                          <span className="sm:hidden">Gerando</span>
+                        </>
+                      ) : canGenerateAI ? (
+                        <>
+                          <Brain className="h-4 w-4 sm:h-5 sm:w-5 mr-2" />
+                          <span className="hidden sm:inline">Gerar Parecer IA</span>
+                          <span className="sm:hidden">Gerar IA</span>
                         </>
                       ) : (
                         <>
-                          <Lock className="h-5 w-5 mr-2" />
-                          Gerar Parecer IA
+                          <Lock className="h-4 w-4 sm:h-5 sm:w-5 mr-2" />
+                          <span className="hidden sm:inline">Gerar Parecer IA</span>
+                          <span className="sm:hidden">Gerar IA</span>
                         </>
                       )}
                     </Button>
@@ -596,11 +613,12 @@ const ComplianceItemCard = memo(({
                   <Button
                     onClick={() => downloadParecerPDF(item.observacoes)}
                     variant="outline"
-                    className="border-green-600 text-green-600 hover:bg-green-50"
+                    className="border-green-600 text-green-600 hover:bg-green-50 w-full sm:w-auto text-sm sm:text-base"
                     size="lg"
                   >
-                    <Download className="h-5 w-5 mr-2" />
-                    Baixar PDF
+                    <Download className="h-4 w-4 sm:h-5 sm:w-5 mr-2" />
+                    <span className="hidden sm:inline">Baixar PDF</span>
+                    <span className="sm:hidden">Baixar</span>
                   </Button>
                 )}
               </div>
@@ -609,12 +627,12 @@ const ComplianceItemCard = memo(({
 
           {/* Mostrar loading enquanto gera o parecer */}
           {loading && !item.observacoes && (
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-              <div className="flex items-center gap-3">
-                <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
-                <div>
-                  <h4 className="font-medium text-blue-900">Gerando Parecer com IA...</h4>
-                  <p className="text-sm text-blue-700">Aguarde enquanto a inteligência artificial analisa os dados e gera o parecer.</p>
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 sm:p-4 w-full">
+              <div className="flex items-start sm:items-center gap-3">
+                <div className="animate-spin rounded-full h-5 w-5 sm:h-6 sm:w-6 border-b-2 border-blue-600 flex-shrink-0 mt-0.5 sm:mt-0"></div>
+                <div className="flex-1 min-w-0">
+                  <h4 className="font-medium text-blue-900 text-sm sm:text-base break-words">Gerando Parecer com IA...</h4>
+                  <p className="text-xs sm:text-sm text-blue-700 break-words mt-1">Aguarde enquanto a inteligência artificial analisa os dados e gera o parecer.</p>
                 </div>
               </div>
             </div>
@@ -622,12 +640,12 @@ const ComplianceItemCard = memo(({
 
           {/* Mostrar parecer gerado se existir */}
           {item.observacoes && (
-            <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+            <div className="bg-green-50 border border-green-200 rounded-lg p-3 sm:p-4 w-full">
               <div className="flex items-center gap-2 text-green-800 mb-3">
-                <CheckCircle className="h-4 w-4" />
-                <span className="font-medium">Parecer Gerado:</span>
+                <CheckCircle className="h-4 w-4 flex-shrink-0" />
+                <span className="font-medium text-sm sm:text-base break-words">Parecer Gerado:</span>
               </div>
-              <div className="text-sm text-gray-700 whitespace-pre-wrap bg-white p-3 rounded border">
+              <div className="text-xs sm:text-sm text-gray-700 whitespace-pre-wrap bg-white p-3 rounded border break-words overflow-x-auto max-w-full">
                 {item.observacoes}
               </div>
             </div>
@@ -635,30 +653,32 @@ const ComplianceItemCard = memo(({
 
           {/* Lista de anexos do parecer */}
           {anexos.length > 0 && (
-            <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+            <div className="bg-green-50 border border-green-200 rounded-lg p-3 sm:p-4 w-full">
               <div className="flex items-center gap-2 text-green-800 mb-3">
-                <CheckCircle className="h-4 w-4" />
-                <span className="font-medium">Pareceres gerados:</span>
+                <CheckCircle className="h-4 w-4 flex-shrink-0" />
+                <span className="font-medium text-sm sm:text-base break-words">Pareceres gerados:</span>
               </div>
               <div className="space-y-2">
                 {anexos.map((anexo) => (
-                  <div key={anexo.id} className="flex items-center justify-between bg-white p-3 rounded border">
-                    <div className="flex items-center gap-2">
-                      <FileText className="h-4 w-4 text-green-600" />
-                      <span className="text-sm font-medium">{anexo.nome_arquivo || 'Arquivo sem nome'}</span>
-                      <span className="text-xs text-gray-500">
-                        ({formatFileSize(anexo.tamanho_arquivo || 0)})
-                      </span>
+                  <div key={anexo.id} className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 bg-white p-3 rounded border w-full">
+                    <div className="flex items-center gap-2 min-w-0 flex-1">
+                      <FileText className="h-4 w-4 text-green-600 flex-shrink-0" />
+                      <div className="min-w-0 flex-1">
+                        <span className="text-xs sm:text-sm font-medium break-words block">{anexo.nome_arquivo || 'Arquivo sem nome'}</span>
+                        <span className="text-xs text-gray-500">
+                          ({formatFileSize(anexo.tamanho_arquivo || 0)})
+                        </span>
+                      </div>
                     </div>
-                    <div className="flex gap-2">
+                    <div className="flex gap-2 flex-shrink-0">
                       <Button
                         variant="outline"
                         size="sm"
                         onClick={() => handleDownloadAnexo(anexo)}
-                        className="text-green-700 border-green-300"
+                        className="text-green-700 border-green-300 text-xs sm:text-sm"
                       >
-                        <Download className="h-4 w-4 mr-1" />
-                        Baixar
+                        <Download className="h-3 w-3 sm:h-4 sm:w-4 sm:mr-1" />
+                        <span className="hidden sm:inline">Baixar</span>
                       </Button>
                       <Button
                         variant="outline"
@@ -666,7 +686,7 @@ const ComplianceItemCard = memo(({
                         onClick={() => handleRemoveAnexo(anexo.id)}
                         className="text-red-700 border-red-300"
                       >
-                        <Trash2 className="h-4 w-4" />
+                        <Trash2 className="h-3 w-3 sm:h-4 sm:w-4" />
                       </Button>
                     </div>
                   </div>
@@ -676,7 +696,7 @@ const ComplianceItemCard = memo(({
           )}
 
           {item.lastUpdated && (
-            <div className="text-xs text-gray-500 border-t pt-2">
+            <div className="text-xs text-gray-500 border-t pt-2 break-words">
               Última atualização: {formatDateTimeBR(item.lastUpdated)} por {item.updatedBy}
             </div>
           )}
@@ -687,17 +707,17 @@ const ComplianceItemCard = memo(({
 
   // Renderização normal para outros itens
   return (
-    <Card className={`mb-6 bg-white transition-shadow ${!canAccess ? 'opacity-50' : 'shadow-sm hover:shadow-lg'}`}>
-      <CardHeader>
-        <div className="flex justify-between items-start">
-          <div>
-            <CardTitle className={`text-lg ${!canAccess ? 'text-gray-400' : ''}`}>
+    <Card className={`mb-6 bg-white transition-shadow ${!canAccess ? 'opacity-50' : 'shadow-sm hover:shadow-lg'} overflow-hidden`}>
+      <CardHeader className="p-4 sm:p-6">
+        <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-3 sm:gap-4">
+          <div className="flex-1 min-w-0">
+            <CardTitle className={`text-base sm:text-lg break-words ${!canAccess ? 'text-gray-400' : ''}`}>
               {item.id === '1' && item.data
                 ? formatCompetenciaTitle(item.data)
                 : item.title
               }
             </CardTitle>
-            <CardDescription className={!canAccess ? 'text-gray-400' : ''}>
+            <CardDescription className={`text-sm sm:text-base mt-1 break-words ${!canAccess ? 'text-gray-400' : ''}`}>
               {item.description}
             </CardDescription>
             {!canAccess && (
@@ -706,20 +726,23 @@ const ComplianceItemCard = memo(({
               </div>
             )}
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2 sm:flex-nowrap sm:flex-shrink-0">
             {/* Badge de organização */}
             {getOrganizationBadge(item.organizacao)}
             {getStatusBadge(item.status)}
             <Button
               onClick={() => onSave(item.id)}
               size="sm"
-              className="bg-blue-600 hover:bg-blue-700"
+              className="bg-blue-600 hover:bg-blue-700 text-xs sm:text-sm whitespace-nowrap"
               disabled={loading || !canAccess}
             >
-              {loading ? 'Salvando...' : (
+              {loading ? (
+                <span className="hidden sm:inline">Salvando...</span>
+              ) : (
                 <>
-                  <Save className="h-4 w-4 mr-1" />
-                  {canAccess ? 'Salvar' : 'Bloqueado'}
+                  <Save className="h-3 w-3 sm:h-4 sm:w-4 sm:mr-1" />
+                  <span className="hidden sm:inline">{canAccess ? 'Salvar' : 'Bloqueado'}</span>
+                  <span className="sm:hidden">{canAccess ? 'Salvar' : 'Bloq.'}</span>
                 </>
               )}
             </Button>
@@ -727,6 +750,7 @@ const ComplianceItemCard = memo(({
               onClick={() => onToggleExpanded(item.id)}
               size="sm"
               variant="outline"
+              className="text-xs sm:text-sm whitespace-nowrap"
             >
               Fechar
             </Button>
@@ -734,26 +758,26 @@ const ComplianceItemCard = memo(({
         </div>
       </CardHeader>
 
-      <CardContent className={`space-y-4 ${!canAccess ? 'pointer-events-none' : ''}`}>
+      <CardContent className={`p-4 sm:p-6 space-y-4 ${!canAccess ? 'pointer-events-none' : ''} overflow-hidden`}>
         {!canAccess ? (
-          <div className="text-center py-8 text-gray-500">
-            <div className="text-4xl mb-2">🔒</div>
-            <p className="text-lg font-medium">Etapa Bloqueada</p>
-            <p className="text-sm">Complete a etapa anterior para desbloquear esta seção.</p>
+          <div className="text-center py-6 sm:py-8 text-gray-500 px-2">
+            <div className="text-3xl sm:text-4xl mb-2">🔒</div>
+            <p className="text-base sm:text-lg font-medium break-words">Etapa Bloqueada</p>
+            <p className="text-xs sm:text-sm break-words mt-1">Complete a etapa anterior para desbloquear esta seção.</p>
           </div>
         ) : (
           <>
-            <div className={`grid grid-cols-1 gap-4 md:grid-cols-1`}>
+            <div className={`grid grid-cols-1 gap-4 md:grid-cols-1 w-full`}>
 
           {/* Campo Período - apenas para Período (id: 1) */}
           {item.id === '1' && (
-            <div>
-              <Label htmlFor={`data-${item.id}`}>
-                <Calendar className="h-4 w-4 inline mr-1" />
+            <div className="w-full">
+              <Label htmlFor={`data-${item.id}`} className="text-sm sm:text-base">
+                <Calendar className="h-3 w-3 sm:h-4 sm:w-4 inline mr-1" />
                 Período da Competência
               </Label>
-              <div className="flex gap-2 mt-1">
-                <div className="flex-1">
+              <div className="flex flex-col sm:flex-row gap-2 mt-1 w-full">
+                <div className="flex-1 w-full min-w-0">
                   <Label htmlFor={`data-inicio-${item.id}`} className="text-xs text-gray-500">
                     Data Início
                   </Label>
@@ -769,11 +793,11 @@ const ComplianceItemCard = memo(({
                     }}
                     min={demandaPrincipalPeriodo?.dataInicio || "1900-01-01"}
                     max={demandaPrincipalPeriodo?.dataFim || "2099-12-31"}
-                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                    className="flex h-9 sm:h-10 w-full rounded-md border border-input bg-background px-2 sm:px-3 py-2 text-xs sm:text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
                     placeholder="Data início"
                   />
                 </div>
-                <div className="flex-1">
+                <div className="flex-1 w-full min-w-0">
                   <Label htmlFor={`data-fim-${item.id}`} className="text-xs text-gray-500">
                     Data Fim
                   </Label>
@@ -789,12 +813,12 @@ const ComplianceItemCard = memo(({
                     }}
                     min={demandaPrincipalPeriodo?.dataInicio || "1900-01-01"}
                     max={demandaPrincipalPeriodo?.dataFim || "2099-12-31"}
-                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                    className="flex h-9 sm:h-10 w-full rounded-md border border-input bg-background px-2 sm:px-3 py-2 text-xs sm:text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
                     placeholder="Data fim"
                   />
                 </div>
               </div>
-              <p className="text-xs text-gray-500 mt-1">
+              <p className="text-xs text-gray-500 mt-1 break-words">
                 {demandaPrincipalPeriodo?.dataInicio && demandaPrincipalPeriodo?.dataFim
                   ? `Selecione o período da competência fiscal dentro do período da demanda principal (${formatDateBR(demandaPrincipalPeriodo.dataInicio)} a ${formatDateBR(demandaPrincipalPeriodo.dataFim)})`
                   : 'Selecione o período da competência fiscal (ano entre 1900 e 2099)'
@@ -803,9 +827,9 @@ const ComplianceItemCard = memo(({
             </div>
           )}
 
-          <div>
-            <Label htmlFor={`observacoes-${item.id}`}>
-              <MessageSquare className="h-4 w-4 inline mr-1" />
+          <div className="w-full">
+            <Label htmlFor={`observacoes-${item.id}`} className="text-sm sm:text-base">
+              <MessageSquare className="h-3 w-3 sm:h-4 sm:w-4 inline mr-1" />
               Observações
             </Label>
             <Textarea
@@ -813,29 +837,29 @@ const ComplianceItemCard = memo(({
               value={item.observacoes || ''}
               onChange={(e) => onFieldChange(item.id, 'observacoes', e.target.value)}
               placeholder="Digite suas observações aqui..."
-              className="mt-1 w-full min-h-[80px] resize-none"
+              className="mt-1 w-full min-h-[80px] resize-none max-w-full text-xs sm:text-sm"
               rows={3}
             />
           </div>
 
           {/* Campos de Email - para Notas Fiscais (ID '7') e Relatório Faturamento (ID '3') */}
           {(item.id === '7' || item.id === '3') && (
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 sm:p-4 w-full">
               <div className="flex items-center gap-2 mb-3">
-                <Mail className="h-5 w-5 text-blue-600" />
-                <h3 className="text-lg font-semibold text-blue-900">Envio por Email</h3>
+                <Mail className="h-4 w-4 sm:h-5 sm:w-5 text-blue-600 flex-shrink-0" />
+                <h3 className="text-base sm:text-lg font-semibold text-blue-900 break-words">Envio por Email</h3>
               </div>
-              <p className="text-sm text-blue-700 mb-4">
+              <p className="text-xs sm:text-sm text-blue-700 mb-4 break-words">
                 {item.id === '3' 
                   ? 'Envie o relatório de faturamento anexado diretamente por email'
                   : 'Envie as notas fiscais anexadas diretamente por email'
                 }
               </p>
               
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <Label htmlFor={`email-remetente-${item.id}`}>
-                    <Mail className="h-4 w-4 inline mr-1" />
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4 w-full">
+                <div className="w-full min-w-0">
+                  <Label htmlFor={`email-remetente-${item.id}`} className="text-xs sm:text-sm">
+                    <Mail className="h-3 w-3 sm:h-4 sm:w-4 inline mr-1" />
                     Seu Email (Remetente)
                   </Label>
                   <Input
@@ -844,14 +868,14 @@ const ComplianceItemCard = memo(({
                     value={item.emailRemetente || currentUserEmail || ''}
                     onChange={(e) => onFieldChange(item.id, 'emailRemetente', e.target.value)}
                     placeholder="seu.email@exemplo.com"
-                    className="mt-1"
+                    className="mt-1 w-full text-xs sm:text-sm"
                     disabled
                   />
                 </div>
                 
-                <div>
-                  <Label htmlFor={`email-destinatario-${item.id}`}>
-                    <Mail className="h-4 w-4 inline mr-1" />
+                <div className="w-full min-w-0">
+                  <Label htmlFor={`email-destinatario-${item.id}`} className="text-xs sm:text-sm">
+                    <Mail className="h-3 w-3 sm:h-4 sm:w-4 inline mr-1" />
                     Email Destinatário
                   </Label>
                   <Input
@@ -860,14 +884,14 @@ const ComplianceItemCard = memo(({
                     value={item.emailDestinatario || ''}
                     onChange={(e) => onFieldChange(item.id, 'emailDestinatario', e.target.value)}
                     placeholder="destinatario@exemplo.com"
-                    className="mt-1"
+                    className="mt-1 w-full text-xs sm:text-sm"
                   />
                 </div>
               </div>
 
               {/* Assunto opcional */}
-              <div className="mt-4">
-                <Label htmlFor={`email-assunto-${item.id}`}>Assunto (opcional)</Label>
+              <div className="mt-4 w-full">
+                <Label htmlFor={`email-assunto-${item.id}`} className="text-xs sm:text-sm">Assunto (opcional)</Label>
                 <Input
                   id={`email-assunto-${item.id}`}
                   type="text"
@@ -881,25 +905,25 @@ const ComplianceItemCard = memo(({
                         ? `Notas Fiscais - Competência Período (${competenciaPeriodo}) (padrão)`
                         : `Notas Fiscais - Competência ${currentCompetenciaId || ''} (padrão)`
                     }
-                  className="mt-1"
+                  className="mt-1 w-full text-xs sm:text-sm"
                 />
               </div>
               
               {/* Status de envio */}
               {item.emailEnviado && (
-                <div className="mt-4 p-3 bg-green-50 border border-green-200 rounded-lg">
-                  <div className="flex items-center gap-2">
-                    <Mail className="h-5 w-5 text-green-600" />
-                    <span className="text-green-800 font-medium">Email enviado com sucesso!</span>
+                <div className="mt-4 p-3 bg-green-50 border border-green-200 rounded-lg w-full">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <Mail className="h-4 w-4 sm:h-5 sm:w-5 text-green-600 flex-shrink-0" />
+                    <span className="text-xs sm:text-sm text-green-800 font-medium break-words">Email enviado com sucesso!</span>
                   </div>
-                  <p className="text-sm text-green-700 mt-1">
+                  <p className="text-xs sm:text-sm text-green-700 mt-1 break-words">
                     De: {item.emailRemetente} → Para: {item.emailDestinatario}
                   </p>
                 </div>
               )}
 
               {/* Botão de envio de email */}
-              <div className="mt-4 flex justify-end">
+              <div className="mt-4 flex justify-end w-full">
                 <Button
                   onClick={async () => {
                     const emailRemetenteToUse = item.emailRemetente || currentUserEmail || '';
@@ -992,11 +1016,12 @@ const ComplianceItemCard = memo(({
                       });
                     }
                   }}
-                  className={item.emailEnviado ? "bg-green-600 hover:bg-green-700 text-white" : "bg-blue-600 hover:bg-blue-700 text-white"}
+                  className={`${item.emailEnviado ? "bg-green-600 hover:bg-green-700 text-white" : "bg-blue-600 hover:bg-blue-700 text-white"} text-xs sm:text-sm whitespace-nowrap`}
                   disabled={!(item.emailRemetente || currentUserEmail) || !item.emailDestinatario || anexos.length === 0 || loading || item.emailEnviado}
                 >
-                  <Mail className="h-4 w-4 mr-2" />
-                  {loading ? 'Enviando...' : item.emailEnviado ? 'Email Enviado ✓' : 'Enviar por Email'}
+                  <Mail className="h-3 w-3 sm:h-4 sm:w-4 sm:mr-2" />
+                  <span className="hidden sm:inline">{loading ? 'Enviando...' : item.emailEnviado ? 'Email Enviado ✓' : 'Enviar por Email'}</span>
+                  <span className="sm:hidden">{loading ? 'Enviando...' : item.emailEnviado ? 'Enviado ✓' : 'Enviar'}</span>
                 </Button>
               </div>
             </div>
@@ -1005,31 +1030,32 @@ const ComplianceItemCard = memo(({
 
         {/* Seção de Anexos - apenas para itens que não sejam Período */}
         {item.id !== '1' && (
-          <div>
-            <Label htmlFor={`anexo-${item.id}`}>Anexar Arquivo</Label>
-            <div className="mt-1">
+          <div className="w-full">
+            <Label htmlFor={`anexo-${item.id}`} className="text-sm sm:text-base font-semibold">Anexar Arquivo</Label>
+            <div className="mt-1 w-full">
               {/* Lista de anexos existentes */}
               {anexos.length > 0 && (
-                <div className="mb-4 space-y-2">
+                <div className="mb-4 space-y-2 w-full">
                   {anexos.map((anexo) => (
-                    <div key={anexo.id} className="flex items-center justify-between p-3 border rounded-lg bg-gray-50">
-                      <div className="flex items-center gap-2">
-                        <span className="text-lg">{getFileIcon(anexo.nome_arquivo || 'arquivo')}</span>
-                        <div>
-                          <span className="text-sm font-medium">{anexo.nome_arquivo || 'Arquivo sem nome'}</span>
-                          <span className="text-xs text-gray-500 ml-2">
+                    <div key={anexo.id} className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 p-3 border rounded-lg bg-gray-50 w-full">
+                      <div className="flex items-center gap-2 min-w-0 flex-1">
+                        <span className="text-lg flex-shrink-0">{getFileIcon(anexo.nome_arquivo || 'arquivo')}</span>
+                        <div className="min-w-0 flex-1">
+                          <span className="text-xs sm:text-sm font-medium break-words block">{anexo.nome_arquivo || 'Arquivo sem nome'}</span>
+                          <span className="text-xs text-gray-500">
                             ({formatFileSize(anexo.tamanho_arquivo || 0)})
                           </span>
                         </div>
                       </div>
-                      <div className="flex gap-2">
+                      <div className="flex gap-2 flex-shrink-0">
                         <Button
                           variant="outline"
                           size="sm"
                           onClick={() => handleDownloadAnexo(anexo)}
+                          className="text-xs sm:text-sm"
                         >
-                          <Download className="h-4 w-4 mr-1" />
-                          Baixar
+                          <Download className="h-3 w-3 sm:h-4 sm:w-4 sm:mr-1" />
+                          <span className="hidden sm:inline">Baixar</span>
                         </Button>
                         <Button
                           variant="outline"
@@ -1037,7 +1063,7 @@ const ComplianceItemCard = memo(({
                           onClick={() => handleRemoveAnexo(anexo.id)}
                           className="text-red-600 hover:text-red-700"
                         >
-                          <Trash2 className="h-4 w-4" />
+                          <Trash2 className="h-3 w-3 sm:h-4 sm:w-4" />
                         </Button>
                       </div>
                     </div>
@@ -1047,7 +1073,7 @@ const ComplianceItemCard = memo(({
 
               {/* Upload de novo arquivo */}
               <div 
-                className={`border-2 border-dashed rounded-lg p-6 text-center transition-colors cursor-pointer ${
+                className={`border-2 border-dashed rounded-lg p-4 sm:p-6 text-center transition-colors cursor-pointer w-full ${
                   isDragOver 
                     ? 'border-blue-400 bg-blue-50' 
                     : 'border-gray-300 hover:border-gray-400'
@@ -1078,8 +1104,8 @@ const ComplianceItemCard = memo(({
                   if (input) input.click();
                 }}
               >
-                <Upload className="h-8 w-8 mx-auto text-gray-400 mb-2" />
-                <p className="text-sm text-gray-600 mb-2">
+                <Upload className="h-6 w-6 sm:h-8 sm:w-8 mx-auto text-gray-400 mb-2" />
+                <p className="text-xs sm:text-sm text-gray-600 mb-2 break-words px-2">
                   {uploading ? 'Fazendo upload...' : 'Clique para fazer upload ou arraste o arquivo aqui'}
                 </p>
                 <Input
@@ -1096,8 +1122,12 @@ const ComplianceItemCard = memo(({
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => document.getElementById(`anexo-${item.id}`)?.click()}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    document.getElementById(`anexo-${item.id}`)?.click();
+                  }}
                   disabled={uploading}
+                  className="text-xs sm:text-sm"
                 >
                   {uploading ? 'Uploading...' : 'Selecionar Arquivo'}
                 </Button>
@@ -2732,7 +2762,7 @@ export default function Compliance() {
             >
               <div className="flex-1 min-w-0">
                 <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
-                  <h3 className="text-base lg:text-lg font-semibold text-gray-900 truncate">
+                  <h3 className="text-base lg:text-lg font-semibold text-gray-900 break-words">
                     {(() => {
                       // Priorizar os novos campos separados
                       if (competencia.competencia_inicio || competencia.competencia_fim) {
@@ -2776,9 +2806,9 @@ export default function Compliance() {
                 </div>
 
                 {/* Na seção de informações da competência, adicionar indicador de parecer */}
-                <div className="mt-1 text-sm text-gray-600">
-                  <div className="flex items-center gap-2">
-                    <p>
+                <div className="mt-1 text-xs sm:text-sm text-gray-600 space-y-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="break-words">
                       {competencia.ultima_alteracao_por 
                         ? `Última alteração por ${competencia.ultima_alteracao_por_nome || competencia.ultima_alteracao_por} (${formatOrganizationName(competencia.ultima_alteracao_organizacao)})`
                         : `Criado por ${competencia.created_by_nome || 'Usuário'} (${formatOrganizationName(competencia.created_by_organizacao)})`
@@ -2788,24 +2818,24 @@ export default function Compliance() {
                     {competencia.created_by_organizacao && (
                       <div className="flex items-center gap-1">
                         <div
-                          className="w-2 h-2 rounded-full"
+                          className="w-2 h-2 rounded-full flex-shrink-0"
                           style={{
                             backgroundColor: competencia.created_by_cor || '#6B7280'
                           }}
                         />
-                        <span className="text-xs font-medium">
+                        <span className="text-xs font-medium break-words">
                           {formatOrganizationName(competencia.created_by_organizacao)}
                         </span>
                       </div>
                     )}
                   </div>
-                  <p>Criado em: {formatDateBR(competencia.created_at)}</p>
+                  <p className="break-words">Criado em: {formatDateBR(competencia.created_at)}</p>
                   
                   {/* Indicador de parecer disponível */}
                   {competencia.parecer_texto && (
                     <div className="flex items-center gap-1 text-green-600 font-medium">
-                      <CheckCircle className="h-4 w-4" />
-                      <span>Parecer disponível para download</span>
+                      <CheckCircle className="h-3 w-3 sm:h-4 sm:w-4 flex-shrink-0" />
+                      <span className="text-xs sm:text-sm break-words">Parecer disponível para download</span>
                     </div>
                   )}
                 </div>
@@ -2818,9 +2848,9 @@ export default function Compliance() {
                     variant="outline"
                     size="sm"
                     onClick={() => downloadParecerPDF(competencia.parecer_texto)}
-                    className="border-green-600 text-green-600 hover:bg-green-50 text-xs lg:text-sm font-medium"
+                    className="border-green-600 text-green-600 hover:bg-green-50 text-xs lg:text-sm font-medium w-full sm:w-auto whitespace-nowrap"
                   >
-                    <Download className="h-3 w-3 lg:h-4 lg:w-4 mr-1" />
+                    <Download className="h-3 w-3 lg:h-4 lg:w-4 sm:mr-1" />
                     <span className="hidden sm:inline">Baixar Parecer</span>
                     <span className="sm:hidden">Baixar</span>
                   </Button>
@@ -2841,9 +2871,9 @@ export default function Compliance() {
                     // Carregar dados de compliance da competência selecionada
                     loadComplianceData(competencia.id.toString());
                   }}
-                  className="text-xs lg:text-sm font-medium"
+                  className="text-xs lg:text-sm font-medium w-full sm:w-auto whitespace-nowrap"
                 >
-                  <Eye className="h-3 w-3 lg:h-4 lg:w-4 mr-1" />
+                  <Eye className="h-3 w-3 lg:h-4 lg:w-4 sm:mr-1" />
                   <span className="hidden sm:inline">Visualizar</span>
                   <span className="sm:hidden">Ver</span>
                 </Button>
@@ -2869,13 +2899,26 @@ export default function Compliance() {
 
   // Renderizar tela de criação
   const renderCreateCompetencia = () => (
-    <div className="p-6 space-y-6">
-      <div className="flex items-center gap-4">
-        <Button variant="outline" onClick={() => setCurrentView('list')}>
-          <ArrowLeft className="h-4 w-4 mr-2" />
-          Voltar
-        </Button>
-        <h1 className="text-3xl font-bold">Nova Competência</h1>
+    <div className="p-3 sm:p-4 lg:p-6 space-y-4 lg:space-y-6">
+      {/* Header */}
+      <div className="flex flex-col lg:flex-row lg:justify-between lg:items-center space-y-4 lg:space-y-0">
+        <div className="flex-1">
+          <h1 className="text-2xl lg:text-3xl font-bold">Nova Competência</h1>
+          <p className="text-sm lg:text-base text-gray-600 mt-1">
+            Preencha os campos abaixo para criar uma nova competência
+          </p>
+        </div>
+        <div className="flex flex-col sm:flex-row gap-2 items-stretch sm:items-center">
+          <Button 
+            variant="outline" 
+            onClick={() => setCurrentView('list')}
+            className="text-xs lg:text-sm font-medium border-gray-300 hover:bg-gray-50 hover:border-gray-400 transition-all duration-200"
+          >
+            <ArrowLeft className="h-4 w-4 lg:h-5 lg:w-5 mr-1.5 lg:mr-2" />
+            <span className="hidden sm:inline">Voltar</span>
+            <span className="sm:hidden">Voltar</span>
+          </Button>
+        </div>
       </div>
 
       <div className="space-y-6">
@@ -2907,28 +2950,25 @@ export default function Compliance() {
   // Renderizar tela de visualização
   const renderViewCompetencia = () => (
     <div className="p-3 sm:p-4 lg:p-6 space-y-4 lg:space-y-6">
-      <div className="flex flex-col lg:flex-row lg:justify-between lg:items-center space-y-4 lg:space-y-0 mb-4 lg:mb-6">
+      {/* Header */}
+      <div className="flex flex-col lg:flex-row lg:justify-between lg:items-center space-y-4 lg:space-y-0">
         <div className="flex-1">
-          <h2 className="text-xl lg:text-2xl font-bold text-gray-900">
-            Competência
-          </h2>
+          <h1 className="text-2xl lg:text-3xl font-bold">Competência</h1>
           <p className="text-sm lg:text-base text-gray-600 mt-1">
             Preencha os campos abaixo para gerar o parecer de compliance
           </p>
         </div>
-
-        <div className="flex flex-col sm:flex-row gap-2">
+        <div className="flex flex-col sm:flex-row gap-2 items-stretch sm:items-center">
           <Button 
             onClick={() => handleDeleteClick(selectedCompetencia?.id || '')}
             variant="destructive"
             disabled={loading || loadingCompetencia}
             className="text-xs lg:text-sm font-medium"
           >
-            <Trash2 className="h-3 w-3 lg:h-4 lg:w-4 mr-1 lg:mr-2" />
+            <Trash2 className="h-4 w-4 lg:h-5 lg:w-5 mr-1.5 lg:mr-2" />
             <span className="hidden sm:inline">Excluir</span>
             <span className="sm:hidden">Excluir</span>
           </Button>
-
           <Button 
             onClick={() => {
               setCurrentView('list');
@@ -2938,9 +2978,9 @@ export default function Compliance() {
             }} 
             variant="outline" 
             disabled={loadingCompetencia}
-            className="text-xs lg:text-sm font-medium"
+            className="text-xs lg:text-sm font-medium border-gray-300 hover:bg-gray-50 hover:border-gray-400 transition-all duration-200"
           >
-            <ArrowLeft className="h-3 w-3 lg:h-4 lg:w-4 mr-1 lg:mr-2" />
+            <ArrowLeft className="h-4 w-4 lg:h-5 lg:w-5 mr-1.5 lg:mr-2" />
             <span className="hidden sm:inline">Voltar</span>
             <span className="sm:hidden">Voltar</span>
           </Button>
@@ -3035,17 +3075,17 @@ export default function Compliance() {
       
       {/* Modal de confirmação de exclusão */}
       <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
-        <AlertDialogContent className="mx-4 sm:mx-0">
+        <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle className="flex items-center gap-2 text-base lg:text-lg">
-              <Trash2 className="h-4 w-4 lg:h-5 lg:w-5 text-red-600" />
+            <AlertDialogTitle className="flex items-center gap-2 text-base lg:text-lg break-words">
+              <Trash2 className="h-4 w-4 lg:h-5 lg:w-5 text-red-600 flex-shrink-0" />
               Confirmar Exclusão
             </AlertDialogTitle>
-            <AlertDialogDescription className="text-sm lg:text-base">
+            <AlertDialogDescription className="text-sm lg:text-base break-words">
               Tem certeza que deseja excluir esta competência? Esta ação não pode ser desfeita.
               <br /><br />
               <strong className="text-red-600">⚠️ ATENÇÃO:</strong> Todos os dados relacionados serão excluídos permanentemente:
-              <ul className="list-disc list-inside mt-2 space-y-1 text-sm">
+              <ul className="list-disc list-inside mt-2 space-y-1 text-xs sm:text-sm break-words">
                 <li>Dados da competência</li>
                 <li>Histórico de alterações</li>
                 <li>Arquivos anexados</li>
@@ -3054,12 +3094,12 @@ export default function Compliance() {
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter className="flex-col sm:flex-row gap-2">
-            <AlertDialogCancel onClick={cancelDelete} className="text-xs lg:text-sm">
+            <AlertDialogCancel onClick={cancelDelete} className="text-xs lg:text-sm w-full sm:w-auto order-2 sm:order-1">
               Cancelar
             </AlertDialogCancel>
             <AlertDialogAction 
               onClick={confirmDelete}
-              className="bg-red-600 hover:bg-red-700 text-xs lg:text-sm"
+              className="bg-red-600 hover:bg-red-700 text-xs lg:text-sm w-full sm:w-auto order-1 sm:order-2"
               disabled={loading}
             >
               {loading ? 'Excluindo...' : 'Sim, Excluir'}

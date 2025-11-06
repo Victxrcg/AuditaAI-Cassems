@@ -10,6 +10,7 @@ import {
   addDivider,
   addTable,
   addLayoutBackgroundToAllPages,
+  ensureSpace,
   LAYOUT_COLORS,
   LAYOUT_CONFIG
 } from '@/utils/pdfLayoutUtils';
@@ -69,11 +70,12 @@ import {
   Building,
   AlertTriangle,
   List,
+  ChevronDown,
+  ChevronUp,
   User,
   GripVertical,
   CheckSquare,
   Download,
-  ChevronDown,
   ArrowLeft
 } from 'lucide-react';
 
@@ -156,6 +158,7 @@ const Cronograma = () => {
   const [filtroStatus, setFiltroStatus] = useState<string>('todos');
   const [filtroPrioridade, setFiltroPrioridade] = useState<string>('todos');
   const [filtroOrganizacao, setFiltroOrganizacao] = useState<string>('todos');
+  const [filtrosExpanded, setFiltrosExpanded] = useState<boolean>(true);
   const { toast } = useToast();
 
   // Carregar usuário atual
@@ -727,53 +730,96 @@ const Cronograma = () => {
 
       yPosition = addDivider(pdf, yPosition);
 
-      // Processar análise da IA
+      // Processar análise da IA agrupando blocos de demanda para evitar quebras
       const analiseLinhas = analise.split('\n');
-      analiseLinhas.forEach((linha: string) => {
+      let blocoAtual: string[] = [];
+      
+      const processarBloco = (bloco: string[], yPos: number): number => {
+        if (bloco.length === 0) return yPos;
+        
+        // Calcular altura aproximada do bloco
+        const alturaEstimada = bloco.reduce((acc, linha) => {
+          const t = linha.trim();
+          if (t.startsWith('### ')) return acc + 20; // Título de demanda
+          if (t.startsWith('## ')) return acc + 18; // Título de seção
+          if (t.startsWith('[OK]') || t.startsWith('[PENDENTE]') || t.startsWith('[EM ANDAMENTO]') || t.startsWith('[ATRASADA]')) {
+            return acc + 15; // Linha com marcador
+          }
+          return acc + 12; // Linha normal
+        }, 0);
+        
+        // Garantir espaço antes de processar o bloco completo
+        yPos = ensureSpace(pdf, yPos, alturaEstimada);
+        
+        // Processar cada linha do bloco
+        bloco.forEach((linha: string) => {
+          const t = linha.trim();
+          // Cabeçalhos Markdown
+          if (t.startsWith('### ')) {
+            yPos = addSectionTitle(pdf, t.replace(/^###\s+/, ''), yPos, 3);
+            return;
+          }
+          if (t.startsWith('## ')) {
+            yPos = addSectionTitle(pdf, t.replace(/^##\s+/, ''), yPos, 2);
+            return;
+          }
+          // Marcadores de status
+          if (t.startsWith('[OK]')) {
+            yPos = addBodyText(pdf, linha, yPos, {
+              fontSize: 12,
+              isBold: true,
+              color: LAYOUT_COLORS.accent
+            });
+            return;
+          }
+          if (t.startsWith('[PENDENTE]') || t.startsWith('[EM ANDAMENTO]') || t.startsWith('[ATRASADA]')) {
+            yPos = addBodyText(pdf, linha, yPos, {
+              fontSize: 12,
+              isBold: true,
+              color: LAYOUT_COLORS.warning
+            });
+            return;
+          }
+          // Fallback para emojis antigos, caso venham
+          if (linha.includes('✅') || t.includes('O QUE FOI FEITO')) {
+            yPos = addBodyText(pdf, linha, yPos, {
+              fontSize: 12,
+              isBold: true,
+              color: LAYOUT_COLORS.accent
+            });
+          } else if (linha.includes('⏳') || t.includes('O QUE NÃO FOI FEITO')) {
+            yPos = addBodyText(pdf, linha, yPos, {
+              fontSize: 12,
+              isBold: true,
+              color: LAYOUT_COLORS.warning
+            });
+          } else {
+            yPos = addBodyText(pdf, linha, yPos, {
+              fontSize: 11
+            });
+          }
+        });
+        
+        return yPos;
+      };
+      
+      analiseLinhas.forEach((linha: string, index: number) => {
         const t = linha.trim();
-        // Cabeçalhos Markdown
-        if (t.startsWith('### ')) {
-          yPosition = addSectionTitle(pdf, t.replace(/^###\s+/, ''), yPosition, 3);
-          return;
+        const isNovaDemanda = t.startsWith('### ');
+        const isNovaSecao = t.startsWith('## ') && !t.startsWith('### ');
+        
+        // Se encontrou nova demanda ou seção, processar bloco anterior
+        if ((isNovaDemanda || isNovaSecao) && blocoAtual.length > 0) {
+          yPosition = processarBloco(blocoAtual, yPosition);
+          blocoAtual = [];
         }
-        if (t.startsWith('## ')) {
-          yPosition = addSectionTitle(pdf, t.replace(/^##\s+/, ''), yPosition, 2);
-          return;
-        }
-        // Marcadores de status
-        if (t.startsWith('[OK]')) {
-          yPosition = addBodyText(pdf, linha, yPosition, {
-            fontSize: 12,
-            isBold: true,
-            color: LAYOUT_COLORS.accent
-          });
-          return;
-        }
-        if (t.startsWith('[PENDENTE]')) {
-          yPosition = addBodyText(pdf, linha, yPosition, {
-            fontSize: 12,
-            isBold: true,
-            color: LAYOUT_COLORS.warning
-          });
-          return;
-        }
-        // Fallback para emojis antigos, caso venham
-        if (linha.includes('✅') || t.includes('O QUE FOI FEITO')) {
-          yPosition = addBodyText(pdf, linha, yPosition, {
-            fontSize: 12,
-            isBold: true,
-            color: LAYOUT_COLORS.accent
-          });
-        } else if (linha.includes('⏳') || t.includes('O QUE NÃO FOI FEITO')) {
-          yPosition = addBodyText(pdf, linha, yPosition, {
-            fontSize: 12,
-            isBold: true,
-            color: LAYOUT_COLORS.warning
-          });
-        } else {
-          yPosition = addBodyText(pdf, linha, yPosition, {
-            fontSize: 11
-          });
+        
+        // Adicionar linha ao bloco atual
+        blocoAtual.push(linha);
+        
+        // Se é última linha, processar bloco final
+        if (index === analiseLinhas.length - 1) {
+          yPosition = processarBloco(blocoAtual, yPosition);
         }
       });
 
@@ -966,43 +1012,86 @@ const Cronograma = () => {
       
       yPosition += 2; // Espaço mínimo antes da análise
 
-      // Processar análise da IA
+      // Processar análise da IA agrupando blocos de demanda para evitar quebras
       const analiseLinhas = analise.split('\n');
-      analiseLinhas.forEach((linha: string) => {
-        const t = linha.trim();
+      let blocoAtual: string[] = [];
+      
+      const processarBloco = (bloco: string[], yPos: number): number => {
+        if (bloco.length === 0) return yPos;
         
-        // Ignorar linhas que são títulos duplicados do overview
-        if (t.includes('# OVERVIEW DO CRONOGRAMA') || t.match(/^#+\s*OVERVIEW/i)) {
-          return;
-        }
+        // Calcular altura aproximada do bloco
+        const alturaEstimada = bloco.reduce((acc, linha) => {
+          const t = linha.trim();
+          if (t.startsWith('### ')) return acc + 20; // Título de demanda
+          if (t.startsWith('## ')) return acc + 18; // Título de seção
+          if (t.startsWith('[OK]') || t.startsWith('[PENDENTE]') || t.startsWith('[EM ANDAMENTO]') || t.startsWith('[ATRASADA]')) {
+            return acc + 15; // Linha com marcador
+          }
+          return acc + 12; // Linha normal
+        }, 0);
         
-        if (t.startsWith('### ')) {
-          yPosition = addSectionTitle(pdf, t.replace(/^###\s+/, ''), yPosition, 3);
-          return;
-        }
-        if (t.startsWith('## ')) {
-          yPosition = addSectionTitle(pdf, t.replace(/^##\s+/, ''), yPosition, 2);
-          return;
-        }
-        if (t.startsWith('[OK]')) {
-          yPosition = addBodyText(pdf, linha, yPosition, {
-            fontSize: 12,
-            isBold: true,
-            color: LAYOUT_COLORS.accent
+        // Garantir espaço antes de processar o bloco completo
+        yPos = ensureSpace(pdf, yPos, alturaEstimada);
+        
+        // Processar cada linha do bloco
+        bloco.forEach((linha: string) => {
+          const t = linha.trim();
+          
+          // Ignorar linhas que são títulos duplicados do overview
+          if (t.includes('# OVERVIEW DO CRONOGRAMA') || t.match(/^#+\s*OVERVIEW/i)) {
+            return;
+          }
+          
+          if (t.startsWith('### ')) {
+            yPos = addSectionTitle(pdf, t.replace(/^###\s+/, ''), yPos, 3);
+            return;
+          }
+          if (t.startsWith('## ')) {
+            yPos = addSectionTitle(pdf, t.replace(/^##\s+/, ''), yPos, 2);
+            return;
+          }
+          if (t.startsWith('[OK]')) {
+            yPos = addBodyText(pdf, linha, yPos, {
+              fontSize: 12,
+              isBold: true,
+              color: LAYOUT_COLORS.accent
+            });
+            return;
+          }
+          if (t.startsWith('[PENDENTE]') || t.startsWith('[EM ANDAMENTO]') || t.startsWith('[ATRASADA]')) {
+            yPos = addBodyText(pdf, linha, yPos, {
+              fontSize: 12,
+              isBold: true,
+              color: LAYOUT_COLORS.warning
+            });
+            return;
+          }
+          yPos = addBodyText(pdf, linha, yPos, {
+            fontSize: 11
           });
-          return;
-        }
-        if (t.startsWith('[PENDENTE]') || t.startsWith('[EM ANDAMENTO]') || t.startsWith('[ATRASADA]')) {
-          yPosition = addBodyText(pdf, linha, yPosition, {
-            fontSize: 12,
-            isBold: true,
-            color: LAYOUT_COLORS.warning
-          });
-          return;
-        }
-        yPosition = addBodyText(pdf, linha, yPosition, {
-          fontSize: 11
         });
+        
+        return yPos;
+      };
+      
+      analiseLinhas.forEach((linha: string, index: number) => {
+        const t = linha.trim();
+        const isNovaDemanda = t.startsWith('### ');
+        const isNovaSecao = t.startsWith('## ') && !t.startsWith('### ');
+        
+        // Se encontrou nova demanda ou seção, processar bloco anterior
+        if ((isNovaDemanda || isNovaSecao) && blocoAtual.length > 0) {
+          yPosition = processarBloco(blocoAtual, yPosition);
+          blocoAtual = [];
+        }
+        
+        // Adicionar linha ao bloco atual
+        blocoAtual.push(linha);
+        
+        // Se é última linha, processar bloco final
+        if (index === analiseLinhas.length - 1) {
+          yPosition = processarBloco(blocoAtual, yPosition);
+        }
       });
 
       // Rodapé em todas as páginas
@@ -1198,41 +1287,41 @@ const Cronograma = () => {
       <div
         ref={setNodeRef}
         style={style}
-        className="flex items-start gap-3 p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors border border-gray-200 min-h-[120px] max-h-[200px]"
+        className="flex items-start gap-2 sm:gap-3 p-2 sm:p-3 lg:p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors border border-gray-200 w-full min-h-[80px] sm:min-h-[100px] lg:min-h-[120px] overflow-hidden"
       >
-        <div className={disabled ? "flex-shrink-0 mt-1 opacity-40" : "flex-shrink-0 cursor-grab active:cursor-grabbing mt-1"}
+        <div className={disabled ? "flex-shrink-0 mt-0.5 opacity-40" : "flex-shrink-0 cursor-grab active:cursor-grabbing mt-0.5"}
           {...(!disabled ? attributes : {})}
           {...(!disabled ? listeners : {})}
         >
-          <GripVertical className="h-5 w-5 text-gray-400 hover:text-gray-600" />
+          <GripVertical className="h-3 w-3 sm:h-4 sm:w-4 lg:h-5 lg:w-5 text-gray-400 hover:text-gray-600" />
         </div>
         <button
           onClick={() => toggleChecklistItemStatus(item.id, !item.concluido)}
-          className={`flex-shrink-0 w-5 h-5 rounded border-2 flex items-center justify-center transition-colors ${
+          className={`flex-shrink-0 w-4 h-4 sm:w-5 sm:h-5 rounded border-2 flex items-center justify-center transition-colors mt-0.5 ${
             item.concluido
               ? 'bg-green-500 border-green-500 text-white'
               : 'border-gray-300 hover:border-green-400'
           }`}
         >
-          {item.concluido && <CheckCircle className="h-3 w-3" />}
+          {item.concluido && <CheckCircle className="h-2.5 w-2.5 sm:h-3 sm:w-3" />}
         </button>
         <div className="flex-1 min-w-0 overflow-hidden">
-          <p className={`text-sm font-medium mb-1 ${item.concluido ? 'line-through text-gray-500' : 'text-gray-700'}`}>
+          <p className={`text-xs sm:text-sm font-medium mb-0.5 sm:mb-1 break-words ${item.concluido ? 'line-through text-gray-500' : 'text-gray-700'}`}>
             {item.titulo}
           </p>
           {item.descricao && (
-            <p className={`text-xs leading-relaxed line-clamp-3 overflow-hidden ${item.concluido ? 'text-gray-400' : 'text-gray-500'}`}>
+            <p className={`text-xs leading-relaxed line-clamp-2 sm:line-clamp-3 overflow-hidden break-words ${item.concluido ? 'text-gray-400' : 'text-gray-500'}`}>
               {item.descricao}
             </p>
           )}
           {(item.data_inicio || item.data_fim) && (
-            <div className={`flex items-center gap-3 mt-2 text-xs ${item.concluido ? 'text-gray-400' : 'text-gray-500'}`}>
-              <Clock className="h-3 w-3" />
+            <div className={`flex flex-wrap items-center gap-1.5 sm:gap-2 lg:gap-3 mt-1.5 sm:mt-2 text-xs ${item.concluido ? 'text-gray-400' : 'text-gray-500'}`}>
+              <Clock className="h-2.5 w-2.5 sm:h-3 sm:w-3 flex-shrink-0" />
               {item.data_inicio && (
-                <span>Início: {formatDateForDisplay(item.data_inicio)}</span>
+                <span className="break-words">Início: {formatDateForDisplay(item.data_inicio)}</span>
               )}
               {item.data_fim && (
-                <span>Fim: {formatDateForDisplay(item.data_fim)}</span>
+                <span className="break-words">Fim: {formatDateForDisplay(item.data_fim)}</span>
               )}
             </div>
           )}
@@ -1875,8 +1964,7 @@ const Cronograma = () => {
     dataFim, 
     posicao, 
     coresStatus,
-    inicioPeriodo,
-    fimPeriodo
+    posicaoHoje
   }: {
     cronograma: CronogramaItem;
     organizacao: string;
@@ -1884,8 +1972,7 @@ const Cronograma = () => {
     dataFim: Date | null;
     posicao: { inicio: string; largura: string; colunaInicio: number; colunaFim: number };
     coresStatus: Record<string, string>;
-    inicioPeriodo: Date;
-    fimPeriodo: Date;
+    posicaoHoje: number | null;
   }) => {
     const {
       attributes,
@@ -1906,28 +1993,28 @@ const Cronograma = () => {
       <div 
         ref={setNodeRef}
         style={style}
-        className={`flex items-center h-16 border-b border-gray-100 bg-gray-50 hover:bg-gray-100 transition-colors overflow-hidden ${isDragging ? 'z-50' : ''}`}
+        className={`flex items-center h-12 sm:h-14 lg:h-16 border-b border-gray-100 bg-gray-50 hover:bg-gray-100 transition-colors overflow-hidden ${isDragging ? 'z-50' : ''}`}
       >
         <div 
-          className="px-4 py-3 text-sm text-gray-700 border-r overflow-hidden"
-          style={{ width: `${colunaLargura}px` }}
+          className="px-2 sm:px-3 lg:px-4 py-2 sm:py-2.5 lg:py-3 text-xs sm:text-sm text-gray-700 border-r overflow-hidden"
+          style={{ width: `${Math.max(colunaLargura, 120)}px`, minWidth: '120px' }}
         >
-          <div className="flex flex-col gap-2 min-w-0">
-            <div className="flex items-center justify-between gap-2 flex-nowrap min-w-0">
-              <div className="flex items-center gap-2 flex-1 min-w-0">
+          <div className="flex flex-col gap-1 sm:gap-1.5 lg:gap-2 min-w-0">
+            <div className="flex items-center justify-between gap-1.5 sm:gap-2 flex-nowrap min-w-0">
+              <div className="flex items-center gap-1 sm:gap-1.5 lg:gap-2 flex-1 min-w-0">
                 {/* Handle de arrastar */}
                 {podeReordenar && (
                   <div
                     {...attributes}
                     {...listeners}
-                    className="cursor-grab hover:cursor-grabbing text-gray-400 hover:text-gray-600 transition-colors"
+                    className="cursor-grab hover:cursor-grabbing text-gray-400 hover:text-gray-600 transition-colors flex-shrink-0"
                     title="Arrastar para reordenar"
                   >
-                    <GripVertical className="h-4 w-4" />
+                    <GripVertical className="h-3 w-3 sm:h-4 sm:w-4" />
                   </div>
                 )}
                 <span 
-                  className="truncate cursor-pointer hover:text-blue-600 transition-colors flex-1 block max-w-full"
+                  className="truncate cursor-pointer hover:text-blue-600 transition-colors flex-1 block max-w-full text-xs sm:text-sm"
                   onClick={() => {
                     setViewingCronograma(cronograma);
                     setIsViewDialogOpen(true);
@@ -1939,13 +2026,13 @@ const Cronograma = () => {
               </div>
               <Badge 
                 variant={getStatusBadgeInfo(cronograma.status).variant as any}
-                className="text-xs whitespace-nowrap flex-shrink-0 ml-2"
+                className="text-[10px] sm:text-xs whitespace-nowrap flex-shrink-0 ml-1 sm:ml-2 px-1.5 sm:px-2 py-0.5"
               >
                 {getStatusBadgeInfo(cronograma.status).text}
               </Badge>
             </div>
             {cronograma.responsavel_nome && (
-              <div className="text-xs text-gray-500 truncate">
+              <div className="text-[10px] sm:text-xs text-gray-500 truncate">
                 {cronograma.responsavel_nome}
               </div>
             )}
@@ -1956,11 +2043,11 @@ const Cronograma = () => {
         <div className="relative flex-1 h-full">
           {dataInicio && dataFim && (
             <div
-              className={`absolute top-1/2 transform -translate-y-1/2 h-8 rounded-lg ${coresStatus[cronograma.status]} shadow-sm hover:shadow-md transition-all cursor-pointer border-2 border-white hover:scale-105 overflow-hidden`}
+              className={`absolute top-1/2 transform -translate-y-1/2 h-6 sm:h-7 lg:h-8 rounded-lg ${coresStatus[cronograma.status]} shadow-sm hover:shadow-md transition-all cursor-pointer border-2 border-white hover:scale-105 overflow-hidden`}
               style={{
                 left: posicao.inicio,
                 width: posicao.largura,
-                minWidth: '60px'
+                minWidth: '40px'
               }}
               onClick={() => {
                 setViewingCronograma(cronograma);
@@ -1973,20 +2060,22 @@ const Cronograma = () => {
             ${cronograma.motivo_atraso ? `Atraso: ${cronograma.motivo_atraso}` : ''}
              Clique para editar`}
             >
-              <span className="text-white text-xs font-medium px-2 whitespace-nowrap overflow-hidden text-ellipsis block">
+              <span className="text-white text-[10px] sm:text-xs font-medium px-1 sm:px-2 whitespace-nowrap overflow-hidden text-ellipsis block">
                 {cronograma.titulo}
               </span>
             </div>
           )}
           
           {/* Linha do tempo atual */}
-          <div 
-            className="absolute top-0 bottom-0 w-0.5 bg-red-500 z-10"
-            style={{
-              left: `${((new Date().getTime() - inicioPeriodo.getTime()) / (fimPeriodo.getTime() - inicioPeriodo.getTime())) * 100}%`
-            }}
-            title={`Hoje: ${new Date().toLocaleDateString('pt-BR')}`}
-          />
+          {posicaoHoje !== null && (
+            <div 
+              className="absolute top-0 bottom-0 w-0.5 bg-red-500 z-10"
+              style={{
+                left: `${posicaoHoje}%`
+              }}
+              title={`Hoje: ${new Date().toLocaleDateString('pt-BR')}`}
+            />
+          )}
         </div>
       </div>
     );
@@ -1999,27 +2088,25 @@ const Cronograma = () => {
     dataFim, 
     posicao, 
     coresStatus,
-    inicioPeriodo,
-    fimPeriodo
+    posicaoHoje
   }: {
     cronograma: CronogramaItem;
     dataInicio: Date | null;
     dataFim: Date | null;
     posicao: { inicio: string; largura: string; colunaInicio: number; colunaFim: number };
     coresStatus: Record<string, string>;
-    inicioPeriodo: Date;
-    fimPeriodo: Date;
+    posicaoHoje: number | null;
   }) => {
     return (
-      <div className={`flex items-center h-16 border-b border-gray-100 bg-gray-50 hover:bg-gray-100 transition-colors overflow-hidden`}>
+      <div className={`flex items-center h-12 sm:h-14 lg:h-16 border-b border-gray-100 bg-gray-50 hover:bg-gray-100 transition-colors overflow-hidden`}>
         <div 
-          className="px-4 py-3 text-sm text-gray-700 border-r"
-          style={{ width: `${colunaLargura}px` }}
+          className="px-2 sm:px-3 lg:px-4 py-2 sm:py-2.5 lg:py-3 text-xs sm:text-sm text-gray-700 border-r overflow-hidden"
+          style={{ width: `${Math.max(colunaLargura, 120)}px`, minWidth: '120px' }}
         >
-          <div className="flex flex-col gap-2">
-            <div className="flex items-center justify-between gap-2">
+          <div className="flex flex-col gap-1 sm:gap-1.5 lg:gap-2">
+            <div className="flex items-center justify-between gap-1.5 sm:gap-2">
               <span 
-                className="truncate cursor-pointer hover:text-blue-600 transition-colors flex-1"
+                className="truncate cursor-pointer hover:text-blue-600 transition-colors flex-1 text-xs sm:text-sm"
                 onClick={() => {
                   setViewingCronograma(cronograma);
                   setIsViewDialogOpen(true);
@@ -2030,13 +2117,13 @@ const Cronograma = () => {
               </span>
               <Badge 
                 variant={getStatusBadgeInfo(cronograma.status).variant as any}
-                className="text-xs whitespace-nowrap"
+                className="text-[10px] sm:text-xs whitespace-nowrap flex-shrink-0 ml-1 sm:ml-2 px-1.5 sm:px-2 py-0.5"
               >
                 {getStatusBadgeInfo(cronograma.status).text}
               </Badge>
             </div>
             {cronograma.responsavel_nome && (
-              <div className="text-xs text-gray-500 truncate">
+              <div className="text-[10px] sm:text-xs text-gray-500 truncate">
                 {cronograma.responsavel_nome}
               </div>
             )}
@@ -2045,26 +2132,28 @@ const Cronograma = () => {
         <div className="relative flex-1 h-full">
           {dataInicio && dataFim && (
             <div
-              className={`absolute top-1/2 transform -translate-y-1/2 h-8 rounded-lg ${coresStatus[cronograma.status]} shadow-sm hover:shadow-md transition-all cursor-pointer border-2 border-white hover:scale-105 overflow-hidden`}
-              style={{ left: posicao.inicio, width: posicao.largura, minWidth: '60px' }}
+              className={`absolute top-1/2 transform -translate-y-1/2 h-6 sm:h-7 lg:h-8 rounded-lg ${coresStatus[cronograma.status]} shadow-sm hover:shadow-md transition-all cursor-pointer border-2 border-white hover:scale-105 overflow-hidden`}
+              style={{ left: posicao.inicio, width: posicao.largura, minWidth: '40px' }}
               onClick={() => {
                 setViewingCronograma(cronograma);
                 setIsViewDialogOpen(true);
               }}
               title={`${cronograma.titulo}\nStatus: ${getStatusBadgeInfo(cronograma.status).text}\nPeríodo: ${dataInicio.toLocaleDateString('pt-BR')} a ${dataFim.toLocaleDateString('pt-BR')}`}
             >
-              <span className="text-white text-xs font-medium px-2 whitespace-nowrap overflow-hidden text-ellipsis block">
+              <span className="text-white text-[10px] sm:text-xs font-medium px-1 sm:px-2 whitespace-nowrap overflow-hidden text-ellipsis block">
                 {cronograma.titulo}
               </span>
             </div>
           )}
-          <div 
-            className="absolute top-0 bottom-0 w-0.5 bg-red-500 z-10"
-            style={{
-              left: `${((new Date().getTime() - inicioPeriodo.getTime()) / (fimPeriodo.getTime() - inicioPeriodo.getTime())) * 100}%`
-            }}
-            title={`Hoje: ${new Date().toLocaleDateString('pt-BR')}`}
-          />
+          {posicaoHoje !== null && (
+            <div 
+              className="absolute top-0 bottom-0 w-0.5 bg-red-500 z-10"
+              style={{
+                left: `${posicaoHoje}%`
+              }}
+              title={`Hoje: ${new Date().toLocaleDateString('pt-BR')}`}
+            />
+          )}
         </div>
       </div>
     );
@@ -2461,20 +2550,52 @@ const Cronograma = () => {
       return acc;
     }, {} as Record<string, CronogramaItem[]>);
 
-    // Calcular período de visualização (fixo em meses)
-    const hoje = new Date();
+    // Calcular período de visualização dinamicamente baseado nas demandas
+    let inicioPeriodo: Date | null = null;
+    let fimPeriodo: Date | null = null;
     
-    // Visualização por meses (período fixo)
-    const mesesVisiveis = 8; // 8 meses
-    const inicioPeriodo = new Date(hoje.getFullYear(), hoje.getMonth() - Math.floor(mesesVisiveis / 2), 1);
-    const fimPeriodo = new Date(hoje.getFullYear(), hoje.getMonth() + Math.floor(mesesVisiveis / 2), 0);
+    // Encontrar a data mais antiga e a mais recente entre todas as demandas
+    cronogramasParaTimeline.forEach(cronograma => {
+      if (cronograma.data_inicio) {
+        const dataInicio = new Date(cronograma.data_inicio);
+        // Pegar o primeiro dia do mês de início
+        const inicioMes = new Date(dataInicio.getFullYear(), dataInicio.getMonth(), 1);
+        if (!inicioPeriodo || inicioMes < inicioPeriodo) {
+          inicioPeriodo = inicioMes;
+        }
+      }
+      
+      if (cronograma.data_fim) {
+        const dataFim = new Date(cronograma.data_fim);
+        // Pegar o primeiro dia do mês seguinte à data fim (para incluir o mês completo)
+        // Isso garante que o mês onde a demanda termina seja incluído
+        const fimMes = new Date(dataFim.getFullYear(), dataFim.getMonth() + 1, 1);
+        if (!fimPeriodo || fimMes > fimPeriodo) {
+          fimPeriodo = fimMes;
+        }
+      }
+    });
     
-    // Gerar meses do período
+    // Se não houver demandas, usar período padrão (últimos 6 meses até próximos 6 meses)
+    if (!inicioPeriodo || !fimPeriodo) {
+      const hoje = new Date();
+      inicioPeriodo = new Date(hoje.getFullYear(), hoje.getMonth() - 6, 1);
+      fimPeriodo = new Date(hoje.getFullYear(), hoje.getMonth() + 6, 0);
+    }
+    // Não adicionar margens extras - mostrar apenas os meses com demandas
+    
+    // Gerar meses do período - apenas os meses que têm demandas
     const timeUnits: Date[] = [];
-    const currentDate = new Date(inicioPeriodo);
-    while (currentDate <= fimPeriodo) {
-      timeUnits.push(new Date(currentDate));
-      currentDate.setMonth(currentDate.getMonth() + 1);
+    if (inicioPeriodo && fimPeriodo) {
+      const currentDate = new Date(inicioPeriodo);
+      // fimPeriodo já é o primeiro dia do mês seguinte, então vamos até antes dele
+      const fimMesComparacao = new Date(fimPeriodo);
+      fimMesComparacao.setMonth(fimMesComparacao.getMonth() - 1);
+      
+      while (currentDate <= fimMesComparacao) {
+        timeUnits.push(new Date(currentDate));
+        currentDate.setMonth(currentDate.getMonth() + 1);
+      }
     }
 
     // Cores por organização (fases)
@@ -2503,6 +2624,13 @@ const Cronograma = () => {
       'concluido': 'bg-green-500',
       'atrasado': 'bg-red-500'
     };
+
+    // Calcular posição da data atual (linha vermelha)
+    const hoje = new Date();
+    const hojeNoPeriodo = hoje >= inicioPeriodo && hoje <= fimPeriodo;
+    const posicaoHoje = hojeNoPeriodo 
+      ? ((hoje.getTime() - inicioPeriodo.getTime()) / (fimPeriodo.getTime() - inicioPeriodo.getTime())) * 100
+      : null;
 
     // Função para calcular posição da barra
     const calcularPosicaoBarra = (dataInicio: Date | null, dataFim: Date | null) => {
@@ -2533,15 +2661,15 @@ const Cronograma = () => {
     return (
       <div className="space-y-6">
         {/* Cabeçalho da Timeline */}
-        <Card>
-          <CardHeader className="pb-4">
-            <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
-              <div>
-                <CardTitle className="flex items-center gap-2 text-lg lg:text-xl">
-                  <BarChart3 className="h-5 w-5" />
+        <Card className="overflow-hidden">
+          <CardHeader className="pb-4 p-4 sm:p-6">
+            <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3 sm:gap-4">
+              <div className="flex-1 min-w-0">
+                <CardTitle className="flex items-center gap-2 text-base sm:text-lg lg:text-xl break-words">
+                  <BarChart3 className="h-4 w-4 sm:h-5 sm:w-5 flex-shrink-0" />
                   Timeline de Demandas
                 </CardTitle>
-                <CardDescription className="text-sm lg:text-base mt-1">
+                <CardDescription className="text-xs sm:text-sm lg:text-base mt-1 break-words">
                   {filtroStatus === 'apenas_concluidas' 
                     ? `Visualização temporal das tarefas concluídas (${cronogramasConcluidos.length} tarefas)`
                     : `Visualização temporal das demandas por organização${podeReordenar ? ' - Arraste para reordenar' : ''}`
@@ -2550,37 +2678,38 @@ const Cronograma = () => {
               </div>
               
               {/* Controles da timeline */}
-              <div className="flex items-center gap-2">
-                <div className="text-xs text-gray-500">
-                  {Object.keys(cronogramasOrdenadosPorOrganizacao).length} organizações
+              <div className="flex flex-wrap items-center gap-2 flex-shrink-0">
+                <div className="text-xs text-gray-500 whitespace-nowrap">
+                  {Object.keys(cronogramasOrdenadosPorOrganizacao).length} org.
                 </div>
-                <div className="text-xs text-gray-500">
+                <div className="text-xs text-gray-500 whitespace-nowrap">
                   {cronogramasParaTimeline.length} demandas
                 </div>
                 <Button
                   variant="outline"
                   size="sm"
                   onClick={resetColumnWidth}
-                  className="text-xs h-6 px-2"
+                  className="text-xs h-7 lg:h-6 px-2 whitespace-nowrap"
                   title="Resetar largura da coluna para o padrão"
                 >
-                  Resetar Coluna
+                  <span className="hidden sm:inline">Resetar Coluna</span>
+                  <span className="sm:hidden">Resetar</span>
                 </Button>
               </div>
             </div>
           </CardHeader>
-          <CardContent className="p-0">
+          <CardContent className="p-0 overflow-x-auto">
         {/* Timeline Header */}
-        <div className="w-full timeline-container">
-          <div className="w-full">
+        <div className="w-full timeline-container overflow-x-auto">
+          <div className="w-full min-w-[600px]">
                 {/* Header dos meses */}
-                <div className="flex border-b-2 border-gray-200 overflow-x-auto">
+                <div className="flex border-b-2 border-gray-200">
                   <div 
-                    className="px-3 lg:px-4 py-3 lg:py-4 font-semibold text-gray-700 bg-gray-100 border-r flex-shrink-0 relative"
-                    style={{ width: `${colunaLargura}px` }}
+                    className="px-2 sm:px-3 lg:px-4 py-2 sm:py-3 lg:py-4 font-semibold text-gray-700 bg-gray-100 border-r flex-shrink-0 relative"
+                    style={{ width: `${Math.max(colunaLargura, 120)}px`, minWidth: '120px' }}
                   >
                     <div className="flex items-center justify-between">
-                      <span className="text-sm lg:text-base">Organização / Demanda</span>
+                      <span className="text-xs sm:text-sm lg:text-base">Demanda</span>
                     </div>
                     {/* Handle de redimensionamento */}
                     <div
@@ -2600,8 +2729,8 @@ const Cronograma = () => {
                     </div>
                   </div>
                   {timeUnits.map((timeUnit, index) => (
-                    <div key={index} className="px-1 lg:px-2 py-3 lg:py-4 text-center font-semibold text-gray-700 bg-gray-50 border-r flex-1 min-w-[60px] lg:min-w-[80px]">
-                      <span className="text-xs lg:text-sm">
+                    <div key={index} className="px-1 sm:px-1.5 lg:px-2 py-2 sm:py-3 lg:py-4 text-center font-semibold text-gray-700 bg-gray-50 border-r flex-1 min-w-[50px] sm:min-w-[60px] lg:min-w-[80px]">
+                      <span className="text-[10px] sm:text-xs lg:text-sm">
                         {timeUnit.toLocaleDateString('pt-BR', { month: 'short', year: '2-digit' })}
                       </span>
                     </div>
@@ -2618,20 +2747,20 @@ const Cronograma = () => {
                     {Object.entries(cronogramasOrdenadosPorOrganizacao).map(([organizacao, cronogramasOrg]) => (
                   <div key={organizacao} className="border-b border-gray-100">
                     {/* Header da organização */}
-                    <div className="flex items-center h-12 lg:h-16 bg-gray-100 hover:bg-gray-50 transition-colors">
+                    <div className="flex items-center h-10 sm:h-12 lg:h-16 bg-gray-100 hover:bg-gray-50 transition-colors">
                       <div 
-                        className="px-3 lg:px-4 py-3 lg:py-4 font-semibold text-gray-900 border-r flex-shrink-0"
-                        style={{ width: `${colunaLargura}px` }}
+                        className="px-2 sm:px-3 lg:px-4 py-2 sm:py-3 lg:py-4 font-semibold text-gray-900 border-r flex-shrink-0"
+                        style={{ width: `${Math.max(colunaLargura, 120)}px`, minWidth: '120px' }}
                       >
-                        <div className="flex items-center gap-2">
-                          <div className={`w-2 h-2 lg:w-3 lg:h-3 rounded-full ${coresOrganizacao[organizacao] || 'bg-gray-400'}`}></div>
-                          <span className="truncate text-sm lg:text-base font-medium">
+                        <div className="flex items-center gap-1.5 sm:gap-2">
+                          <div className={`w-2 h-2 sm:w-2.5 sm:h-2.5 lg:w-3 lg:h-3 rounded-full ${coresOrganizacao[organizacao] || 'bg-gray-400'}`}></div>
+                          <span className="truncate text-xs sm:text-sm lg:text-base font-medium">
                             {organizacao.toUpperCase()}
                           </span>
                         </div>
                       </div>
                       {timeUnits.map((_, index) => (
-                        <div key={index} className="border-r flex-1 min-w-[60px] lg:min-w-[80px]"></div>
+                        <div key={index} className="border-r flex-1 min-w-[50px] sm:min-w-[60px] lg:min-w-[80px]"></div>
                       ))}
                     </div>
 
@@ -2652,8 +2781,7 @@ const Cronograma = () => {
                             dataFim={dataFim}
                             posicao={posicao}
                             coresStatus={coresStatus}
-                            inicioPeriodo={inicioPeriodo}
-                            fimPeriodo={fimPeriodo}
+                            posicaoHoje={posicaoHoje}
                           />
                         );
                       })}
@@ -2665,20 +2793,20 @@ const Cronograma = () => {
                   Object.entries(cronogramasOrdenadosPorOrganizacao).map(([organizacao, cronogramasOrg]) => (
                     <div key={organizacao} className="border-b border-gray-100">
                       {/* Header da organização */}
-                      <div className="flex items-center h-12 lg:h-16 bg-gray-100 hover:bg-gray-50 transition-colors">
+                      <div className="flex items-center h-10 sm:h-12 lg:h-16 bg-gray-100 hover:bg-gray-50 transition-colors">
                         <div 
-                          className="px-3 lg:px-4 py-3 lg:py-4 font-semibold text-gray-900 border-r flex-shrink-0"
-                          style={{ width: `${colunaLargura}px` }}
+                          className="px-2 sm:px-3 lg:px-4 py-2 sm:py-3 lg:py-4 font-semibold text-gray-900 border-r flex-shrink-0"
+                          style={{ width: `${Math.max(colunaLargura, 120)}px`, minWidth: '120px' }}
                         >
-                          <div className="flex items-center gap-2">
-                            <div className={`w-2 h-2 lg:w-3 lg:h-3 rounded-full ${coresOrganizacao[organizacao] || 'bg-gray-400'}`}></div>
-                            <span className="truncate text-sm lg:text-base font-medium">
+                          <div className="flex items-center gap-1.5 sm:gap-2">
+                            <div className={`w-2 h-2 sm:w-2.5 sm:h-2.5 lg:w-3 lg:h-3 rounded-full ${coresOrganizacao[organizacao] || 'bg-gray-400'}`}></div>
+                            <span className="truncate text-xs sm:text-sm lg:text-base font-medium">
                               {organizacao.toUpperCase()}
                             </span>
                           </div>
                         </div>
                         {timeUnits.map((_, index) => (
-                          <div key={index} className="border-r flex-1 min-w-[60px] lg:min-w-[80px]"></div>
+                          <div key={index} className="border-r flex-1 min-w-[50px] sm:min-w-[60px] lg:min-w-[80px]"></div>
                         ))}
                       </div>
 
@@ -2695,8 +2823,7 @@ const Cronograma = () => {
                             dataFim={dataFim}
                             posicao={posicao}
                             coresStatus={coresStatus}
-                            inicioPeriodo={inicioPeriodo}
-                            fimPeriodo={fimPeriodo}
+                            posicaoHoje={posicaoHoje}
                           />
                         );
                       })}
@@ -2787,17 +2914,17 @@ const Cronograma = () => {
                 <p className="text-gray-600 text-lg">Nenhuma organização cadastrada</p>
               </div>
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
                 {organizacoes.map((org) => (
                   <Card
                     key={org.id}
-                    className="cursor-pointer hover:shadow-lg transition-all duration-300 hover:scale-105 border-2 hover:border-blue-500"
+                    className="cursor-pointer hover:shadow-lg transition-all duration-300 hover:scale-105 border-2 hover:border-blue-500 overflow-hidden"
                     onClick={() => handleSelecionarEmpresa(org)}
                   >
-                    <CardContent className="p-6">
-                      <div className="flex items-start gap-4">
+                    <CardContent className="p-4 sm:p-6">
+                      <div className="flex items-start gap-3 sm:gap-4">
                         <div
-                          className="w-16 h-16 rounded-lg flex items-center justify-center flex-shrink-0 overflow-hidden"
+                          className="w-12 h-12 sm:w-16 sm:h-16 rounded-lg flex items-center justify-center flex-shrink-0 overflow-hidden"
                           style={{
                             backgroundColor: org.logo_url ? 'transparent' : (org.cor_identificacao || '#3B82F6'),
                             opacity: org.logo_url ? 1 : 0.1
@@ -2826,7 +2953,7 @@ const Cronograma = () => {
                                   // Criar ícone Building como fallback
                                   const iconWrapper = document.createElement('div');
                                   iconWrapper.innerHTML = `
-                                    <svg class="h-8 w-8" style="color: ${org.cor_identificacao || '#3B82F6'}" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                                    <svg class="h-6 w-6 sm:h-8 sm:w-8" style="color: ${org.cor_identificacao || '#3B82F6'}" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                                       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"></path>
                                     </svg>
                                   `;
@@ -2836,7 +2963,7 @@ const Cronograma = () => {
                             />
                           ) : (
                             <Building
-                              className="h-8 w-8"
+                              className="h-6 w-6 sm:h-8 sm:w-8"
                               style={{
                                 color: org.cor_identificacao || '#3B82F6'
                               }}
@@ -2844,14 +2971,14 @@ const Cronograma = () => {
                           )}
                         </div>
                         <div className="flex-1 min-w-0">
-                          <h3 className="text-xl font-bold text-gray-900 mb-1 truncate">
+                          <h3 className="text-lg sm:text-xl font-bold text-gray-900 mb-1 break-words">
                             {org.nome}
                           </h3>
-                          <p className="text-sm text-gray-500 mb-2">
+                          <p className="text-xs sm:text-sm text-gray-500 mb-2 break-words">
                             {org.codigo.toUpperCase()}
                           </p>
-                          <div className="flex items-center gap-2 mt-4">
-                            <span className="text-xs font-medium text-blue-600 bg-blue-50 px-3 py-1 rounded-full">
+                          <div className="flex items-center gap-2 mt-3 sm:mt-4">
+                            <span className="text-xs font-medium text-blue-600 bg-blue-50 px-2 sm:px-3 py-1 rounded-full whitespace-nowrap">
                               Acessar Cronograma
                             </span>
                           </div>
@@ -2959,10 +3086,7 @@ const Cronograma = () => {
               className="text-xs lg:text-sm font-medium border-gray-300 hover:bg-gray-50 hover:border-gray-400 transition-all duration-200"
             >
               <Download className="h-4 w-4 lg:h-5 lg:w-5 mr-1.5 lg:mr-2" />
-              <span className="hidden sm:inline">
-                {filtroOrganizacao === 'todos' ? 'Baixar Overview' : `Baixar Overview`}
-              </span>
-              <span className="sm:hidden">PDF</span>
+              Baixar Overview
             </Button>
             <Button 
               onClick={() => {
@@ -2982,60 +3106,71 @@ const Cronograma = () => {
 
       {/* Estatísticas */}
       {estatisticas && (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Total</CardTitle>
-              <BarChart3 className="h-4 w-4 text-muted-foreground" />
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+          <Card className="overflow-hidden">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 p-4 sm:p-6">
+              <CardTitle className="text-xs sm:text-sm font-medium break-words">Total</CardTitle>
+              <BarChart3 className="h-3 w-3 sm:h-4 sm:w-4 text-muted-foreground flex-shrink-0 ml-2" />
             </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{estatisticas.total_cronogramas}</div>
+            <CardContent className="p-4 sm:p-6 pt-0">
+              <div className="text-xl sm:text-2xl font-bold break-words">{estatisticas.total_cronogramas}</div>
             </CardContent>
           </Card>
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Em Andamento</CardTitle>
-              <Clock className="h-4 w-4 text-blue-500" />
+          <Card className="overflow-hidden">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 p-4 sm:p-6">
+              <CardTitle className="text-xs sm:text-sm font-medium break-words">Em Andamento</CardTitle>
+              <Clock className="h-3 w-3 sm:h-4 sm:w-4 text-blue-500 flex-shrink-0 ml-2" />
             </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-blue-600">{estatisticas.em_andamento}</div>
+            <CardContent className="p-4 sm:p-6 pt-0">
+              <div className="text-xl sm:text-2xl font-bold text-blue-600 break-words">{estatisticas.em_andamento}</div>
             </CardContent>
           </Card>
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Concluídos</CardTitle>
-              <CheckCircle className="h-4 w-4 text-green-500" />
+          <Card className="overflow-hidden">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 p-4 sm:p-6">
+              <CardTitle className="text-xs sm:text-sm font-medium break-words">Concluídos</CardTitle>
+              <CheckCircle className="h-3 w-3 sm:h-4 sm:w-4 text-green-500 flex-shrink-0 ml-2" />
             </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-green-600">{estatisticas.concluidos}</div>
+            <CardContent className="p-4 sm:p-6 pt-0">
+              <div className="text-xl sm:text-2xl font-bold text-green-600 break-words">{estatisticas.concluidos}</div>
             </CardContent>
           </Card>
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Atrasados</CardTitle>
-              <AlertCircle className="h-4 w-4 text-red-500" />
+          <Card className="overflow-hidden">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 p-4 sm:p-6">
+              <CardTitle className="text-xs sm:text-sm font-medium break-words">Atrasados</CardTitle>
+              <AlertCircle className="h-3 w-3 sm:h-4 sm:w-4 text-red-500 flex-shrink-0 ml-2" />
             </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-red-600">{estatisticas.atrasados}</div>
+            <CardContent className="p-4 sm:p-6 pt-0">
+              <div className="text-xl sm:text-2xl font-bold text-red-600 break-words">{estatisticas.atrasados}</div>
             </CardContent>
           </Card>
         </div>
       )}
 
       {/* Filtros */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Filter className="h-5 w-5" />
-            Filtros
-          </CardTitle>
+      <Card className="overflow-hidden">
+        <CardHeader 
+          className="p-4 sm:p-6 cursor-pointer hover:bg-gray-50 transition-colors"
+          onClick={() => setFiltrosExpanded(!filtrosExpanded)}
+        >
+          <div className="flex items-center justify-between">
+            <CardTitle className="flex items-center gap-2 text-base sm:text-lg">
+              <Filter className="h-4 w-4 sm:h-5 sm:w-5 flex-shrink-0" />
+              Filtros
+            </CardTitle>
+            {filtrosExpanded ? (
+              <ChevronUp className="h-4 w-4 sm:h-5 sm:w-5 text-gray-500 flex-shrink-0" />
+            ) : (
+              <ChevronDown className="h-4 w-4 sm:h-5 sm:w-5 text-gray-500 flex-shrink-0" />
+            )}
+          </div>
         </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            <div>
-              <Label htmlFor="status-filter" className="text-sm font-medium">Status</Label>
+        {filtrosExpanded && (
+          <CardContent className="p-4 sm:p-6 pt-0">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 w-full">
+            <div className="w-full min-w-0">
+              <Label htmlFor="status-filter" className="text-xs sm:text-sm font-medium">Status</Label>
               <Select key={`status-${viewMode}-${filtroStatus}`} value={filtroStatus} onValueChange={setFiltroStatus}>
-                <SelectTrigger className="mt-1">
+                <SelectTrigger className="mt-1 h-9 sm:h-10 text-xs sm:text-sm w-full">
                   <SelectValue placeholder="Todos os status" />
                 </SelectTrigger>
                 <SelectContent>
@@ -3047,10 +3182,10 @@ const Cronograma = () => {
                 </SelectContent>
               </Select>
             </div>
-            <div>
-              <Label htmlFor="prioridade-filter" className="text-sm font-medium">Prioridade</Label>
+            <div className="w-full min-w-0">
+              <Label htmlFor="prioridade-filter" className="text-xs sm:text-sm font-medium">Prioridade</Label>
               <Select key={`prioridade-${viewMode}-${filtroPrioridade}`} value={filtroPrioridade} onValueChange={setFiltroPrioridade}>
-                <SelectTrigger className="mt-1">
+                <SelectTrigger className="mt-1 h-9 sm:h-10 text-xs sm:text-sm w-full">
                   <SelectValue placeholder="Todas as prioridades" />
                 </SelectTrigger>
                 <SelectContent>
@@ -3063,10 +3198,10 @@ const Cronograma = () => {
               </Select>
             </div>
             {currentUser?.organizacao === 'portes' && (
-              <div>
-                <Label htmlFor="organizacao-filter" className="text-sm font-medium">Organização</Label>
+              <div className="w-full min-w-0">
+                <Label htmlFor="organizacao-filter" className="text-xs sm:text-sm font-medium">Organização</Label>
                 <Select key={`org-${viewMode}-${filtroOrganizacao}`} value={filtroOrganizacao} onValueChange={setFiltroOrganizacao}>
-                  <SelectTrigger className="mt-1">
+                  <SelectTrigger className="mt-1 h-9 sm:h-10 text-xs sm:text-sm w-full">
                     <SelectValue placeholder="Todas as organizações" />
                   </SelectTrigger>
                   <SelectContent>
@@ -3080,17 +3215,18 @@ const Cronograma = () => {
                 </Select>
               </div>
             )}
-          </div>
-          
-          {/* Contador de tarefas concluídas */}
-          {filtroStatus === 'apenas_concluidas' && (
-            <div className="mt-4 flex items-center gap-4">
-              <div className="text-sm text-gray-600">
-                ({cronogramasConcluidos.length} tarefa{cronogramasConcluidos.length !== 1 ? 's' : ''} concluída{cronogramasConcluidos.length !== 1 ? 's' : ''})
-              </div>
             </div>
-          )}
-        </CardContent>
+            
+            {/* Contador de tarefas concluídas */}
+            {filtroStatus === 'apenas_concluidas' && (
+              <div className="mt-4 flex items-center gap-4 w-full">
+                <div className="text-xs sm:text-sm text-gray-600 break-words">
+                  ({cronogramasConcluidos.length} tarefa{cronogramasConcluidos.length !== 1 ? 's' : ''} concluída{cronogramasConcluidos.length !== 1 ? 's' : ''})
+                </div>
+              </div>
+            )}
+          </CardContent>
+        )}
       </Card>
 
       {/* Conteúdo baseado no modo de visualização */}
@@ -3368,54 +3504,41 @@ const Cronograma = () => {
 
       {/* Modal de Visualização */}
       <Dialog open={isViewDialogOpen} onOpenChange={setIsViewDialogOpen}>
-        <DialogContent className="max-w-7xl w-[95vw] h-[90vh] max-h-[90vh] overflow-hidden flex flex-col">
-          <DialogHeader className="relative">
-            {viewingCronograma && currentUser?.organizacao === 'portes' && (
-              <Button
-                variant="destructive"
-                size="sm"
-                className="absolute right-16 top-2 bg-red-600 hover:bg-red-700"
-                onClick={() => {
-                  setIsViewDialogOpen(false);
-                  setCronogramaToDelete(viewingCronograma);
-                  setIsDeleteDialogOpen(true);
-                }}
-              >
-                <Trash2 className="h-4 w-4 mr-2" />
-                Excluir
-              </Button>
-            )}
-            <DialogTitle className="flex items-center gap-2">
-              <div className="w-3 h-3 rounded-full bg-blue-500"></div>
-              {viewingCronograma?.titulo}
+        <DialogContent className="max-w-7xl w-[95vw] max-h-[95vh] overflow-hidden flex flex-col p-0">
+          <DialogHeader className="relative flex-shrink-0 px-3 sm:px-4 lg:px-6 pt-3 sm:pt-4 lg:pt-6 pb-3 sm:pb-4 border-b">
+            <DialogTitle className="flex items-center gap-2 text-base sm:text-lg lg:text-xl break-words flex-1 min-w-0">
+              <div className="w-2 h-2 sm:w-3 sm:h-3 rounded-full bg-blue-500 flex-shrink-0"></div>
+              <span className="break-words">{viewingCronograma?.titulo}</span>
             </DialogTitle>
-            <DialogDescription>
+            <DialogDescription className="text-xs sm:text-sm break-words mt-2">
               Detalhes da demanda selecionada
             </DialogDescription>
           </DialogHeader>
           
           {viewingCronograma && (
-            <div className="flex-1 overflow-hidden grid grid-cols-1 lg:grid-cols-2 gap-4 lg:gap-6 min-h-0">
-              {/* Grid 1: Informações da Demanda */}
-              <div className="flex flex-col overflow-hidden min-h-0">
-                {/* Área scrollável de conteúdo */}
-                <div className="flex-1 overflow-y-auto pr-2 space-y-6">
+            <>
+              <div className="flex-1 overflow-y-auto min-h-0 px-3 sm:px-4 lg:px-6 py-4 sm:py-5 lg:py-6">
+                <div className="flex flex-col lg:grid lg:grid-cols-2 gap-4 sm:gap-4 lg:gap-6">
+                {/* Grid 1: Informações da Demanda */}
+                <div className="flex flex-col min-h-0">
+                  {/* Área scrollável de conteúdo */}
+                  <div className="space-y-3 sm:space-y-4 lg:space-y-6">
                   {/* Status e Prioridade */}
-                  <div className="flex items-center gap-4">
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm font-medium text-gray-600">Status:</span>
+                  <div className="flex flex-col gap-2 sm:gap-3">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-xs sm:text-sm font-medium text-gray-600">Status:</span>
                       <Badge 
                         variant={getStatusBadgeInfo(viewingCronograma.status).variant as any}
-                        className="text-xs"
+                        className="text-xs whitespace-nowrap"
                       >
                         {getStatusBadgeInfo(viewingCronograma.status).text}
                       </Badge>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm font-medium text-gray-600">Prioridade:</span>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-xs sm:text-sm font-medium text-gray-600">Prioridade:</span>
                       <Badge 
                         variant={getPriorityBadgeInfo(viewingCronograma.prioridade).variant as any}
-                        className="text-xs"
+                        className="text-xs whitespace-nowrap"
                       >
                         {getPriorityBadgeInfo(viewingCronograma.prioridade).text}
                       </Badge>
@@ -3424,39 +3547,41 @@ const Cronograma = () => {
 
                   {/* Descrição */}
                   {viewingCronograma.descricao && (
-                    <div>
-                      <h3 className="text-sm font-medium text-gray-600 mb-2">Descrição</h3>
-                      <p className="text-gray-700 bg-gray-50 p-3 rounded-lg text-sm leading-relaxed">
+                    <div className="w-full">
+                      <h3 className="text-xs sm:text-sm font-medium text-gray-600 mb-2 break-words">Descrição</h3>
+                      <p className="text-xs sm:text-sm text-gray-700 bg-gray-50 p-2 sm:p-3 rounded-lg leading-relaxed break-words">
                         {viewingCronograma.descricao}
                       </p>
                     </div>
                   )}
 
                   {/* Informações do Período e Responsável */}
-                  <div className="grid grid-cols-3 gap-4">
-                    <div>
-                      <h3 className="text-sm font-medium text-gray-600 mb-2">Data de Início</h3>
-                      <div className="flex items-center gap-2">
-                        <Calendar className="h-4 w-4 text-gray-400" />
-                        <span className="text-gray-700">
-                          {formatDateForDisplay(viewingCronograma.data_inicio)}
-                        </span>
+                  <div className="flex flex-col gap-3 sm:gap-4 w-full">
+                    <div className="grid grid-cols-2 gap-2 sm:gap-3 w-full">
+                      <div className="w-full min-w-0">
+                        <h3 className="text-xs sm:text-sm font-medium text-gray-600 mb-1.5 sm:mb-2 break-words">Data de Início</h3>
+                        <div className="flex items-center gap-2 min-w-0">
+                          <Calendar className="h-3 w-3 sm:h-4 sm:w-4 text-gray-400 flex-shrink-0" />
+                          <span className="text-xs sm:text-sm text-gray-700 break-words">
+                            {formatDateForDisplay(viewingCronograma.data_inicio)}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="w-full min-w-0">
+                        <h3 className="text-xs sm:text-sm font-medium text-gray-600 mb-1.5 sm:mb-2 break-words">Data de Fim</h3>
+                        <div className="flex items-center gap-2 min-w-0">
+                          <Calendar className="h-3 w-3 sm:h-4 sm:w-4 text-gray-400 flex-shrink-0" />
+                          <span className="text-xs sm:text-sm text-gray-700 break-words">
+                            {formatDateForDisplay(viewingCronograma.data_fim)}
+                          </span>
+                        </div>
                       </div>
                     </div>
-                    <div>
-                      <h3 className="text-sm font-medium text-gray-600 mb-2">Data de Fim</h3>
-                      <div className="flex items-center gap-2">
-                        <Calendar className="h-4 w-4 text-gray-400" />
-                        <span className="text-gray-700">
-                          {formatDateForDisplay(viewingCronograma.data_fim)}
-                        </span>
-                      </div>
-                    </div>
-                    <div>
-                      <h3 className="text-sm font-medium text-gray-600 mb-2">Responsável</h3>
-                      <div className="flex items-center gap-2">
-                        <User className="h-4 w-4 text-gray-400" />
-                        <span className="text-gray-700">
+                    <div className="w-full min-w-0">
+                      <h3 className="text-xs sm:text-sm font-medium text-gray-600 mb-1.5 sm:mb-2 break-words">Responsável</h3>
+                      <div className="flex items-center gap-2 min-w-0">
+                        <User className="h-3 w-3 sm:h-4 sm:w-4 text-gray-400 flex-shrink-0" />
+                        <span className="text-xs sm:text-sm text-gray-700 break-words">
                           {viewingCronograma.responsavel_nome || 'Não definido'}
                         </span>
                       </div>
@@ -3465,26 +3590,26 @@ const Cronograma = () => {
 
                   {/* Motivo do Atraso */}
                   {viewingCronograma.motivo_atraso && (
-                    <div>
+                    <div className="w-full">
                       <button
                         onClick={() => setIsDelayExpanded(!isDelayExpanded)}
                         className="flex items-center justify-between w-full text-left mb-2 hover:bg-red-50 p-2 rounded-lg transition-colors"
                       >
-                        <h3 className="text-sm font-medium text-red-600">Motivo do Atraso</h3>
+                        <h3 className="text-xs sm:text-sm font-medium text-red-600 break-words">Motivo do Atraso</h3>
                         <ChevronDown 
-                          className={`h-5 w-5 text-red-500 transition-transform ${
+                          className={`h-4 w-4 sm:h-5 sm:w-5 text-red-500 transition-transform flex-shrink-0 ${
                             isDelayExpanded ? 'rotate-180' : ''
                           }`} 
                         />
                       </button>
                       
                       {isDelayExpanded && (
-                        <div className="bg-red-50 border border-red-200 p-3 rounded-lg">
+                        <div className="bg-red-50 border border-red-200 p-2 sm:p-3 rounded-lg w-full">
                           <div className="flex items-center gap-2 mb-2">
-                            <AlertTriangle className="h-4 w-4 text-red-500" />
-                            <span className="text-sm font-medium text-red-700">Atraso Identificado</span>
+                            <AlertTriangle className="h-3 w-3 sm:h-4 sm:w-4 text-red-500 flex-shrink-0" />
+                            <span className="text-xs sm:text-sm font-medium text-red-700 break-words">Atraso Identificado</span>
                           </div>
-                          <p className="text-red-700 text-sm leading-relaxed">
+                          <p className="text-xs sm:text-sm text-red-700 leading-relaxed break-words">
                             {viewingCronograma.motivo_atraso}
                           </p>
                         </div>
@@ -3494,87 +3619,43 @@ const Cronograma = () => {
 
                   {/* Barra de Progresso */}
                   {checklistItems.length > 0 && (
-                    <div>
-                      <div className="flex items-center justify-between mb-2">
-                        <span className="text-sm font-medium text-gray-600">
+                    <div className="w-full">
+                      <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between mb-2">
+                        <span className="text-xs sm:text-sm font-medium text-gray-600 break-words">
                           Progresso: {checklistItems.filter(item => item.concluido).length}/{checklistItems.length} itens concluídos
                         </span>
-                        <span className="text-sm font-medium text-gray-600">
+                        <span className="text-xs sm:text-sm font-medium text-gray-600 whitespace-nowrap">
                           {Math.round((checklistItems.filter(item => item.concluido).length / checklistItems.length) * 100)}%
                         </span>
                       </div>
                       <Progress 
                         value={(checklistItems.filter(item => item.concluido).length / checklistItems.length) * 100} 
-                        className="h-2 [&>div]:bg-green-500"
+                        className="h-2 [&>div]:bg-green-500 w-full"
                       />
                     </div>
                   )}
 
                   {/* Observações */}
                   {viewingCronograma.observacoes && (
-                    <div>
-                      <h3 className="text-sm font-medium text-gray-600 mb-2">Observações</h3>
-                      <p className="text-gray-700 bg-gray-50 p-3 rounded-lg text-sm leading-relaxed">
+                    <div className="w-full">
+                      <h3 className="text-xs sm:text-sm font-medium text-gray-600 mb-2 break-words">Observações</h3>
+                      <p className="text-xs sm:text-sm text-gray-700 bg-gray-50 p-2 sm:p-3 rounded-lg leading-relaxed break-words">
                         {viewingCronograma.observacoes}
                       </p>
                     </div>
                   )}
 
-                </div>
-
-                {/* Ações - Fixas na parte inferior */}
-                <div className="flex items-center pt-4 border-t flex-shrink-0 mt-4">
-                  {currentUser?.organizacao === 'portes' && (
-                    <Button
-                      variant="outline"
-                      onClick={() => {
-                        if (viewingCronograma) {
-                          setIsViewDialogOpen(false);
-                          setIsChecklistOpen(true);
-                        }
-                      }}
-                      className="mr-auto bg-blue-50 border-blue-200 text-blue-700 hover:bg-blue-100"
-                    >
-                      <CheckSquare className="h-4 w-4 mr-2" />
-                      Checklist
-                    </Button>
-                  )}
-                  
-                  <div className="flex gap-3 ml-auto">
-                    <Button
-                      variant="outline"
-                      onClick={() => {
-                        setViewingCronograma(null);
-                        setIsViewDialogOpen(false);
-                      }}
-                    >
-                      Fechar
-                    </Button>
-                    {currentUser?.organizacao === 'portes' && (
-                      <Button
-                        onClick={() => {
-                          setViewingCronograma(null);
-                          setIsViewDialogOpen(false);
-                          setEditingCronograma(viewingCronograma);
-                          setIsEditDialogOpen(true);
-                        }}
-                      >
-                        <Edit className="h-4 w-4 mr-2" />
-                        Editar
-                      </Button>
-                    )}
                   </div>
                 </div>
-              </div>
 
               {/* Grid 2: Checklist */}
-              <div className="flex flex-col overflow-hidden min-h-0">
-                <div className="flex items-center justify-between mb-4 flex-shrink-0">
-                  <h3 className="text-lg font-semibold text-gray-700">Checklist da Demanda</h3>
+              <div className="flex flex-col min-h-0">
+                <div className="flex flex-col gap-2 mb-3">
+                  <h3 className="text-base sm:text-lg font-semibold text-gray-700 break-words">Checklist da Demanda</h3>
                   {(viewingCronograma?.data_inicio || viewingCronograma?.data_fim) && (
-                    <div className="flex items-center gap-2 text-xs text-gray-500">
-                      <Calendar className="h-3 w-3" />
-                      <span>
+                    <div className="flex items-center gap-2 text-xs text-gray-500 flex-wrap">
+                      <Calendar className="h-3 w-3 flex-shrink-0" />
+                      <span className="break-words">
                         {viewingCronograma.data_inicio && viewingCronograma.data_fim
                           ? `${formatDateForDisplay(viewingCronograma.data_inicio)} a ${formatDateForDisplay(viewingCronograma.data_fim)}`
                           : viewingCronograma.data_inicio
@@ -3589,7 +3670,7 @@ const Cronograma = () => {
                 </div>
 
                 {/* Lista de itens do checklist */}
-                <div className="flex-1 overflow-y-auto">
+                <div className="space-y-2 sm:space-y-3">
                   {checklistLoading ? (
                     <div className="flex justify-center py-4">
                       <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
@@ -3605,7 +3686,7 @@ const Cronograma = () => {
                           items={checklistItems.map(item => item.id)}
                           strategy={verticalListSortingStrategy}
                         >
-                          <div className="grid grid-cols-1 gap-3">
+                          <div className="flex flex-col gap-2 sm:gap-3 w-full">
                             {checklistItems.map((item) => (
                               <SortableChecklistItem key={item.id} item={item} />
                             ))}
@@ -3613,24 +3694,78 @@ const Cronograma = () => {
                         </SortableContext>
                       </DndContext>
                     ) : (
-                      <div className="grid grid-cols-1 gap-3">
+                      <div className="flex flex-col gap-2 sm:gap-3 w-full">
                         {checklistItems.map((item) => (
                           <SortableChecklistItem key={item.id} item={item} disabled={true} />
                         ))}
                       </div>
                     )
                   ) : (
-                    <div className="text-center py-6 text-gray-500">
-                      <CheckSquare className="h-8 w-8 mx-auto mb-2 text-gray-300" />
-                      <p className="text-sm">Nenhum item no checklist</p>
-                      <p className="text-xs text-gray-400 mt-1">
+                    <div className="text-center py-4 sm:py-6 text-gray-500 px-2">
+                      <CheckSquare className="h-6 w-6 sm:h-8 sm:w-8 mx-auto mb-2 text-gray-300" />
+                      <p className="text-xs sm:text-sm break-words">Nenhum item no checklist</p>
+                      <p className="text-xs text-gray-400 mt-1 break-words px-2">
                         Clique no botão "Checklist" abaixo para adicionar itens
                       </p>
                     </div>
                   )}
                 </div>
               </div>
-            </div>
+              </div>
+              </div>
+              
+              {/* Footer com Botões de Ação */}
+              <div className="flex-shrink-0 border-t bg-gray-50/50 px-3 sm:px-4 lg:px-6 py-3 sm:py-4">
+                {currentUser?.organizacao === 'portes' ? (
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
+                    {/* Botão Checklist à esquerda */}
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        if (viewingCronograma) {
+                          setIsViewDialogOpen(false);
+                          setIsChecklistOpen(true);
+                        }
+                      }}
+                      className="bg-blue-50 border-blue-200 text-blue-700 hover:bg-blue-100 text-xs sm:text-sm w-full sm:w-auto order-3 sm:order-1"
+                    >
+                      <CheckSquare className="h-3 w-3 sm:h-4 sm:w-4 sm:mr-2" />
+                      Checklist
+                    </Button>
+
+                    {/* Botões de ação à direita */}
+                    <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 order-1 sm:order-2">
+                      <Button
+                        onClick={() => {
+                          setViewingCronograma(null);
+                          setIsViewDialogOpen(false);
+                          setEditingCronograma(viewingCronograma);
+                          setIsEditDialogOpen(true);
+                        }}
+                        className="text-xs sm:text-sm w-full sm:w-auto"
+                      >
+                        <Edit className="h-3 w-3 sm:h-4 sm:w-4 sm:mr-2" />
+                        Editar
+                      </Button>
+                      <Button
+                        variant="destructive"
+                        onClick={() => {
+                          setIsViewDialogOpen(false);
+                          setCronogramaToDelete(viewingCronograma);
+                          setIsDeleteDialogOpen(true);
+                        }}
+                        className="bg-red-600 hover:bg-red-700 text-white text-xs sm:text-sm w-full sm:w-auto"
+                      >
+                        <Trash2 className="h-3 w-3 sm:h-4 sm:w-4 sm:mr-2" />
+                        Excluir
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="h-0"></div>
+                )}
+              </div>
+            </>
           )}
         </DialogContent>
       </Dialog>
@@ -3725,21 +3860,22 @@ const Cronograma = () => {
 
       {/* Modal de Seleção de Organização para PDF */}
       <Dialog open={isOrganizationModalOpen} onOpenChange={setIsOrganizationModalOpen}>
-        <DialogContent className="sm:max-w-lg mx-4 sm:mx-0">
-          <DialogHeader className="pb-4">
-            <DialogTitle className="flex items-center gap-2 lg:gap-3 text-base lg:text-lg">
-              <Download className="h-5 w-5 lg:h-6 lg:w-6" />
+        <DialogContent className="w-[95vw] max-w-lg max-h-[90vh] flex flex-col">
+          <DialogHeader className="flex-shrink-0 pb-3 sm:pb-4">
+            <DialogTitle className="flex items-center gap-2 lg:gap-3 text-base lg:text-lg break-words">
+              <Download className="h-4 w-4 sm:h-5 sm:w-5 lg:h-6 lg:w-6 flex-shrink-0" />
               Configurar Overview PDF
             </DialogTitle>
-            <DialogDescription className="text-sm lg:text-base">
+            <DialogDescription className="text-xs sm:text-sm lg:text-base break-words mt-1">
               Escolha o tipo de overview e configure os filtros desejados.
             </DialogDescription>
           </DialogHeader>
           
-          <div className="space-y-4 lg:space-y-6">
+          <div className="flex-1 overflow-y-auto min-h-0 pr-1 sm:pr-2 -mr-1 sm:mr-0">
+            <div className="space-y-4 lg:space-y-6">
             {/* Tipo de Overview */}
             <div className="space-y-2 lg:space-y-3">
-              <Label htmlFor="tipo-overview-select" className="text-sm lg:text-base font-medium">Tipo de Overview</Label>
+              <Label htmlFor="tipo-overview-select" className="text-xs sm:text-sm lg:text-base font-medium">Tipo de Overview</Label>
               <Select value={tipoOverview} onValueChange={(value: 'geral' | 'por_mes') => {
                 setTipoOverview(value);
                 // Preencher com mês atual se selecionar por mês
@@ -3749,7 +3885,7 @@ const Cronograma = () => {
                   if (!selectedMes) setSelectedMes((hoje.getMonth() + 1).toString());
                 }
               }}>
-                <SelectTrigger className="h-10 lg:h-12">
+                <SelectTrigger className="h-9 sm:h-10 lg:h-12 text-xs sm:text-sm">
                   <SelectValue placeholder="Selecione o tipo" />
                 </SelectTrigger>
                 <SelectContent>
@@ -3762,9 +3898,9 @@ const Cronograma = () => {
             {/* Seleção de organização - apenas se não houver organização já selecionada */}
             {!organizacaoSelecionada && (
               <div className="space-y-2 lg:space-y-3">
-                <Label htmlFor="org-pdf-select" className="text-sm lg:text-base font-medium">Organização</Label>
+                <Label htmlFor="org-pdf-select" className="text-xs sm:text-sm lg:text-base font-medium">Organização</Label>
                 <Select value={selectedOrganizationForPDF} onValueChange={setSelectedOrganizationForPDF}>
-                  <SelectTrigger className="h-10 lg:h-12">
+                  <SelectTrigger className="h-9 sm:h-10 lg:h-12 text-xs sm:text-sm">
                     <SelectValue placeholder="Selecione uma organização" />
                   </SelectTrigger>
                   <SelectContent>
@@ -3781,10 +3917,10 @@ const Cronograma = () => {
       
             {/* Campos condicionais baseados no tipo */}
             {tipoOverview === 'geral' ? (
-              <div className="space-y-3">
-                <Label htmlFor="status-pdf-select" className="text-base font-medium">Status das Demandas</Label>
+              <div className="space-y-2 sm:space-y-3">
+                <Label htmlFor="status-pdf-select" className="text-xs sm:text-sm lg:text-base font-medium">Status das Demandas</Label>
                 <Select value={selectedStatusForPDF} onValueChange={setSelectedStatusForPDF}>
-                  <SelectTrigger className="h-12">
+                  <SelectTrigger className="h-9 sm:h-10 lg:h-12 text-xs sm:text-sm">
                     <SelectValue placeholder="Selecione um status" />
                   </SelectTrigger>
                   <SelectContent>
@@ -3797,11 +3933,11 @@ const Cronograma = () => {
                 </Select>
               </div>
             ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                 <div className="space-y-2 lg:space-y-3">
-                  <Label htmlFor="ano-select" className="text-sm lg:text-base font-medium">Ano</Label>
+                  <Label htmlFor="ano-select" className="text-xs sm:text-sm lg:text-base font-medium">Ano</Label>
                   <Select value={selectedAno} onValueChange={setSelectedAno}>
-                    <SelectTrigger className="h-10 lg:h-12">
+                    <SelectTrigger className="h-9 sm:h-10 lg:h-12 text-xs sm:text-sm">
                       <SelectValue placeholder="Selecione o ano" />
                     </SelectTrigger>
                     <SelectContent>
@@ -3850,17 +3986,17 @@ const Cronograma = () => {
             
             {/* Informações do overview selecionado */}
             {tipoOverview === 'por_mes' && selectedAno && selectedMes && (
-              <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
-                <div className="flex items-start gap-3">
+              <div className="bg-purple-50 border border-purple-200 rounded-lg p-3 sm:p-4">
+                <div className="flex items-start gap-2 sm:gap-3">
                   <div className="flex-shrink-0">
-                    <TrendingUp className="h-5 w-5 text-purple-600 mt-0.5" />
+                    <TrendingUp className="h-4 w-4 sm:h-5 sm:w-5 text-purple-600 mt-0.5" />
                   </div>
-                  <div>
-                    <p className="text-base font-medium text-purple-800">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm sm:text-base font-medium text-purple-800">
                       Análise Inteligente por Mês
                     </p>
-                    <p className="text-sm text-purple-600 mt-2">
-                      A IA irá analisar todas as demandas e checklists do mês {selectedMes}/{selectedAno}, 
+                    <p className="text-xs sm:text-sm text-purple-600 mt-2">
+                      A Inteligência Artificial irá analisar todas as demandas e checklists do mês {selectedMes}/{selectedAno}, 
                       incluindo análises detalhadas das descrições e listando todos os pontos concluídos.
                       {selectedOrganizationForPDF !== 'todos' && (
                         <span className="block mt-1">
@@ -3876,16 +4012,16 @@ const Cronograma = () => {
             {tipoOverview === 'geral' && (
               <>
                 {selectedOrganizationForPDF !== 'todos' && (
-                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                    <div className="flex items-start gap-3">
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 sm:p-4">
+                    <div className="flex items-start gap-2 sm:gap-3">
                       <div className="flex-shrink-0">
-                        <Building className="h-5 w-5 text-blue-600 mt-0.5" />
+                        <Building className="h-4 w-4 sm:h-5 sm:w-5 text-blue-600 mt-0.5" />
                       </div>
-                      <div>
-                        <p className="text-base font-medium text-blue-800">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm sm:text-base font-medium text-blue-800">
                           Overview específico para: {selectedOrganizationForPDF.toUpperCase()}
                         </p>
-                        <p className="text-sm text-blue-600 mt-2">
+                        <p className="text-xs sm:text-sm text-blue-600 mt-2">
                           Será gerado um PDF contendo apenas as demandas desta organização.
                           {selectedStatusForPDF !== 'todos' && (
                             <span className="block mt-1">
@@ -3902,16 +4038,16 @@ const Cronograma = () => {
                 )}
                 
                 {selectedOrganizationForPDF === 'todos' && (
-                  <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-                    <div className="flex items-start gap-3">
+                  <div className="bg-green-50 border border-green-200 rounded-lg p-3 sm:p-4">
+                    <div className="flex items-start gap-2 sm:gap-3">
                       <div className="flex-shrink-0">
-                        <Building className="h-5 w-5 text-green-600 mt-0.5" />
+                        <Building className="h-4 w-4 sm:h-5 sm:w-5 text-green-600 mt-0.5" />
                       </div>
-                      <div>
-                        <p className="text-base font-medium text-green-800">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm sm:text-base font-medium text-green-800">
                           Overview completo de todas as organizações
                         </p>
-                        <p className="text-sm text-green-600 mt-2">
+                        <p className="text-xs sm:text-sm text-green-600 mt-2">
                           Será gerado um PDF contendo todas as demandas de todas as organizações.
                           {selectedStatusForPDF !== 'todos' && (
                             <span className="block mt-1">
@@ -3928,17 +4064,17 @@ const Cronograma = () => {
                 )}
 
                 {/* Opção de IA apenas para overview geral */}
-                <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-start gap-3 flex-1">
+                <div className="bg-purple-50 border border-purple-200 rounded-lg p-3 sm:p-4">
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
+                    <div className="flex items-start gap-2 sm:gap-3 flex-1 min-w-0">
                       <div className="flex-shrink-0">
-                        <TrendingUp className="h-5 w-5 text-purple-600 mt-0.5" />
+                        <TrendingUp className="h-4 w-4 sm:h-5 sm:w-5 text-purple-600 mt-0.5" />
                       </div>
-                      <div className="flex-1">
-                        <p className="text-base font-medium text-purple-800">
-                          Análise Inteligente com IA
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm sm:text-base font-medium text-purple-800">
+                          Análise Inteligente com Inteligência Artificial
                         </p>
-                        <p className="text-sm text-purple-600 mt-1">
+                        <p className="text-xs sm:text-sm text-purple-600 mt-1">
                           Ative para gerar um relatório com análise mensal inteligente do que foi feito e o que falta fazer, incluindo análise de checklists.
                         </p>
                       </div>
@@ -3946,15 +4082,16 @@ const Cronograma = () => {
                     <Switch
                       checked={usarIA}
                       onCheckedChange={setUsarIA}
-                      className="ml-4"
+                      className="flex-shrink-0 sm:ml-4 self-start sm:self-center"
                     />
                   </div>
                 </div>
               </>
             )}
+            </div>
           </div>
 
-          <div className="flex justify-end gap-4 pt-6 border-t">
+          <div className="flex flex-col sm:flex-row justify-end gap-2 sm:gap-4 pt-3 sm:pt-4 border-t flex-shrink-0 mt-auto">
             <Button 
               variant="outline" 
               onClick={() => {
@@ -3962,37 +4099,37 @@ const Cronograma = () => {
                 setUsarIA(false);
                 setTipoOverview('geral');
               }}
-              className="px-6"
+              className="w-full sm:w-auto px-4 sm:px-6 text-sm sm:text-base"
               disabled={loadingIA || loadingMesIA}
             >
               Cancelar
             </Button>
             <Button 
               onClick={confirmarDownloadPDFAtualizado}
-              className={tipoOverview === 'por_mes' || usarIA ? "bg-purple-600 hover:bg-purple-700 px-6" : "bg-blue-600 hover:bg-blue-700 px-6"}
+              className={`w-full sm:w-auto px-4 sm:px-6 text-sm sm:text-base ${tipoOverview === 'por_mes' || usarIA ? "bg-purple-600 hover:bg-purple-700" : "bg-blue-600 hover:bg-blue-700"}`}
               disabled={loadingIA || loadingMesIA || (tipoOverview === 'por_mes' && (!selectedAno || !selectedMes))}
             >
               {loadingIA || loadingMesIA ? (
                 <>
-                  <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
-                  Analisando IA...
+                  <RefreshCw className="h-4 w-4 mr-1.5 sm:mr-2 animate-spin flex-shrink-0" />
+                  <span className="truncate">Analisando com Inteligência Artificial...</span>
                 </>
               ) : (
                 <>
                   {tipoOverview === 'por_mes' ? (
                     <>
-                      <Calendar className="h-4 w-4 mr-2" />
-                      Gerar Overview
+                      <Calendar className="h-4 w-4 mr-1.5 sm:mr-2 flex-shrink-0" />
+                      <span className="truncate">Gerar Overview</span>
                     </>
                   ) : usarIA ? (
                     <>
-                      <TrendingUp className="h-4 w-4 mr-2" />
-                      Baixar Overview com IA
+                      <TrendingUp className="h-4 w-4 mr-1.5 sm:mr-2 flex-shrink-0" />
+                      <span className="truncate">Baixar Overview com Inteligência Artificial</span>
                     </>
                   ) : (
                     <>
-                      <Download className="h-4 w-4 mr-2" />
-                      Baixar Overview
+                      <Download className="h-4 w-4 mr-1.5 sm:mr-2 flex-shrink-0" />
+                      <span className="truncate">Baixar Overview</span>
                     </>
                   )}
                 </>
@@ -4004,116 +4141,121 @@ const Cronograma = () => {
 
       {/* Modal de Seleção de Status para PDF (Usuários não-Portes) */}
       <Dialog open={isStatusModalOpen} onOpenChange={setIsStatusModalOpen}>
-        <DialogContent className="sm:max-w-lg mx-4 sm:mx-0">
-          <DialogHeader className="pb-4">
-            <DialogTitle className="flex items-center gap-2 lg:gap-3 text-base lg:text-lg">
-              <Download className="h-5 w-5 lg:h-6 lg:w-6" />
+        <DialogContent className="w-[95vw] max-w-lg max-h-[90vh] flex flex-col">
+          <DialogHeader className="flex-shrink-0 pb-3 sm:pb-4">
+            <DialogTitle className="flex items-center gap-2 lg:gap-3 text-base lg:text-lg break-words">
+              <Download className="h-4 w-4 sm:h-5 sm:w-5 lg:h-6 lg:w-6 flex-shrink-0" />
               Configurar Overview PDF
             </DialogTitle>
-            <DialogDescription className="text-sm lg:text-base">
+            <DialogDescription className="text-xs sm:text-sm lg:text-base break-words mt-1">
               Escolha o status das demandas para incluir no overview PDF da sua organização.
             </DialogDescription>
           </DialogHeader>
           
-          <div className="space-y-4 lg:space-y-6">
-            <div className="space-y-2 lg:space-y-3">
-              <Label htmlFor="status-non-portes-pdf-select" className="text-sm lg:text-base font-medium">Status das Demandas</Label>
-              <Select value={selectedStatusForNonPortesPDF} onValueChange={setSelectedStatusForNonPortesPDF}>
-                <SelectTrigger className="h-10 lg:h-12">
-                  <SelectValue placeholder="Selecione um status" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="todos">Todas as demandas</SelectItem>
-                  <SelectItem value="concluido">Concluídas</SelectItem>
-                  <SelectItem value="em_andamento">Em andamento</SelectItem>
-                  <SelectItem value="pendente">Pendentes</SelectItem>
-                  <SelectItem value="atrasado">Atrasadas</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-              <div className="flex items-start gap-3">
-                <div className="flex-shrink-0">
-                  <Building className="h-5 w-5 text-blue-600 mt-0.5" />
-                </div>
-                <div>
-                  <p className="text-base font-medium text-blue-800">
-                    Overview da sua organização: {(currentUser?.nome_empresa || currentUser?.organizacao_nome || currentUser?.organizacao || 'Sistema').toUpperCase()}
-                  </p>
-                  <p className="text-sm text-blue-600 mt-2">
-                    Será gerado um PDF contendo as demandas da sua organização.
-                    {selectedStatusForNonPortesPDF !== 'todos' && (
-                      <span className="block mt-1">
-                        <strong>Status filtrado:</strong> {selectedStatusForNonPortesPDF === 'concluido' ? 'Concluídas' : 
-                                                        selectedStatusForNonPortesPDF === 'em_andamento' ? 'Em Andamento' :
-                                                        selectedStatusForNonPortesPDF === 'pendente' ? 'Pendentes' :
-                                                        selectedStatusForNonPortesPDF === 'atrasado' ? 'Atrasadas' : selectedStatusForNonPortesPDF}
-                      </span>
-                    )}
-                  </p>
+          <div className="flex-1 overflow-y-auto min-h-0 pr-1 sm:pr-2 -mr-1 sm:mr-0">
+            <div className="space-y-4 lg:space-y-6">
+              <div className="space-y-2 lg:space-y-3">
+                <Label htmlFor="status-non-portes-pdf-select" className="text-xs sm:text-sm lg:text-base font-medium">Status das Demandas</Label>
+                <Select value={selectedStatusForNonPortesPDF} onValueChange={setSelectedStatusForNonPortesPDF}>
+                  <SelectTrigger className="h-9 sm:h-10 lg:h-12 text-xs sm:text-sm">
+                    <SelectValue placeholder="Selecione um status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="todos">Todas as demandas</SelectItem>
+                    <SelectItem value="concluido">Concluídas</SelectItem>
+                    <SelectItem value="em_andamento">Em andamento</SelectItem>
+                    <SelectItem value="pendente">Pendentes</SelectItem>
+                    <SelectItem value="atrasado">Atrasadas</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 sm:p-4">
+                <div className="flex items-start gap-2 sm:gap-3">
+                  <div className="flex-shrink-0">
+                    <Building className="h-4 w-4 sm:h-5 sm:w-5 text-blue-600 mt-0.5" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs sm:text-sm lg:text-base font-medium text-blue-800 break-words">
+                      Overview da sua organização: {(currentUser?.nome_empresa || currentUser?.organizacao_nome || currentUser?.organizacao || 'Sistema').toUpperCase()}
+                    </p>
+                    <p className="text-xs sm:text-sm text-blue-600 mt-2 break-words">
+                      Será gerado um PDF contendo as demandas da sua organização.
+                      {selectedStatusForNonPortesPDF !== 'todos' && (
+                        <span className="block mt-1">
+                          <strong>Status filtrado:</strong> {selectedStatusForNonPortesPDF === 'concluido' ? 'Concluídas' : 
+                                                          selectedStatusForNonPortesPDF === 'em_andamento' ? 'Em Andamento' :
+                                                          selectedStatusForNonPortesPDF === 'pendente' ? 'Pendentes' :
+                                                          selectedStatusForNonPortesPDF === 'atrasado' ? 'Atrasadas' : selectedStatusForNonPortesPDF}
+                        </span>
+                      )}
+                    </p>
+                  </div>
                 </div>
               </div>
-            </div>
 
-            {/* Opção de IA */}
-            <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-start gap-3 flex-1">
-                  <div className="flex-shrink-0">
-                    <TrendingUp className="h-5 w-5 text-purple-600 mt-0.5" />
+              {/* Opção de IA */}
+              <div className="bg-purple-50 border border-purple-200 rounded-lg p-3 sm:p-4">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
+                  <div className="flex items-start gap-2 sm:gap-3 flex-1 min-w-0">
+                    <div className="flex-shrink-0">
+                      <TrendingUp className="h-4 w-4 sm:h-5 sm:w-5 text-purple-600 mt-0.5" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs sm:text-sm lg:text-base font-medium text-purple-800 break-words">
+                        Análise Inteligente com Inteligência Artificial
+                      </p>
+                      <p className="text-xs sm:text-sm text-purple-600 mt-1 break-words">
+                        Ative para gerar um relatório com análise mensal inteligente do que foi feito e o que falta fazer, incluindo análise de checklists.
+                      </p>
+                    </div>
                   </div>
-                  <div className="flex-1">
-                    <p className="text-base font-medium text-purple-800">
-                      Análise Inteligente com IA
-                    </p>
-                    <p className="text-sm text-purple-600 mt-1">
-                      Ative para gerar um relatório com análise mensal inteligente do que foi feito e o que falta fazer, incluindo análise de checklists.
-                    </p>
-                  </div>
+                  <Switch
+                    checked={usarIA}
+                    onCheckedChange={setUsarIA}
+                    className="flex-shrink-0 sm:ml-4 self-start sm:self-center"
+                  />
                 </div>
-                <Switch
-                  checked={usarIA}
-                  onCheckedChange={setUsarIA}
-                  className="ml-4"
-                />
               </div>
             </div>
           </div>
 
-          <div className="flex justify-end gap-4 pt-6 border-t">
+          <div className="flex flex-col sm:flex-row justify-end gap-2 sm:gap-4 pt-3 sm:pt-4 border-t flex-shrink-0 mt-auto">
             <Button 
               variant="outline" 
               onClick={() => {
                 setIsStatusModalOpen(false);
                 setUsarIA(false);
               }}
-              className="px-6"
+              className="w-full sm:w-auto text-xs sm:text-sm"
               disabled={loadingIA}
             >
               Cancelar
             </Button>
             <Button 
               onClick={confirmarDownloadPDFNonPortes}
-              className={usarIA ? "bg-purple-600 hover:bg-purple-700 px-6" : "bg-blue-600 hover:bg-blue-700 px-6"}
+              className={`w-full sm:w-auto text-xs sm:text-sm ${usarIA ? "bg-purple-600 hover:bg-purple-700" : "bg-blue-600 hover:bg-blue-700"}`}
               disabled={loadingIA}
             >
               {loadingIA ? (
                 <>
-                  <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
-                  Analisando IA...
+                  <RefreshCw className="h-3 w-3 sm:h-4 sm:w-4 sm:mr-2 animate-spin flex-shrink-0" />
+                  <span className="hidden sm:inline">Analisando com Inteligência Artificial...</span>
+                  <span className="sm:hidden">Analisando...</span>
                 </>
               ) : (
                 <>
                   {usarIA ? (
                     <>
-                      <TrendingUp className="h-4 w-4 mr-2" />
-                      Baixar Overview com IA
+                      <TrendingUp className="h-3 w-3 sm:h-4 sm:w-4 sm:mr-2 flex-shrink-0" />
+                      <span className="hidden sm:inline">Baixar Overview com Inteligência Artificial</span>
+                      <span className="sm:hidden">Baixar com IA</span>
                     </>
                   ) : (
                     <>
-                      <Download className="h-4 w-4 mr-2" />
-                      Baixar Overview
+                      <Download className="h-3 w-3 sm:h-4 sm:w-4 sm:mr-2 flex-shrink-0" />
+                      <span className="hidden sm:inline">Baixar Overview</span>
+                      <span className="sm:hidden">Baixar</span>
                     </>
                   )}
                 </>

@@ -5,6 +5,16 @@ import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger } from '@/components/ui/dialog';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -55,6 +65,9 @@ const Users = () => {
   const [logoPreview, setLogoPreview] = useState<string | null>(null);
   const [uploadingLogo, setUploadingLogo] = useState(false);
   const [logoError, setLogoError] = useState<{ [key: number]: boolean }>({});
+  const [showDeleteOrgDialog, setShowDeleteOrgDialog] = useState(false);
+  const [orgToDelete, setOrgToDelete] = useState<{ id: number; nome: string } | null>(null);
+  const [deletingOrg, setDeletingOrg] = useState(false);
 
   // Estados para filtros
   const [filtroOrganizacao, setFiltroOrganizacao] = useState<string>('todas');
@@ -460,13 +473,22 @@ const Users = () => {
     }
   };
 
-  const deletarOrganizacao = async (orgId: number, orgNome: string) => {
-    if (!confirm(`Tem certeza que deseja excluir a organização "${orgNome}"?`)) {
-      return;
-    }
+  const handleDeleteOrgClick = (orgId: number, orgNome: string) => {
+    setOrgToDelete({ id: orgId, nome: orgNome });
+    setShowDeleteOrgDialog(true);
+  };
 
+  const cancelDeleteOrg = () => {
+    setShowDeleteOrgDialog(false);
+    setOrgToDelete(null);
+  };
+
+  const confirmDeleteOrg = async () => {
+    if (!orgToDelete) return;
+
+    setDeletingOrg(true);
     try {
-      const response = await fetch(`${API_BASE}/organizacoes/${orgId}`, {
+      const response = await fetch(`${API_BASE}/organizacoes/${orgToDelete.id}`, {
         method: 'DELETE',
         headers: {
           'x-user-organization': 'portes'
@@ -478,9 +500,11 @@ const Users = () => {
       if (data.success) {
         toast({
           title: "Organização Excluída",
-          description: `Organização ${orgNome} foi excluída com sucesso.`,
+          description: `Organização ${orgToDelete.nome} foi excluída com sucesso.`,
         });
         fetchOrganizacoes();
+        setShowDeleteOrgDialog(false);
+        setOrgToDelete(null);
       } else {
         toast({
           title: "Erro",
@@ -495,6 +519,8 @@ const Users = () => {
         description: "Erro ao excluir organização",
         variant: "destructive",
       });
+    } finally {
+      setDeletingOrg(false);
     }
   };
 
@@ -865,8 +891,7 @@ const Users = () => {
                               className="text-blue-600 border-blue-300 hover:bg-blue-50 text-xs sm:text-sm"
                             >
                               <Edit className="h-3 w-3 sm:h-4 sm:w-4 mr-1" />
-                              <span className="hidden sm:inline">Editar</span>
-                              <span className="sm:hidden">Ed.</span>
+                              Editar
                             </Button>
                             <Button
                               variant="outline"
@@ -875,8 +900,7 @@ const Users = () => {
                               className="text-orange-600 border-orange-300 hover:bg-orange-50 text-xs sm:text-sm"
                             >
                               <Key className="h-3 w-3 sm:h-4 sm:w-4 mr-1" />
-                              <span className="hidden sm:inline">Resetar</span>
-                              <span className="sm:hidden">Reset</span>
+                              Resetar senha
                             </Button>
                           </div>
                         ) : (
@@ -914,14 +938,18 @@ const Users = () => {
           
           <TabsContent value="organizacoes" className="space-y-4">
             <Card>
-              <CardHeader>
-                <div className="flex justify-between items-center">
-                  <CardTitle className="flex items-center gap-2">
-                    <Building className="h-5 w-5" />
+              <CardHeader className="p-4 sm:p-6">
+                <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 sm:gap-4">
+                  <CardTitle className="flex items-center gap-2 text-lg sm:text-xl break-words">
+                    <Building className="h-4 w-4 sm:h-5 sm:w-5 flex-shrink-0" />
                     Organizações ({organizacoes.length})
                   </CardTitle>
-                  <Button onClick={openCreateOrgDialog} size="sm">
-                    <Plus className="h-4 w-4 mr-2" />
+                  <Button 
+                    onClick={openCreateOrgDialog} 
+                    size="sm"
+                    className="text-xs sm:text-sm font-medium bg-blue-600 hover:bg-blue-700 text-white shadow-md hover:shadow-lg transition-all duration-200 w-full sm:w-auto whitespace-nowrap"
+                  >
+                    <Plus className="h-3 w-3 sm:h-4 sm:w-4 sm:mr-2" />
                     Nova Organização
                   </Button>
                 </div>
@@ -1034,19 +1062,17 @@ const Users = () => {
                                   className="text-blue-600 border-blue-300 hover:bg-blue-50 text-xs sm:text-sm"
                                 >
                                   <Edit className="h-3 w-3 sm:h-4 sm:w-4 mr-1" />
-                                  <span className="hidden sm:inline">Editar</span>
-                                  <span className="sm:hidden">Ed.</span>
+                                  Editar
                                 </Button>
                                 <Button
                                   variant="outline"
                                   size="sm"
-                                  onClick={() => deletarOrganizacao(org.id, org.nome)}
+                                  onClick={() => handleDeleteOrgClick(org.id, org.nome)}
                                   disabled={(org.total_usuarios || 0) > 0}
                                   className="text-red-600 border-red-300 hover:bg-red-50 text-xs sm:text-sm disabled:opacity-50"
                                 >
                                   <Trash2 className="h-3 w-3 sm:h-4 sm:w-4 mr-1" />
-                                  <span className="hidden sm:inline">Excluir</span>
-                                  <span className="sm:hidden">Del.</span>
+                                  Excluir
                                 </Button>
                               </div>
                             </div>
@@ -1157,18 +1183,18 @@ const Users = () => {
 
       {/* Dialog de Edição de Usuário - Fora do container principal */}
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen} modal={true}>
-        <DialogContent className="max-w-xl mx-4 sm:mx-auto max-h-[85vh] flex flex-col z-[60]">
-          <DialogHeader>
-            <DialogTitle className="text-xl flex items-center gap-2">
-              <Edit className="h-5 w-5" />
+        <DialogContent className="max-w-xl w-[95vw] max-h-[90vh] flex flex-col z-[60]">
+          <DialogHeader className="flex-shrink-0">
+            <DialogTitle className="text-lg sm:text-xl flex items-center gap-2 break-words">
+              <Edit className="h-4 w-4 sm:h-5 sm:w-5 flex-shrink-0" />
               Editar Usuário
             </DialogTitle>
-            <DialogDescription>
+            <DialogDescription className="text-xs sm:text-sm break-words">
               Gerencie as informações e permissões de acesso do usuário
             </DialogDescription>
           </DialogHeader>
           {editingUser && (
-            <div className="space-y-6 overflow-y-auto flex-1 pr-2">
+            <div className="space-y-4 sm:space-y-6 overflow-y-auto flex-1 min-h-0 pr-1 sm:pr-2 -mr-1 sm:mr-0">
               {/* Seção: Informações Básicas */}
               <div className="space-y-4">
                 <div className="flex items-center gap-2 pb-2 border-b">
@@ -1424,7 +1450,7 @@ const Users = () => {
           )}
           
           {/* Botões de Ação - Fixos na parte inferior */}
-          <div className="flex flex-col sm:flex-row justify-end gap-3 pt-4 border-t flex-shrink-0 mt-auto">
+          <div className="flex flex-col sm:flex-row justify-end gap-2 sm:gap-3 pt-4 border-t flex-shrink-0 mt-auto">
             <Button
               variant="outline"
               onClick={() => {
@@ -1491,19 +1517,21 @@ const Users = () => {
           setIsCreatingOrg(false);
         }
       }}>
-        <DialogContent className="max-w-md mx-4 sm:mx-auto">
-          <DialogHeader>
-            <DialogTitle>{isCreatingOrg ? 'Criar Organização' : 'Editar Organização'}</DialogTitle>
-            <DialogDescription>
+        <DialogContent className="max-w-md w-[95vw] max-h-[90vh] flex flex-col">
+          <DialogHeader className="flex-shrink-0">
+            <DialogTitle className="text-lg sm:text-xl break-words">
+              {isCreatingOrg ? 'Criar Organização' : 'Editar Organização'}
+            </DialogTitle>
+            <DialogDescription className="text-xs sm:text-sm break-words">
               {isCreatingOrg 
                 ? 'Preencha os dados para criar uma nova organização no sistema.'
                 : 'Edite os dados da organização abaixo.'}
             </DialogDescription>
           </DialogHeader>
           {editingOrg && (
-            <div className="space-y-4 sm:space-y-6">
-              <div className="space-y-2">
-                <Label htmlFor="org-nome">Nome *</Label>
+            <div className="space-y-4 sm:space-y-6 overflow-y-auto flex-1 min-h-0 pr-1 sm:pr-2 -mr-1 sm:mr-0">
+              <div className="space-y-2 w-full">
+                <Label htmlFor="org-nome" className="text-sm sm:text-base">Nome *</Label>
                 <Input
                   id="org-nome"
                   value={editingOrg.nome}
@@ -1513,11 +1541,12 @@ const Users = () => {
                   }}
                   placeholder="Ex: SENAC"
                   required
+                  className="w-full text-xs sm:text-sm"
                 />
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="org-codigo">Código *</Label>
+              <div className="space-y-2 w-full">
+                <Label htmlFor="org-codigo" className="text-sm sm:text-base">Código *</Label>
                 <Input
                   id="org-codigo"
                   value={editingOrg.codigo}
@@ -1536,65 +1565,67 @@ const Users = () => {
                   placeholder="Ex: senac"
                   required
                   disabled={!isCreatingOrg} // Desabilitar edição do código quando estiver editando
+                  className="w-full text-xs sm:text-sm"
                 />
-                <p className="text-xs text-gray-500">
+                <p className="text-xs text-gray-500 break-words">
                   {isCreatingOrg 
                     ? 'Usado como identificador único (apenas letras, números e _)' 
                     : 'O código não pode ser alterado após a criação da organização'}
                 </p>
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="org-cor">Cor de Identificação</Label>
-                <div className="flex gap-2 items-center">
+              <div className="space-y-2 w-full">
+                <Label htmlFor="org-cor" className="text-sm sm:text-base">Cor de Identificação</Label>
+                <div className="flex flex-col sm:flex-row gap-2 items-center w-full">
                   <Input
                     id="org-cor"
                     type="color"
                     value={editingOrg.cor_identificacao}
                     onChange={(e) => setEditingOrg({ ...editingOrg, cor_identificacao: e.target.value })}
-                    className="w-20 h-10"
+                    className="w-20 h-10 flex-shrink-0"
                   />
                   <Input
                     value={editingOrg.cor_identificacao}
                     onChange={(e) => setEditingOrg({ ...editingOrg, cor_identificacao: e.target.value })}
                     placeholder="#6366F1"
                     pattern="^#[0-9A-Fa-f]{6}$"
+                    className="flex-1 w-full text-xs sm:text-sm"
                   />
                 </div>
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="org-logo">Logo da Organização</Label>
-                <div className="space-y-3">
-                  <div className="flex items-center gap-3">
+              <div className="space-y-2 w-full">
+                <Label htmlFor="org-logo" className="text-sm sm:text-base">Logo da Organização</Label>
+                <div className="space-y-3 w-full">
+                  <div className="flex items-center gap-3 w-full">
                     <label
                       htmlFor="logo-upload"
-                      className="flex-1 cursor-pointer"
+                      className="flex-1 cursor-pointer w-full"
                     >
-                      <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 hover:border-blue-500 hover:bg-blue-50 transition-colors">
+                      <div className="border-2 border-dashed border-gray-300 rounded-lg p-3 sm:p-4 hover:border-blue-500 hover:bg-blue-50 transition-colors w-full">
                         <div className="flex flex-col items-center justify-center gap-2">
                           {uploadingLogo ? (
                             <>
-                              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-                              <p className="text-sm text-gray-600">Enviando...</p>
+                              <div className="animate-spin rounded-full h-6 w-6 sm:h-8 sm:w-8 border-b-2 border-blue-600"></div>
+                              <p className="text-xs sm:text-sm text-gray-600 break-words">Enviando...</p>
                             </>
                           ) : logoPreview ? (
                             <>
                               <img
                                 src={logoPreview.startsWith('data:') || logoPreview.startsWith('http') ? logoPreview : `${API_BASE}${logoPreview}`}
                                 alt="Preview logo"
-                                className="w-16 h-16 object-cover rounded-lg"
+                                className="w-12 h-12 sm:w-16 sm:h-16 object-cover rounded-lg"
                                 onError={(e) => {
                                   e.currentTarget.style.display = 'none';
                                 }}
                               />
-                              <p className="text-xs text-gray-600">Clique para alterar</p>
+                              <p className="text-xs text-gray-600 break-words">Clique para alterar</p>
                             </>
                           ) : (
                             <>
-                              <Upload className="h-8 w-8 text-gray-400" />
-                              <p className="text-sm text-gray-600">Clique para fazer upload</p>
-                              <p className="text-xs text-gray-400">PNG, JPG, GIF até 15MB</p>
+                              <Upload className="h-6 w-6 sm:h-8 sm:w-8 text-gray-400" />
+                              <p className="text-xs sm:text-sm text-gray-600 break-words">Clique para fazer upload</p>
+                              <p className="text-xs text-gray-400 break-words">PNG, JPG, GIF até 15MB</p>
                             </>
                           )}
                         </div>
@@ -1610,11 +1641,11 @@ const Users = () => {
                     </label>
                   </div>
                   {logoFile && (
-                    <div className="flex items-center justify-between p-2 bg-blue-50 rounded-lg">
-                      <div className="flex items-center gap-2">
-                        <ImageIcon className="h-4 w-4 text-blue-600" />
-                        <span className="text-sm text-gray-700">{logoFile.name}</span>
-                        <span className="text-xs text-gray-500">
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 p-2 bg-blue-50 rounded-lg w-full">
+                      <div className="flex items-center gap-2 min-w-0 flex-1">
+                        <ImageIcon className="h-4 w-4 text-blue-600 flex-shrink-0" />
+                        <span className="text-xs sm:text-sm text-gray-700 break-words truncate">{logoFile.name}</span>
+                        <span className="text-xs text-gray-500 whitespace-nowrap">
                           ({(logoFile.size / 1024 / 1024).toFixed(2)} MB)
                         </span>
                       </div>
@@ -1628,31 +1659,31 @@ const Users = () => {
                           const input = document.getElementById('logo-upload') as HTMLInputElement;
                           if (input) input.value = '';
                         }}
-                        className="h-6 px-2 text-xs"
+                        className="h-6 px-2 text-xs flex-shrink-0"
                       >
                         <X className="h-3 w-3" />
                       </Button>
                     </div>
                   )}
                   {!logoPreview && !logoFile && (
-                    <div className="w-16 h-16 rounded-lg overflow-hidden border-2 border-gray-200 flex items-center justify-center bg-gray-50">
-                      <Building className="h-8 w-8 text-gray-400" />
+                    <div className="w-12 h-12 sm:w-16 sm:h-16 rounded-lg overflow-hidden border-2 border-gray-200 flex items-center justify-center bg-gray-50 flex-shrink-0">
+                      <Building className="h-6 w-6 sm:h-8 sm:h-8 text-gray-400" />
                     </div>
                   )}
                 </div>
-                <p className="text-xs text-gray-500">Faça upload da logo da organização (máximo 15MB)</p>
+                <p className="text-xs text-gray-500 break-words">Faça upload da logo da organização (máximo 15MB)</p>
               </div>
 
-              <div className="space-y-2">
-                <Label>Status</Label>
-                <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                  <div className="flex items-center gap-2">
+              <div className="space-y-2 w-full">
+                <Label className="text-sm sm:text-base">Status</Label>
+                <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg w-full">
+                  <div className="flex items-center gap-2 min-w-0 flex-1">
                     {editingOrg.ativa === 1 ? (
-                      <CheckCircle className="h-4 w-4 text-green-600" />
+                      <CheckCircle className="h-4 w-4 text-green-600 flex-shrink-0" />
                     ) : (
-                      <XCircle className="h-4 w-4 text-red-600" />
+                      <XCircle className="h-4 w-4 text-red-600 flex-shrink-0" />
                     )}
-                    <span className="font-medium">
+                    <span className="font-medium text-sm sm:text-base break-words">
                       {editingOrg.ativa === 1 ? 'Ativa' : 'Inativa'}
                     </span>
                   </div>
@@ -1662,49 +1693,89 @@ const Users = () => {
                       if (!editingOrg) return;
                       setEditingOrg({ ...editingOrg, ativa: checked ? 1 : 0 });
                     }}
+                    className="flex-shrink-0"
                   />
                 </div>
               </div>
-
-              <div className="flex flex-col sm:flex-row justify-end gap-2 pt-4">
-                <Button
-                  variant="outline"
-                  onClick={() => {
-                    console.log('🔍 Cancelando edição/criação de organização');
-                    setIsOrgDialogOpen(false);
-                    setEditingOrg(null);
-                    setIsCreatingOrg(false);
-                    setLogoFile(null);
-                    setLogoPreview(null);
-                  }}
-                  className="w-full sm:w-auto"
-                  disabled={uploadingLogo}
-                >
-                  <X className="h-4 w-4 mr-2" />
-                  Cancelar
-                </Button>
-                <Button
-                  onClick={handleSaveOrg}
-                  disabled={!editingOrg.nome || !editingOrg.codigo || uploadingLogo}
-                  className="w-full sm:w-auto"
-                >
-                  {uploadingLogo ? (
-                    <>
-                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                      Enviando...
-                    </>
-                  ) : (
-                    <>
-                      <Save className="h-4 w-4 mr-2" />
-                      {isCreatingOrg ? 'Criar' : 'Salvar Alterações'}
-                    </>
-                  )}
-                </Button>
-              </div>
+            </div>
+          )}
+          
+          {/* Botões de Ação - Fixos na parte inferior */}
+          {editingOrg && (
+            <div className="flex flex-col sm:flex-row justify-end gap-2 sm:gap-3 pt-4 border-t flex-shrink-0 mt-auto">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  console.log('🔍 Cancelando edição/criação de organização');
+                  setIsOrgDialogOpen(false);
+                  setEditingOrg(null);
+                  setIsCreatingOrg(false);
+                  setLogoFile(null);
+                  setLogoPreview(null);
+                }}
+                className="w-full sm:w-auto text-xs sm:text-sm"
+                disabled={uploadingLogo}
+              >
+                <X className="h-3 w-3 sm:h-4 sm:w-4 sm:mr-2" />
+                Cancelar
+              </Button>
+              <Button
+                onClick={handleSaveOrg}
+                disabled={!editingOrg.nome || !editingOrg.codigo || uploadingLogo}
+                className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 text-xs sm:text-sm"
+              >
+                {uploadingLogo ? (
+                  <>
+                    <div className="animate-spin rounded-full h-3 w-3 sm:h-4 sm:w-4 border-b-2 border-white sm:mr-2"></div>
+                    <span className="hidden sm:inline">Enviando...</span>
+                    <span className="sm:hidden">Enviando</span>
+                  </>
+                ) : (
+                  <>
+                    <Save className="h-3 w-3 sm:h-4 sm:w-4 sm:mr-2" />
+                    {isCreatingOrg ? 'Criar' : 'Salvar Alterações'}
+                  </>
+                )}
+              </Button>
             </div>
           )}
         </DialogContent>
       </Dialog>
+
+      {/* Modal de confirmação de exclusão de organização */}
+      <AlertDialog open={showDeleteOrgDialog} onOpenChange={setShowDeleteOrgDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2 text-base lg:text-lg break-words">
+              <Trash2 className="h-4 w-4 lg:h-5 lg:w-5 text-red-600 flex-shrink-0" />
+              Confirmar Exclusão
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-sm lg:text-base break-words">
+              Tem certeza que deseja excluir a organização "{orgToDelete?.nome}"? Esta ação não pode ser desfeita.
+              <br /><br />
+              <strong className="text-red-600">⚠️ ATENÇÃO:</strong> Todos os dados relacionados serão excluídos permanentemente:
+              <ul className="list-disc list-inside mt-2 space-y-1 text-xs sm:text-sm break-words">
+                <li>Dados da organização</li>
+                <li>Configurações e permissões</li>
+                <li>Logo e identificação visual</li>
+                <li>Histórico de alterações</li>
+              </ul>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="flex-col sm:flex-row gap-2">
+            <AlertDialogCancel onClick={cancelDeleteOrg} className="text-xs lg:text-sm w-full sm:w-auto order-2 sm:order-1">
+              Cancelar
+            </AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={confirmDeleteOrg}
+              className="bg-red-600 hover:bg-red-700 text-xs lg:text-sm w-full sm:w-auto order-1 sm:order-2"
+              disabled={deletingOrg}
+            >
+              {deletingOrg ? 'Excluindo...' : 'Sim, Excluir'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   );
 };

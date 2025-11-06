@@ -28,6 +28,7 @@ export const LAYOUT_CONFIG = {
   paragraphSpacing: 1.5, // Espaçamento entre parágrafos
   leftBorderWidth: 3, // Largura da linha vertical esquerda
   goldBandHeight: 10, // Altura da faixa dourada
+  minSpaceBeforeNewPage: 40, // Espaço mínimo necessário antes de criar nova página (evita orphans)
 };
 
 /**
@@ -230,24 +231,13 @@ export const addSectionTitle = (
     color,
   });
   
-  let currentY = yPosition;
-  const pageHeight = pdf.internal.pageSize.getHeight();
-  const bottomMargin = LAYOUT_CONFIG.margin + LAYOUT_CONFIG.footerHeight;
+  // Calcular altura total necessária para o título
+  const titleHeight = lines.length * fontSize * (1 + LAYOUT_CONFIG.lineSpacing) + LAYOUT_CONFIG.titleSpacing;
+  
+  // Garantir espaço suficiente antes de adicionar título (evita título órfão)
+  let currentY = ensureSpace(pdf, yPosition, titleHeight);
   
   lines.forEach((line: string) => {
-      if (currentY > pageHeight - bottomMargin) {
-        pdf.addPage();
-        // IMPORTANTE: Adicionar background PRIMEIRO na nova página
-        try {
-          const pageWidth = pdf.internal.pageSize.getWidth();
-          const pageHeight = pdf.internal.pageSize.getHeight();
-          pdf.addImage('/layout-background.png', 'PNG', 0, 0, pageWidth, pageHeight, undefined, 'FAST');
-        } catch (error) {
-          console.warn('Erro ao carregar background na nova página:', error);
-        }
-        currentY = LAYOUT_CONFIG.margin + LAYOUT_CONFIG.headerHeight + LAYOUT_CONFIG.titleSpacing;
-      }
-      
       pdf.text(line, margin, currentY);
       currentY += fontSize * (1 + LAYOUT_CONFIG.lineSpacing); // Espaçamento reduzido entre linhas
     });
@@ -292,22 +282,14 @@ export const addBodyText = (
     marginRight: LAYOUT_CONFIG.margin
   });
   
-  let currentY = yPosition;
+  // Calcular altura total necessária
+  const textHeight = lines.length * fontSize * (1 + LAYOUT_CONFIG.lineSpacing);
+  
+  // Se o texto tem múltiplas linhas, garantir que não seja quebrado no meio
+  // Se não há espaço suficiente para todo o texto, criar nova página antes
+  let currentY = ensureSpace(pdf, yPosition, textHeight);
   
   lines.forEach((line: string) => {
-      if (currentY > pageHeight - bottomMargin) {
-        pdf.addPage();
-        // IMPORTANTE: Adicionar background PRIMEIRO na nova página
-        try {
-          const pageWidth = pdf.internal.pageSize.getWidth();
-          const pageHeight = pdf.internal.pageSize.getHeight();
-          pdf.addImage('/layout-background.png', 'PNG', 0, 0, pageWidth, pageHeight, undefined, 'FAST');
-        } catch (error) {
-          console.warn('Erro ao carregar background na nova página:', error);
-        }
-        currentY = LAYOUT_CONFIG.margin + LAYOUT_CONFIG.headerHeight + LAYOUT_CONFIG.titleSpacing;
-      }
-      
       pdf.text(line, margin, currentY);
       currentY += fontSize * (1 + LAYOUT_CONFIG.lineSpacing); // Espaçamento reduzido
     });
@@ -356,20 +338,13 @@ export const addListItem = (
       marginRight: LAYOUT_CONFIG.margin
     });
     
+    // Calcular altura total do item (todas as linhas + espaçamento)
+    const itemHeight = lines.length * fontSize * (1 + LAYOUT_CONFIG.lineSpacing) + 1.5;
+    
+    // Garantir espaço suficiente para o item completo antes de adicionar
+    currentY = ensureSpace(pdf, currentY, itemHeight);
+    
     lines.forEach((line: string, index: number) => {
-      if (currentY > pageHeight - bottomMargin) {
-        pdf.addPage();
-        // IMPORTANTE: Adicionar background PRIMEIRO na nova página (antes de qualquer conteúdo)
-        try {
-          const pageWidth = pdf.internal.pageSize.getWidth();
-          const pageHeight = pdf.internal.pageSize.getHeight();
-          pdf.addImage('/layout-background.png', 'PNG', 0, 0, pageWidth, pageHeight, undefined, 'FAST');
-        } catch (error) {
-          console.warn('Erro ao carregar background na nova página:', error);
-        }
-        currentY = LAYOUT_CONFIG.margin + LAYOUT_CONFIG.headerHeight + LAYOUT_CONFIG.titleSpacing;
-      }
-      
       // Adicionar bullet apenas na primeira linha e se indent > 0
       if (index === 0 && useBullet) {
         pdf.setFontSize(fontSize);
@@ -389,11 +364,51 @@ export const addListItem = (
 };
 
 /**
+ * Verifica se há espaço suficiente na página atual antes de adicionar conteúdo
+ * @param pdf - Instância do jsPDF
+ * @param yPosition - Posição Y atual
+ * @param requiredHeight - Altura necessária para o conteúdo
+ * @returns true se há espaço suficiente, false caso contrário
+ */
+export const hasEnoughSpace = (pdf: jsPDF, yPosition: number, requiredHeight: number): boolean => {
+  const pageHeight = pdf.internal.pageSize.getHeight();
+  const bottomMargin = LAYOUT_CONFIG.margin + LAYOUT_CONFIG.footerHeight;
+  const availableSpace = pageHeight - bottomMargin - yPosition;
+  return availableSpace >= requiredHeight;
+};
+
+/**
+ * Garante que há espaço suficiente, criando nova página se necessário
+ * @param pdf - Instância do jsPDF
+ * @param yPosition - Posição Y atual (será atualizada se criar nova página)
+ * @param requiredHeight - Altura necessária para o conteúdo
+ * @returns Nova posição Y (pode ser na mesma página ou em nova página)
+ */
+export const ensureSpace = (pdf: jsPDF, yPosition: number, requiredHeight: number): number => {
+  if (!hasEnoughSpace(pdf, yPosition, requiredHeight)) {
+    pdf.addPage();
+    // Adicionar background na nova página
+    try {
+      const pageWidth = pdf.internal.pageSize.getWidth();
+      const pageHeight = pdf.internal.pageSize.getHeight();
+      pdf.addImage('/layout-background.png', 'PNG', 0, 0, pageWidth, pageHeight, undefined, 'FAST');
+    } catch (error) {
+      console.warn('Erro ao carregar background na nova página:', error);
+    }
+    return LAYOUT_CONFIG.margin + LAYOUT_CONFIG.headerHeight + LAYOUT_CONFIG.titleSpacing;
+  }
+  return yPosition;
+};
+
+/**
  * Adiciona linha divisória seguindo o layout do documento Word
  */
 export const addDivider = (pdf: jsPDF, yPosition: number): number => {
   const pageWidth = pdf.internal.pageSize.getWidth();
   const margin = LAYOUT_CONFIG.margin + LAYOUT_CONFIG.leftBorderWidth;
+  
+  // Garantir espaço antes de adicionar divisor
+  yPosition = ensureSpace(pdf, yPosition, 5);
   
   pdf.setDrawColor(...LAYOUT_COLORS.border);
   pdf.setLineWidth(0.5);
@@ -454,15 +469,8 @@ export const addTable = (
   pdf.setTextColor(...LAYOUT_COLORS.text);
   
   rows.forEach((row, rowIndex) => {
-    const pageHeight = pdf.internal.pageSize.getHeight();
-    const bottomMargin = LAYOUT_CONFIG.margin + LAYOUT_CONFIG.footerHeight;
-    
-    if (currentY + rowHeight > pageHeight - bottomMargin) {
-      pdf.addPage();
-      // Adicionar cabeçalho na nova página
-      addHeader(pdf);
-      currentY = LAYOUT_CONFIG.margin + LAYOUT_CONFIG.headerHeight + LAYOUT_CONFIG.titleSpacing;
-    }
+    // Garantir espaço suficiente para a linha completa antes de adicionar
+    currentY = ensureSpace(pdf, currentY, rowHeight);
     
     // Borda da linha
     pdf.setDrawColor(...LAYOUT_COLORS.border);

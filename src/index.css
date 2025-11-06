@@ -246,4 +246,39 @@
     box-shadow: var(--shadow-hover);
     transform: translateY(-2px);
   }
+
+  /* Timeline responsiva para mobile */
+  .timeline-container {
+    -webkit-overflow-scrolling: touch;
+    scroll-behavior: smooth;
+  }
+
+  .timeline-container::-webkit-scrollbar {
+    height: 8px;
+  }
+
+  .timeline-container::-webkit-scrollbar-track {
+    background: #f1f1f1;
+    border-radius: 4px;
+  }
+
+  .timeline-container::-webkit-scrollbar-thumb {
+    background: #888;
+    border-radius: 4px;
+  }
+
+  .timeline-container::-webkit-scrollbar-thumb:hover {
+    background: #555;
+  }
+
+  /* Melhorar toque em mobile */
+  @media (max-width: 640px) {
+    .timeline-container {
+      scroll-snap-type: x proximity;
+    }
+    
+    .timeline-container > div {
+      scroll-snap-align: start;
+    }
+  }
 }
