@@ -3242,49 +3242,52 @@ const Cronograma = () => {
 
       {/* Dialog de Edição/Criação */}
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto mx-4 sm:mx-0">
-          <DialogHeader>
-            <DialogTitle className="text-lg lg:text-xl">
+        <DialogContent className="max-w-4xl w-[95vw] max-h-[90vh] flex flex-col p-0">
+          <DialogHeader className="flex-shrink-0 px-3 sm:px-4 lg:px-6 pt-3 sm:pt-4 lg:pt-6 pb-3 sm:pb-4 border-b">
+            <DialogTitle className="text-base sm:text-lg lg:text-xl break-words">
               {editingCronograma ? 'Editar Demanda' : 'Nova Demanda'}
             </DialogTitle>
-            <DialogDescription className="text-sm lg:text-base">
+            <DialogDescription className="text-xs sm:text-sm lg:text-base break-words mt-1">
               {editingCronograma ? 'Modifique os dados da demanda abaixo.' : 'Preencha os dados para criar uma nova demanda.'}
             </DialogDescription>
           </DialogHeader>
           
-          <div className="space-y-4 lg:space-y-6">
-            {/* Informações Básicas */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-              <div className="lg:col-span-2">
-                <Label htmlFor="titulo">Título *</Label>
-                <Input
-                  id="titulo"
-                  value={formData.titulo}
-                  onChange={(e) => setFormData({...formData, titulo: e.target.value})}
-                  placeholder="Digite o título da demanda"
-                />
-              </div>
-              
-              <div className="md:col-span-2">
-                <Label htmlFor="descricao">Descrição</Label>
-                <Textarea
-                  id="descricao"
-                  value={formData.descricao}
-                  onChange={(e) => setFormData({...formData, descricao: e.target.value})}
-                  placeholder="Descreva a demanda em detalhes"
-                  rows={3}
-                />
-              </div>
+          <div className="flex-1 overflow-y-auto min-h-0 px-3 sm:px-4 lg:px-6 py-4 sm:py-5 lg:py-6 -mx-3 sm:mx-0">
+            <div className="space-y-4 sm:space-y-5 lg:space-y-6">
+              {/* Informações Básicas */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 sm:gap-4">
+                <div className="lg:col-span-2">
+                  <Label htmlFor="titulo" className="text-xs sm:text-sm font-medium">Título *</Label>
+                  <Input
+                    id="titulo"
+                    value={formData.titulo}
+                    onChange={(e) => setFormData({...formData, titulo: e.target.value})}
+                    placeholder="Digite o título da demanda"
+                    className="mt-1.5 text-xs sm:text-sm"
+                  />
+                </div>
+                
+                <div className="lg:col-span-2">
+                  <Label htmlFor="descricao" className="text-xs sm:text-sm font-medium">Descrição</Label>
+                  <Textarea
+                    id="descricao"
+                    value={formData.descricao}
+                    onChange={(e) => setFormData({...formData, descricao: e.target.value})}
+                    placeholder="Descreva a demanda em detalhes"
+                    rows={3}
+                    className="mt-1.5 text-xs sm:text-sm"
+                  />
+                </div>
 
-              <div>
-                <Label htmlFor="organizacao">Organização</Label>
-                <Select
-                  value={formData.organizacao}
-                  onValueChange={(value) => setFormData({...formData, organizacao: value})}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Selecione a organização" />
-                  </SelectTrigger>
+                <div>
+                  <Label htmlFor="organizacao" className="text-xs sm:text-sm font-medium">Organização</Label>
+                  <Select
+                    value={formData.organizacao}
+                    onValueChange={(value) => setFormData({...formData, organizacao: value})}
+                  >
+                    <SelectTrigger className="mt-1.5 h-9 sm:h-10 text-xs sm:text-sm">
+                      <SelectValue placeholder="Selecione a organização" />
+                    </SelectTrigger>
                   <SelectContent>
                     {/* Sempre mostrar a organização do usuário */}
                     <SelectItem value={currentUser?.organizacao || 'cassems'}>
@@ -3332,100 +3335,101 @@ const Cronograma = () => {
                       </>
                     )}
                   </SelectContent>
-                </Select>
-                <p className="text-xs text-gray-500 mt-1">
-                  {currentUser?.organizacao !== 'portes' 
-                    ? 'Você pode criar demandas para sua organização ou para a Portes'
-                    : 'Selecione a organização para a demanda'
-                  }
-                </p>
-              </div>
+                  </Select>
+                  <p className="text-xs text-gray-500 mt-1.5 break-words">
+                    {currentUser?.organizacao !== 'portes' 
+                      ? 'Você pode criar demandas para sua organização ou para a Portes'
+                      : 'Selecione a organização para a demanda'
+                    }
+                  </p>
+                </div>
 
-              <div>
-                <Label htmlFor="fase_atual">Fase Atual</Label>
-                <Select
-                  value={formData.fase_atual}
-                  onValueChange={(value) => setFormData({...formData, fase_atual: value})}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Selecione a fase" />
-                  </SelectTrigger>
+                <div>
+                  <Label htmlFor="fase_atual" className="text-xs sm:text-sm font-medium">Fase Atual</Label>
+                  <Select
+                    value={formData.fase_atual}
+                    onValueChange={(value) => setFormData({...formData, fase_atual: value})}
+                  >
+                    <SelectTrigger className="mt-1.5 h-9 sm:h-10 text-xs sm:text-sm">
+                      <SelectValue placeholder="Selecione a fase" />
+                    </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="inicio">Início</SelectItem>
                     <SelectItem value="planejamento">Planejamento</SelectItem>
                     <SelectItem value="execucao">Execução</SelectItem>
                     <SelectItem value="revisao">Revisão</SelectItem>
                     <SelectItem value="conclusao">Conclusão</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+                    </SelectContent>
+                  </Select>
+                </div>
 
-              <div>
-                <Label htmlFor="status">Status</Label>
-                <Select
-                  value={formData.status}
-                  onValueChange={(value) => setFormData({...formData, status: value})}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Selecione o status" />
-                  </SelectTrigger>
+                <div>
+                  <Label htmlFor="status" className="text-xs sm:text-sm font-medium">Status</Label>
+                  <Select
+                    value={formData.status}
+                    onValueChange={(value) => setFormData({...formData, status: value})}
+                  >
+                    <SelectTrigger className="mt-1.5 h-9 sm:h-10 text-xs sm:text-sm">
+                      <SelectValue placeholder="Selecione o status" />
+                    </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="pendente">Pendente</SelectItem>
                     <SelectItem value="em_andamento">Em Andamento</SelectItem>
                     <SelectItem value="concluido">Concluído</SelectItem>
                     <SelectItem value="atrasado">Atrasado</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+                    </SelectContent>
+                  </Select>
+                </div>
 
-              <div>
-                <Label htmlFor="prioridade">Prioridade</Label>
-                <Select
-                  value={formData.prioridade}
-                  onValueChange={(value) => setFormData({...formData, prioridade: value})}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Selecione a prioridade" />
-                  </SelectTrigger>
+                <div>
+                  <Label htmlFor="prioridade" className="text-xs sm:text-sm font-medium">Prioridade</Label>
+                  <Select
+                    value={formData.prioridade}
+                    onValueChange={(value) => setFormData({...formData, prioridade: value})}
+                  >
+                    <SelectTrigger className="mt-1.5 h-9 sm:h-10 text-xs sm:text-sm">
+                      <SelectValue placeholder="Selecione a prioridade" />
+                    </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="baixa">Baixa</SelectItem>
                     <SelectItem value="media">Média</SelectItem>
                     <SelectItem value="alta">Alta</SelectItem>
                     <SelectItem value="critica">Crítica</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+                    </SelectContent>
+                  </Select>
+                </div>
 
+                <div>
+                  <Label htmlFor="data_inicio" className="text-xs sm:text-sm font-medium">Data de Início</Label>
+                  <Input
+                    id="data_inicio"
+                    type="date"
+                    value={formData.data_inicio}
+                    onChange={(e) => setFormData({...formData, data_inicio: e.target.value})}
+                    className="mt-1.5 text-xs sm:text-sm h-9 sm:h-10"
+                  />
+                </div>
 
-              <div>
-                <Label htmlFor="data_inicio">Data de Início</Label>
-                <Input
-                  id="data_inicio"
-                  type="date"
-                  value={formData.data_inicio}
-                  onChange={(e) => setFormData({...formData, data_inicio: e.target.value})}
-                />
-              </div>
+                <div>
+                  <Label htmlFor="data_fim" className="text-xs sm:text-sm font-medium">Data de Fim</Label>
+                  <Input
+                    id="data_fim"
+                    type="date"
+                    value={formData.data_fim}
+                    onChange={(e) => setFormData({...formData, data_fim: e.target.value})}
+                    className="mt-1.5 text-xs sm:text-sm h-9 sm:h-10"
+                  />
+                </div>
 
-              <div>
-                <Label htmlFor="data_fim">Data de Fim</Label>
-                <Input
-                  id="data_fim"
-                  type="date"
-                  value={formData.data_fim}
-                  onChange={(e) => setFormData({...formData, data_fim: e.target.value})}
-                />
-              </div>
-
-              <div>
-                <Label htmlFor="responsavel_id">Responsável</Label>
-                <Select
-                  value={formData.responsavel_id?.toString() || 'none'}
-                  onValueChange={(value) => setFormData({...formData, responsavel_id: value === 'none' ? null : parseInt(value)})}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Selecione um responsável" />
-                  </SelectTrigger>
+                <div className="lg:col-span-2">
+                  <Label htmlFor="responsavel_id" className="text-xs sm:text-sm font-medium">Responsável</Label>
+                  <Select
+                    value={formData.responsavel_id?.toString() || 'none'}
+                    onValueChange={(value) => setFormData({...formData, responsavel_id: value === 'none' ? null : parseInt(value)})}
+                  >
+                    <SelectTrigger className="mt-1.5 h-9 sm:h-10 text-xs sm:text-sm">
+                      <SelectValue placeholder="Selecione um responsável" />
+                    </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="none">
                       <div className="flex items-center gap-2">
@@ -3442,49 +3446,54 @@ const Cronograma = () => {
                             <span className="text-xs text-gray-500">({usuario.nome_empresa})</span>
                           )}
                         </div>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="md:col-span-2">
-                <Label htmlFor="observacoes">Observações</Label>
-                <Textarea
-                  id="observacoes"
-                  value={formData.observacoes}
-                  onChange={(e) => setFormData({...formData, observacoes: e.target.value})}
-                  placeholder="Observações gerais sobre a demanda"
-                  rows={3}
-                />
-              </div>
-
-              {formData.status === 'atrasado' && (
-                <div className="md:col-span-2">
-                  <Label htmlFor="motivo_atraso">Motivo do Atraso *</Label>
-                  <Textarea
-                    id="motivo_atraso"
-                    value={formData.motivo_atraso}
-                    onChange={(e) => setFormData({...formData, motivo_atraso: e.target.value})}
-                    placeholder="Explique o motivo do atraso (obrigatório quando status é 'atrasado')"
-                    rows={2}
-                    className="border-red-200 focus:border-red-500"
-                  />
-                  <p className="text-xs text-red-600 mt-1">
-                    Este campo é obrigatório quando o status é "Atrasado"
-                  </p>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
-              )}
-            </div>
 
-            {/* Botões */}
-            <div className="flex justify-end gap-3 pt-4 border-t">
+                <div className="lg:col-span-2">
+                  <Label htmlFor="observacoes" className="text-xs sm:text-sm font-medium">Observações</Label>
+                  <Textarea
+                    id="observacoes"
+                    value={formData.observacoes}
+                    onChange={(e) => setFormData({...formData, observacoes: e.target.value})}
+                    placeholder="Observações gerais sobre a demanda"
+                    rows={3}
+                    className="mt-1.5 text-xs sm:text-sm"
+                  />
+                </div>
+
+                {formData.status === 'atrasado' && (
+                  <div className="lg:col-span-2">
+                    <Label htmlFor="motivo_atraso" className="text-xs sm:text-sm font-medium">Motivo do Atraso *</Label>
+                    <Textarea
+                      id="motivo_atraso"
+                      value={formData.motivo_atraso}
+                      onChange={(e) => setFormData({...formData, motivo_atraso: e.target.value})}
+                      placeholder="Explique o motivo do atraso (obrigatório quando status é 'atrasado')"
+                      rows={2}
+                      className="mt-1.5 text-xs sm:text-sm border-red-200 focus:border-red-500"
+                    />
+                    <p className="text-xs text-red-600 mt-1.5 break-words">
+                      Este campo é obrigatório quando o status é "Atrasado"
+                    </p>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Footer com Botões */}
+          <div className="flex-shrink-0 border-t bg-gray-50/50 px-3 sm:px-4 lg:px-6 py-3 sm:py-4">
+            <div className="flex flex-col-reverse sm:flex-row justify-end gap-2 sm:gap-3">
               <Button
                 variant="outline"
                 onClick={() => {
                   setIsEditDialogOpen(false);
                   setEditingCronograma(null);
                 }}
+                className="text-xs sm:text-sm w-full sm:w-auto"
               >
                 Cancelar
               </Button>
@@ -3494,6 +3503,7 @@ const Cronograma = () => {
                   !formData.titulo.trim() || 
                   (formData.status === 'atrasado' && !formData.motivo_atraso.trim())
                 }
+                className="text-xs sm:text-sm w-full sm:w-auto"
               >
                 {editingCronograma ? 'Atualizar' : 'Criar'}
               </Button>

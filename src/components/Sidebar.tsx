@@ -237,16 +237,16 @@ const Sidebar = ({ isOpen, onOpenChange }: SidebarProps) => {
   const SidebarContent = () => (
     <>
       {/* Header */}
-      <div className="p-4 border-b border-sidebar-border">
-        <div className="flex items-center justify-between">
+      <div className={`p-4 border-b border-sidebar-border ${isMobile ? 'pr-14' : ''}`}>
+        <div className="flex items-center justify-between gap-2 sm:gap-3">
           {(!collapsed || isMobile) && (
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-primary rounded-lg">
-                <Shield className="h-6 w-6 text-primary-foreground" />
+            <div className="flex items-center gap-2 sm:gap-3 flex-1 min-w-0">
+              <div className="p-2 bg-primary rounded-lg flex-shrink-0">
+                <Shield className="h-5 w-5 sm:h-6 sm:w-6 text-primary-foreground" />
               </div>
-              <div>
-                <h1 className="text-lg font-bold text-sidebar-foreground">Compliance App</h1>
-                <p className="text-sm text-sidebar-foreground">{getCurrentCompanyName()}</p>      
+              <div className="min-w-0 flex-1">
+                <h1 className="text-base sm:text-lg font-bold text-sidebar-foreground break-words">Compliance App</h1>
+                <p className="text-xs sm:text-sm text-sidebar-foreground break-words truncate">{getCurrentCompanyName()}</p>      
               </div>
             </div>
           )}
@@ -255,7 +255,7 @@ const Sidebar = ({ isOpen, onOpenChange }: SidebarProps) => {
               variant="ghost"
               size="sm"
               onClick={() => setCollapsed(!collapsed)}
-              className="h-8 w-8 p-0 hover:bg-sidebar-accent"
+              className="h-8 w-8 p-0 hover:bg-sidebar-accent flex-shrink-0"
             >
               {collapsed ? (
                 <ChevronRight className="h-4 w-4 text-sidebar-foreground" />
@@ -365,7 +365,7 @@ const Sidebar = ({ isOpen, onOpenChange }: SidebarProps) => {
             <Menu className="h-5 w-5" />
           </Button>
         </SheetTrigger>
-        <SheetContent side="left" className="w-68 p-0 bg-sidebar border-sidebar-border">
+        <SheetContent side="left" className="w-68 p-0 bg-sidebar border-sidebar-border [&>button]:right-3 [&>button]:top-3 [&>button]:z-20">
           <div className="h-full flex flex-col">
             <SidebarContent />
           </div>
