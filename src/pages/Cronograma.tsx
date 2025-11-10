@@ -4134,7 +4134,7 @@ const Cronograma = () => {
                   ) : usarIA ? (
                     <>
                       <TrendingUp className="h-4 w-4 mr-1.5 sm:mr-2 flex-shrink-0" />
-                      <span className="truncate">Baixar Overview com Inteligência Artificial</span>
+                      <span className="truncate">Baixar Overview com IA</span>
                     </>
                   ) : (
                     <>

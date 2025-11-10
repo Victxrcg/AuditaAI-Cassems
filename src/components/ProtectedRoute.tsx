@@ -76,8 +76,14 @@ const ProtectedRoute = ({ children, requiredPermission }: ProtectedRouteProps) =
       return <>{children}</>;
     }
     
-    // Sem permissão - redirecionar para página inicial (cronograma)
-    return <Navigate to="/cronograma" replace />;
+    // Sem permissão - redirecionar para página de acesso negado
+    return (
+      <Navigate
+        to="/acesso-negado"
+        state={{ from: location.pathname, requiredPermission }}
+        replace
+      />
+    );
   } catch {
     // Em caso de erro, permitir acesso por segurança
     return <>{children}</>;

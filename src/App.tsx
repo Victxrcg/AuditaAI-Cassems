@@ -13,6 +13,7 @@ import Cronograma from "./pages/Cronograma";
 import Documentos from "./pages/Documentos";
 import Ajuda from "./pages/Ajuda";
 import Manutencao from "./pages/Manutencao";
+import AcessoNegado from "./pages/AcessoNegado";
 import { useServerStatus } from "./hooks/useServerStatus";
 import ProtectedRoute from "./components/ProtectedRoute";
 
@@ -70,6 +71,14 @@ const AppContent = () => {
               <Layout><Ajuda /></Layout>
             </ProtectedRoute>
           } 
+        />
+        <Route 
+          path="/acesso-negado"
+          element={
+            <ProtectedRoute>
+              <Layout><AcessoNegado /></Layout>
+            </ProtectedRoute>
+          }
         />
         {/* Redireciona / e /dashboard para /cronograma */}
         <Route path="/" element={<Navigate to="/cronograma" />} />

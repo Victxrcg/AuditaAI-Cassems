@@ -14,26 +14,26 @@ const migrarEnumPerfil = async (pool) => {
     `);
     
     if (columnInfo && columnInfo.length > 0) {
-      const columnType = columnInfo[0].COLUMN_TYPE || '';
-      // Se o enum ainda contém valores antigos, atualizar
-      if (columnType.includes('compliance') || columnType.includes('visualizador')) {
-        console.log('🔧 Migrando enum de perfil...');
-        
-        // Primeiro, converter perfis antigos para os novos
-        // compliance e visualizador -> usuario
+      const columnType = (columnInfo[0].COLUMN_TYPE || '').toLowerCase();
+
+      // Se a coluna não está exatamente com o enum esperado, executar migração
+      if (!columnType.includes("enum('admin','usuario'")) {
+        console.log('🔧 Ajustando coluna "perfil" para aceitar somente admin/usuario...');
+
+        // Converter perfis antigos/inválidos para 'usuario'
         await pool.query(`
           UPDATE usuarios_cassems 
           SET perfil = 'usuario' 
-          WHERE perfil IN ('compliance', 'visualizador')
+          WHERE perfil NOT IN ('admin', 'usuario') OR perfil IS NULL OR perfil = ''
         `);
-        
+
         // Alterar o tipo da coluna para o novo enum
         await pool.query(`
           ALTER TABLE usuarios_cassems 
           MODIFY COLUMN perfil ENUM('admin', 'usuario') DEFAULT 'usuario'
         `);
-        
-        console.log('✅ Enum de perfil migrado com sucesso');
+
+        console.log('✅ Coluna "perfil" ajustada com sucesso');
       }
     }
   } catch (err) {
@@ -155,6 +155,9 @@ exports.criarUsuario = async (req, res) => {
     }
     
     ({ pool, server } = await getDbPoolWithTunnel());
+
+    // Garantir que a coluna perfil está com enum atualizado
+    await migrarEnumPerfil(pool);
     
     // Verificar se email já existe
     const [existingUser] = await pool.query(`

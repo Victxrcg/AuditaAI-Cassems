@@ -70,6 +70,8 @@ const Layout = ({ children }: LayoutProps) => {
         return 'Auditoria';
       case '/auditoria':
         return 'Auditoria';
+      case '/acesso-negado':
+        return 'Acesso Negado';
       default:
         return 'Compliance';
     }
