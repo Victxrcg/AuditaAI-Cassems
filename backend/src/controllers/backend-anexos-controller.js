@@ -350,10 +350,15 @@ exports.removeAnexo = async (req, res) => {
     };
     
     // Remover anexo da tabela compliance_anexos
-    await pool.query(`
-      DELETE FROM compliance_anexos 
-      WHERE id = ?
-    `, [anexoId]);
+    try {
+      await pool.query(`
+        DELETE FROM compliance_anexos 
+        WHERE id = ?
+      `, [anexoId]);
+    } catch (deleteError) {
+      console.error('❌ Erro ao remover registro de compliance_anexos:', deleteError);
+      throw deleteError;
+    }
 
     // Atualizar campo de anexo na tabela compliance_fiscal
     const anexoField = `${anexo.tipo_anexo}_anexo_id`;
@@ -399,12 +404,16 @@ exports.removeAnexo = async (req, res) => {
         `, [anexo.documento_id]);
 
         if (documentoInfo?.caminho) {
-          removeDocumentFileIfExists(documentoInfo.caminho);
+          try {
+            removeDocumentFileIfExists(documentoInfo.caminho);
+          } catch (removeFileError) {
+            console.error('⚠️ Erro ao remover arquivo físico sincronizado:', removeFileError);
+          }
         }
 
         console.log('🗑️ Documento sincronizado removido:', anexo.documento_id);
       } catch (docDeleteError) {
-        console.error('⚠️ Erro ao remover documento sincronizado do módulo Documentos:', docDeleteError);
+        console.error('⚠️ Erro ao remover documento sincronizado do módulo Documentos (continuando):', docDeleteError);
       }
     }
 
