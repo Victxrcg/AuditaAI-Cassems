@@ -335,11 +335,13 @@ exports.removeAnexo = async (req, res) => {
       WHERE id = ?
     `, [anexoId]);
 
-    if (!anexoRows || anexoRows.length === 0) {
+    const anexosArray = Array.isArray(anexoRows) ? anexoRows : (anexoRows ? [anexoRows] : []);
+
+    if (!anexosArray || anexosArray.length === 0) {
       return res.status(404).json({ error: 'Anexo não encontrado' });
     }
 
-    const anexo = anexoRows[0];
+    const anexo = anexosArray[0];
     
     // Obter informações do usuário atual dos headers
     const userOrg = req.headers['x-user-organization'] || 'cassems';
@@ -394,8 +396,10 @@ exports.removeAnexo = async (req, res) => {
           WHERE id = ?
         `, [anexo.documento_id]);
 
-        const documentoInfo = Array.isArray(documentoRows) && documentoRows.length > 0
-          ? documentoRows[0]
+        const documentoArray = Array.isArray(documentoRows) ? documentoRows : (documentoRows ? [documentoRows] : []);
+
+        const documentoInfo = documentoArray.length > 0
+          ? documentoArray[0]
           : null;
 
         await runQuery(pool, `

@@ -7,8 +7,16 @@ fs.mkdirSync(DOCUMENTS_UPLOAD_DIR, { recursive: true });
 
 const runQuery = async (pool, sql, params = []) => {
   if (pool && typeof pool.query === 'function') {
-    const [rows] = await pool.query(sql, params);
-    return rows;
+    const result = await pool.query(sql, params);
+
+    if (Array.isArray(result)) {
+      if (Array.isArray(result[0])) {
+        return result[0];
+      }
+      return result;
+    }
+
+    return result;
   }
   return executeQueryWithRetry(sql, params);
 };
