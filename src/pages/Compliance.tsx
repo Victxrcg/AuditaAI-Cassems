@@ -334,8 +334,7 @@ const ComplianceItemCard = memo(({
   complianceItems,
   apiBase,
   currentUserEmail,
-  competenciaPeriodo,
-  demandaPrincipalPeriodo
+  competenciaPeriodo
 }: {
   item: ComplianceItem;
   onFieldChange: (id: string, field: 'valor' | 'data' | 'observacoes' | 'emailRemetente' | 'emailDestinatario' | 'emailAssunto' | 'emailEnviado', value: string | boolean) => void;
@@ -352,7 +351,6 @@ const ComplianceItemCard = memo(({
   apiBase: string;
   currentUserEmail?: string;
   competenciaPeriodo?: string;
-  demandaPrincipalPeriodo?: { dataInicio: string | null; dataFim: string | null };
 }) => {
   const [uploading, setUploading] = useState(false);
   const [anexos, setAnexos] = useState<Anexo[]>(item.anexos || []);
@@ -791,8 +789,6 @@ const ComplianceItemCard = memo(({
                       const novoValor = dataInicio ? (dataFim ? `${dataInicio}|${dataFim}` : dataInicio) : dataFim;
                       onFieldChange(item.id, 'data', novoValor);
                     }}
-                    min={demandaPrincipalPeriodo?.dataInicio || "1900-01-01"}
-                    max={demandaPrincipalPeriodo?.dataFim || "2099-12-31"}
                     className="flex h-9 sm:h-10 w-full rounded-md border border-input bg-background px-2 sm:px-3 py-2 text-xs sm:text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
                     placeholder="Data início"
                   />
@@ -811,18 +807,13 @@ const ComplianceItemCard = memo(({
                       const novoValor = dataInicio ? (dataFim ? `${dataInicio}|${dataFim}` : dataInicio) : dataFim;
                       onFieldChange(item.id, 'data', novoValor);
                     }}
-                    min={demandaPrincipalPeriodo?.dataInicio || "1900-01-01"}
-                    max={demandaPrincipalPeriodo?.dataFim || "2099-12-31"}
                     className="flex h-9 sm:h-10 w-full rounded-md border border-input bg-background px-2 sm:px-3 py-2 text-xs sm:text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
                     placeholder="Data fim"
                   />
                 </div>
               </div>
               <p className="text-xs text-gray-500 mt-1 break-words">
-                {demandaPrincipalPeriodo?.dataInicio && demandaPrincipalPeriodo?.dataFim
-                  ? `Selecione o período da competência fiscal dentro do período da demanda principal (${formatDateBR(demandaPrincipalPeriodo.dataInicio)} a ${formatDateBR(demandaPrincipalPeriodo.dataFim)})`
-                  : 'Selecione o período da competência fiscal (ano entre 1900 e 2099)'
-                }
+                Defina livremente o período fiscal desta competência. Consulte a página de Cronograma para acompanhar as demandas programadas.
               </p>
             </div>
           )}
@@ -1361,12 +1352,6 @@ export default function Compliance() {
   // Estado para período formatado da competência
   const [competenciaPeriodo, setCompetenciaPeriodo] = useState<string>('');
 
-  // Estado para período da demanda principal (para restrição do calendário)
-  const [demandaPrincipalPeriodo, setDemandaPrincipalPeriodo] = useState<{
-    dataInicio: string | null;
-    dataFim: string | null;
-  }>({ dataInicio: null, dataFim: null });
-
   // Estado para histórico de alterações
   const [historico, setHistorico] = useState<HistoricoAlteracao[]>([]);
   const [loadingHistorico, setLoadingHistorico] = useState(false);
@@ -1456,81 +1441,6 @@ export default function Compliance() {
     }
   };
 
-  // Função para carregar período da demanda principal (cronograma principal)
-  const loadDemandaPrincipalPeriodo = async () => {
-    try {
-      // Obter organização do usuário atual
-      let userOrg = currentUser?.organizacao;
-      if (!userOrg) {
-        const userFromStorage = localStorage.getItem('user');
-        if (userFromStorage) {
-          const parsedUser = JSON.parse(userFromStorage);
-          userOrg = parsedUser.organizacao;
-        }
-      }
-      userOrg = userOrg || 'cassems';
-
-      // Buscar cronogramas
-      const response = await fetch(`${API_BASE}/cronograma?organizacao=${userOrg}`, {
-        headers: {
-          'x-user-organization': userOrg
-        }
-      });
-
-      if (!response.ok) {
-        console.error('Erro ao buscar cronogramas para demanda principal');
-        return;
-      }
-
-      const cronogramas = await response.json();
-
-      if (Array.isArray(cronogramas) && cronogramas.length > 0) {
-        // Ordenar por prioridade (alta > media > baixa) e data de início
-        const cronogramasOrdenados = [...cronogramas].sort((a, b) => {
-          const prioridades = { alta: 3, media: 2, baixa: 1 };
-          const prioridadeA = prioridades[a.prioridade as keyof typeof prioridades] || 0;
-          const prioridadeB = prioridades[b.prioridade as keyof typeof prioridades] || 0;
-
-          if (prioridadeA !== prioridadeB) {
-            return prioridadeB - prioridadeA; // Maior prioridade primeiro
-          }
-
-          // Se prioridade igual, ordenar por data de início (mais antiga primeiro)
-          if (a.data_inicio && b.data_inicio) {
-            return new Date(a.data_inicio).getTime() - new Date(b.data_inicio).getTime();
-          }
-
-          return 0;
-        });
-
-        // Pegar o primeiro cronograma (demanda principal)
-        const demandaPrincipal = cronogramasOrdenados[0];
-
-        if (demandaPrincipal.data_inicio && demandaPrincipal.data_fim) {
-          // Converter para formato YYYY-MM-DD
-          const dataInicio = new Date(demandaPrincipal.data_inicio).toISOString().split('T')[0];
-          const dataFim = new Date(demandaPrincipal.data_fim).toISOString().split('T')[0];
-          
-          setDemandaPrincipalPeriodo({
-            dataInicio,
-            dataFim
-          });
-          
-          console.log('📅 Período da demanda principal carregado:', { dataInicio, dataFim });
-        } else {
-          console.log('⚠️ Demanda principal não tem período definido');
-          setDemandaPrincipalPeriodo({ dataInicio: null, dataFim: null });
-        }
-      } else {
-        console.log('⚠️ Nenhum cronograma encontrado');
-        setDemandaPrincipalPeriodo({ dataInicio: null, dataFim: null });
-      }
-    } catch (err) {
-      console.error('Erro ao carregar período da demanda principal:', err);
-      setDemandaPrincipalPeriodo({ dataInicio: null, dataFim: null });
-    }
-  };
-
   // Carregar competências do banco
   const loadCompetencias = async () => {
     try {
@@ -1550,9 +1460,6 @@ export default function Compliance() {
       console.log('🔍 Organização detectada:', userOrg);
       console.log('🔍 currentUser:', currentUser);
       console.log('🔍 localStorage user:', localStorage.getItem('user'));
-      
-      // Carregar período da demanda principal
-      await loadDemandaPrincipalPeriodo();
       
       // Fazer requisição com filtro de organização
       const response = await fetch(`${API_BASE}/compliance/competencias?organizacao=${userOrg}`, {
@@ -2940,7 +2847,6 @@ export default function Compliance() {
             apiBase={API_BASE}
             currentUserEmail={currentUser?.email}
             competenciaPeriodo={competenciaPeriodo}
-            demandaPrincipalPeriodo={demandaPrincipalPeriodo}
           />
         ))}
       </div>
@@ -3026,7 +2932,6 @@ export default function Compliance() {
           apiBase={API_BASE}
           currentUserEmail={currentUser?.email}
           competenciaPeriodo={competenciaPeriodo}
-          demandaPrincipalPeriodo={demandaPrincipalPeriodo}
         />
       ))}
         </div>
