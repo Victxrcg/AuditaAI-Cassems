@@ -75,6 +75,17 @@ const registrarAlerta = async ({
 
     const userInfo = await buscarUsuario(userId);
 
+    console.log('🔔 Registrando alerta de cronograma:', {
+      tipo,
+      cronogramaId,
+      checklistId,
+      organizacao,
+      titulo,
+      descricao,
+      userId,
+      userInfo
+    });
+
     await executeQueryWithRetry(`
       INSERT INTO cronograma_alertas (
         tipo,
