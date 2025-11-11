@@ -262,7 +262,8 @@ exports.createCompetencia = async (req, res) => {
         competencia_referencia,
         competencia_inicio: req.body.competencia_inicio || null,
         competencia_fim: req.body.competencia_fim || null,
-        pasta_documentos_id: null
+        pasta_documentos_id: null,
+        organizacao_documentos: req.body.organizacao_documentos || userOrg
       });
       console.log('📁 Pasta de documentos criada/atualizada:', pastaDocumentosId);
     } catch (folderError) {

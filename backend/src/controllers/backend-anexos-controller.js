@@ -170,6 +170,15 @@ exports.uploadAnexo = async (req, res) => {
       const pastaDocumentosId = complianceInfo?.pasta_documentos_id;
 
       if (pastaDocumentosId) {
+        const pastaRows = await runQuery(pool, `
+          SELECT organizacao, titulo
+          FROM pastas_documentos
+          WHERE id = ?
+        `, [pastaDocumentosId]);
+
+        const pastaInfo = Array.isArray(pastaRows) && pastaRows.length > 0 ? pastaRows[0] : null;
+        const pastaOrganizacao = pastaInfo?.organizacao || complianceInfo?.organizacao_criacao || currentUser.organizacao || 'cassems';
+
         const { filePath } = saveDocumentFile(fileData, sanitizedFileName, complianceId);
 
         try {
@@ -181,7 +190,7 @@ exports.uploadAnexo = async (req, res) => {
             filePath,
             req.file.size,
             req.file.mimetype,
-            complianceInfo?.organizacao_criacao || currentUser.organizacao || 'cassems',
+            pastaOrganizacao,
             currentUser.id || null,
             pastaDocumentosId
           ]);

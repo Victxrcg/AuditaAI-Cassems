@@ -146,20 +146,29 @@ const formatDatePtBr = (value) => {
   return `${day}/${month}/${year}`;
 };
 
+const resolveFolderOrganization = (competencia) => {
+  return competencia.organizacao_documentos
+    || competencia.organizacao_criacao
+    || competencia.organizacao
+    || competencia.ultima_alteracao_organizacao
+    || null;
+};
+
 const buildComplianceFolderMetadata = (competencia) => {
   const inicio = formatDatePtBr(competencia.competencia_inicio);
   const fim = formatDatePtBr(competencia.competencia_fim);
   const referencia = formatDatePtBr(competencia.competencia_referencia);
+  const folderOrganizacao = resolveFolderOrganization(competencia);
 
   let titulo;
   if (inicio && fim) {
-    titulo = `Compliance - Competência período (${inicio}) - (${fim})`;
+    titulo = `Documentos Compliance Período (${inicio}) - (${fim})`;
   } else if (inicio || fim) {
-    titulo = `Compliance - Competência período (${inicio || fim})`;
+    titulo = `Documentos Compliance Período (${inicio || fim})`;
   } else if (referencia) {
-    titulo = `Compliance - Competência (${referencia})`;
+    titulo = `Documentos Compliance Referência (${referencia})`;
   } else {
-    titulo = `Compliance - Competência #${competencia.id}`;
+    titulo = `Documentos Compliance Competência #${competencia.id}`;
   }
 
   const partesDescricao = [
@@ -169,11 +178,11 @@ const buildComplianceFolderMetadata = (competencia) => {
   if (inicio) partesDescricao.push(`Início: ${inicio}`);
   if (fim) partesDescricao.push(`Fim: ${fim}`);
   if (!inicio && !fim && referencia) partesDescricao.push(`Referência: ${referencia}`);
-  if (competencia.organizacao_criacao) partesDescricao.push(`Organização: ${competencia.organizacao_criacao}`);
+  if (folderOrganizacao) partesDescricao.push(`Organização: ${folderOrganizacao}`);
 
   const descricao = partesDescricao.join(' | ');
 
-  return { titulo, descricao };
+  return { titulo, descricao, organizacao: folderOrganizacao };
 };
 
 const createOrUpdateComplianceFolder = async (pool, competencia) => {
@@ -182,6 +191,13 @@ const createOrUpdateComplianceFolder = async (pool, competencia) => {
   const metadata = buildComplianceFolderMetadata(competencia);
   let pastaId = competencia.pasta_documentos_id ? Number(competencia.pasta_documentos_id) : null;
 
+  const folderOrganizacao = metadata.organizacao
+    || competencia.organizacao_documentos
+    || competencia.organizacao_criacao
+    || competencia.organizacao
+    || competencia.ultima_alteracao_organizacao
+    || null;
+
   if (!pastaId) {
     const insertResult = await runQuery(pool, `
       INSERT INTO pastas_documentos (titulo, descricao, organizacao, criado_por)
@@ -189,7 +205,7 @@ const createOrUpdateComplianceFolder = async (pool, competencia) => {
     `, [
       metadata.titulo,
       metadata.descricao,
-      competencia.organizacao_criacao || null,
+      folderOrganizacao || null,
       competencia.created_by || null
     ]);
 
@@ -203,9 +219,9 @@ const createOrUpdateComplianceFolder = async (pool, competencia) => {
   } else {
     await runQuery(pool, `
       UPDATE pastas_documentos
-      SET titulo = ?, descricao = ?, updated_at = CURRENT_TIMESTAMP
+      SET titulo = ?, descricao = ?, organizacao = COALESCE(?, organizacao), updated_at = CURRENT_TIMESTAMP
       WHERE id = ?
-    `, [metadata.titulo, metadata.descricao, pastaId]);
+    `, [metadata.titulo, metadata.descricao, folderOrganizacao || null, pastaId]);
   }
 
   return pastaId;
@@ -264,6 +280,7 @@ module.exports = {
   saveDocumentFile,
   removeDocumentFileIfExists,
   buildComplianceFolderMetadata,
-  formatDatePtBr
+  formatDatePtBr,
+  resolveFolderOrganization
 };
 
