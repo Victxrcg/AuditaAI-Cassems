@@ -5,6 +5,11 @@ const path = require('path');
 const csv = require('csv-parse/sync');
 const { simpleParser } = require('mailparser');
 const mammoth = require('mammoth');
+const {
+  ensureComplianceDocumentsInfrastructure,
+  createOrUpdateComplianceFolder,
+  syncComplianceFolderById
+} = require('../utils/complianceDocuments');
 
 // Configurar OpenAI (opcional)
 let openai = null;
@@ -248,13 +253,30 @@ exports.createCompetencia = async (req, res) => {
     
     const insertId = result.insertId ? parseInt(result.insertId.toString()) : result.affectedRows;
 
+    let pastaDocumentosId = null;
+    try {
+      pastaDocumentosId = await createOrUpdateComplianceFolder(null, {
+        id: insertId,
+        created_by,
+        organizacao_criacao: userOrg,
+        competencia_referencia,
+        competencia_inicio: req.body.competencia_inicio || null,
+        competencia_fim: req.body.competencia_fim || null,
+        pasta_documentos_id: null
+      });
+      console.log('📁 Pasta de documentos criada/atualizada:', pastaDocumentosId);
+    } catch (folderError) {
+      console.error('⚠️ Erro ao sincronizar pasta de documentos da competência:', folderError);
+    }
+
     res.json({
       success: true,
       data: {
         id: insertId,
         competencia_referencia,
         status: 'pendente',
-        organizacao_criacao: userOrg
+        organizacao_criacao: userOrg,
+        pasta_documentos_id: pastaDocumentosId
       }
     });
   } catch (error) {
@@ -315,6 +337,14 @@ exports.updateField = async (req, res) => {
     } catch (histError) {
       console.error('❌ Erro ao registrar histórico (continuando):', histError.message);
       // Não falhar a operação principal por causa do histórico
+    }
+
+    if (['competencia_inicio', 'competencia_fim', 'competencia_referencia'].includes(field)) {
+      try {
+        await syncComplianceFolderById(pool, id);
+      } catch (syncError) {
+        console.error('⚠️ Erro ao sincronizar pasta de documentos (updateField):', syncError);
+      }
     }
 
     res.json({
@@ -468,6 +498,14 @@ exports.updateComplianceField = async (req, res) => {
     } catch (histError) {
       console.error('❌ Erro ao registrar histórico (continuando):', histError.message);
       // Não falhar a operação principal por causa do histórico
+    }
+
+    if (['competencia_inicio', 'competencia_fim', 'competencia_referencia'].includes(field)) {
+      try {
+        await syncComplianceFolderById(pool, id);
+      } catch (syncError) {
+        console.error('⚠️ Erro ao sincronizar pasta de documentos (updateComplianceField):', syncError);
+      }
     }
 
     res.json({
@@ -1452,6 +1490,12 @@ exports.updateCompetenciaReferencia = async (req, res) => {
     `, [competencia_referencia, id]);
 
     console.log('✅ Debug - Competência_referencia atualizada com sucesso');
+
+    try {
+      await syncComplianceFolderById(pool, id);
+    } catch (syncError) {
+      console.error('⚠️ Erro ao sincronizar pasta de documentos (updateCompetenciaReferencia):', syncError);
+    }
 
     res.json({
       success: true,

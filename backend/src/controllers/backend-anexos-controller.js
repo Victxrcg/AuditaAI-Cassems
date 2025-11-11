@@ -1,6 +1,13 @@
 ﻿// Funcionalidades de Anexos para Compliance Fiscal - Cassems
 const { getDbPoolWithTunnel } = require('../lib/db');
 const fs = require('fs');
+const {
+  ensureComplianceDocumentsInfrastructure,
+  syncComplianceFolderById,
+  saveDocumentFile,
+  removeDocumentFileIfExists,
+  runQuery
+} = require('../utils/complianceDocuments');
 
 // Função auxiliar para registrar alterações no histórico
 const registrarAlteracao = async (pool, complianceId, campo, valorAnterior, valorNovo, userId, organizacao) => {
@@ -139,6 +146,71 @@ exports.uploadAnexo = async (req, res) => {
       console.error('❌ Erro ao registrar histórico de anexo (continuando):', histError.message);
     }
 
+    try {
+      await ensureComplianceDocumentsInfrastructure(pool);
+      await syncComplianceFolderById(pool, complianceId);
+
+      const complianceRows = await runQuery(pool, `
+        SELECT 
+          id,
+          organizacao_criacao,
+          pasta_documentos_id,
+          created_by,
+          competencia_inicio,
+          competencia_fim,
+          competencia_referencia
+        FROM compliance_fiscal
+        WHERE id = ?
+      `, [complianceId]);
+
+      const complianceInfo = Array.isArray(complianceRows) && complianceRows.length > 0
+        ? complianceRows[0]
+        : null;
+
+      const pastaDocumentosId = complianceInfo?.pasta_documentos_id;
+
+      if (pastaDocumentosId) {
+        const { filePath } = saveDocumentFile(fileData, sanitizedFileName, complianceId);
+
+        try {
+          const documentoResult = await runQuery(pool, `
+            INSERT INTO documentos (nome_arquivo, caminho, tamanho, mimetype, organizacao, enviado_por, pasta_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+          `, [
+            sanitizedFileName,
+            filePath,
+            req.file.size,
+            req.file.mimetype,
+            complianceInfo?.organizacao_criacao || currentUser.organizacao || 'cassems',
+            currentUser.id || null,
+            pastaDocumentosId
+          ]);
+
+          const documentoId = documentoResult && documentoResult.insertId
+            ? Number(documentoResult.insertId)
+            : null;
+
+          if (documentoId) {
+            await runQuery(pool, `
+              UPDATE compliance_anexos
+              SET documento_id = ?
+              WHERE id = ?
+            `, [documentoId, anexoId]);
+            console.log('📁 Documento sincronizado com módulo Documentos:', documentoId);
+          } else {
+            console.warn('⚠️ Documento criado sem insertId. Mantendo arquivo local.');
+          }
+        } catch (docError) {
+          console.error('❌ Erro ao registrar documento no módulo Documentos:', docError);
+          removeDocumentFileIfExists(filePath);
+        }
+      } else {
+        console.warn('⚠️ Pasta de documentos não encontrada para a competência. Documento não sincronizado.');
+      }
+    } catch (syncError) {
+      console.error('⚠️ Erro geral ao sincronizar anexos com Documentos:', syncError);
+    }
+
     // Remover arquivo temporário
     fs.unlinkSync(req.file.path);
 
@@ -248,8 +320,8 @@ exports.removeAnexo = async (req, res) => {
     ({ pool, server } = await getDbPoolWithTunnel());
     
     // Buscar informações do anexo
-    const anexoRows = await pool.query(`
-      SELECT compliance_id, tipo_anexo, nome_arquivo
+    const anexoRows = await runQuery(pool, `
+      SELECT compliance_id, tipo_anexo, nome_arquivo, documento_id
       FROM compliance_anexos 
       WHERE id = ?
     `, [anexoId]);
@@ -296,6 +368,35 @@ exports.removeAnexo = async (req, res) => {
       console.log('✅ Histórico de remoção de anexo registrado com sucesso');
     } catch (histError) {
       console.error('❌ Erro ao registrar histórico de remoção de anexo (continuando):', histError.message);
+    }
+
+    if (anexo.documento_id) {
+      try {
+        await ensureComplianceDocumentsInfrastructure(pool);
+
+        const documentoRows = await runQuery(pool, `
+          SELECT caminho 
+          FROM documentos
+          WHERE id = ?
+        `, [anexo.documento_id]);
+
+        const documentoInfo = Array.isArray(documentoRows) && documentoRows.length > 0
+          ? documentoRows[0]
+          : null;
+
+        await runQuery(pool, `
+          DELETE FROM documentos
+          WHERE id = ?
+        `, [anexo.documento_id]);
+
+        if (documentoInfo?.caminho) {
+          removeDocumentFileIfExists(documentoInfo.caminho);
+        }
+
+        console.log('🗑️ Documento sincronizado removido:', anexo.documento_id);
+      } catch (docDeleteError) {
+        console.error('⚠️ Erro ao remover documento sincronizado do módulo Documentos:', docDeleteError);
+      }
     }
 
     res.json({

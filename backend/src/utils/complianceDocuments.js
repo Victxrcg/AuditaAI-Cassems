@@ -1,0 +1,269 @@
+const fs = require('fs');
+const path = require('path');
+const { executeQueryWithRetry } = require('../lib/db');
+
+const DOCUMENTS_UPLOAD_DIR = path.join(process.cwd(), 'backend', 'uploads', 'documentos');
+fs.mkdirSync(DOCUMENTS_UPLOAD_DIR, { recursive: true });
+
+const runQuery = async (pool, sql, params = []) => {
+  if (pool && typeof pool.query === 'function') {
+    const [rows] = await pool.query(sql, params);
+    return rows;
+  }
+  return executeQueryWithRetry(sql, params);
+};
+
+const ensureDocumentTables = async (pool) => {
+  await runQuery(pool, `
+    CREATE TABLE IF NOT EXISTS pastas_documentos (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      titulo VARCHAR(255) NOT NULL,
+      descricao TEXT NULL,
+      organizacao VARCHAR(50) NULL,
+      criado_por INT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+  `, []);
+
+  await runQuery(pool, `
+    CREATE TABLE IF NOT EXISTS documentos (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      nome_arquivo VARCHAR(255) NOT NULL,
+      caminho VARCHAR(500) NOT NULL,
+      tamanho BIGINT NULL,
+      mimetype VARCHAR(100) NULL,
+      organizacao VARCHAR(50) NULL,
+      enviado_por INT NULL,
+      pasta_id INT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (pasta_id) REFERENCES pastas_documentos(id) ON DELETE SET NULL
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+  `, []);
+};
+
+const ensureComplianceColumns = async (pool) => {
+  const pastaColumn = await runQuery(pool, `
+    SELECT COLUMN_NAME 
+    FROM INFORMATION_SCHEMA.COLUMNS 
+    WHERE TABLE_SCHEMA = DATABASE() 
+      AND TABLE_NAME = 'compliance_fiscal'
+      AND COLUMN_NAME = 'pasta_documentos_id'
+  `, []);
+
+  if (!pastaColumn || pastaColumn.length === 0) {
+    await runQuery(pool, `
+      ALTER TABLE compliance_fiscal 
+      ADD COLUMN pasta_documentos_id INT NULL
+    `, []);
+
+    try {
+      await runQuery(pool, `
+        ALTER TABLE compliance_fiscal 
+        ADD CONSTRAINT fk_compliance_pasta_documentos 
+        FOREIGN KEY (pasta_documentos_id) REFERENCES pastas_documentos(id) 
+        ON DELETE SET NULL
+      `, []);
+    } catch (error) {
+      // Constraint pode já existir
+      console.log('⚠️ fk_compliance_pasta_documentos:', error.message);
+    }
+  }
+
+  const documentoColumn = await runQuery(pool, `
+    SELECT COLUMN_NAME 
+    FROM INFORMATION_SCHEMA.COLUMNS 
+    WHERE TABLE_SCHEMA = DATABASE() 
+      AND TABLE_NAME = 'compliance_anexos'
+      AND COLUMN_NAME = 'documento_id'
+  `, []);
+
+  if (!documentoColumn || documentoColumn.length === 0) {
+    await runQuery(pool, `
+      ALTER TABLE compliance_anexos 
+      ADD COLUMN documento_id INT NULL
+    `, []);
+
+    try {
+      await runQuery(pool, `
+        ALTER TABLE compliance_anexos 
+        ADD CONSTRAINT fk_compliance_anexos_documentos 
+        FOREIGN KEY (documento_id) REFERENCES documentos(id) 
+        ON DELETE SET NULL
+      `, []);
+    } catch (error) {
+      console.log('⚠️ fk_compliance_anexos_documentos:', error.message);
+    }
+  }
+};
+
+const ensureComplianceDocumentsInfrastructure = async (pool) => {
+  await ensureDocumentTables(pool);
+  await ensureComplianceColumns(pool);
+};
+
+const parseDateValue = (value) => {
+  if (!value) return null;
+
+  if (value instanceof Date && !Number.isNaN(value.getTime())) {
+    return value;
+  }
+
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) return null;
+
+    const match = trimmed.match(/^(\d{4})[-/](\d{2})[-/](\d{2})/);
+    if (match) {
+      const year = Number(match[1]);
+      const month = Number(match[2]) - 1;
+      const day = Number(match[3]);
+      return new Date(year, month, day);
+    }
+
+    const timestamp = Date.parse(trimmed);
+    if (!Number.isNaN(timestamp)) {
+      return new Date(timestamp);
+    }
+  }
+
+  try {
+    const parsed = new Date(value);
+    if (!Number.isNaN(parsed.getTime())) return parsed;
+  } catch (error) {
+    return null;
+  }
+
+  return null;
+};
+
+const formatDatePtBr = (value) => {
+  const date = parseDateValue(value);
+  if (!date) return null;
+  const day = String(date.getDate()).padStart(2, '0');
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const year = date.getFullYear();
+  return `${day}/${month}/${year}`;
+};
+
+const buildComplianceFolderMetadata = (competencia) => {
+  const inicio = formatDatePtBr(competencia.competencia_inicio);
+  const fim = formatDatePtBr(competencia.competencia_fim);
+  const referencia = formatDatePtBr(competencia.competencia_referencia);
+
+  let titulo;
+  if (inicio && fim) {
+    titulo = `Compliance - Competência período (${inicio}) - (${fim})`;
+  } else if (inicio || fim) {
+    titulo = `Compliance - Competência período (${inicio || fim})`;
+  } else if (referencia) {
+    titulo = `Compliance - Competência (${referencia})`;
+  } else {
+    titulo = `Compliance - Competência #${competencia.id}`;
+  }
+
+  const partesDescricao = [
+    `Documentos anexados automaticamente para a competência ${competencia.id}`
+  ];
+
+  if (inicio) partesDescricao.push(`Início: ${inicio}`);
+  if (fim) partesDescricao.push(`Fim: ${fim}`);
+  if (!inicio && !fim && referencia) partesDescricao.push(`Referência: ${referencia}`);
+  if (competencia.organizacao_criacao) partesDescricao.push(`Organização: ${competencia.organizacao_criacao}`);
+
+  const descricao = partesDescricao.join(' | ');
+
+  return { titulo, descricao };
+};
+
+const createOrUpdateComplianceFolder = async (pool, competencia) => {
+  await ensureComplianceDocumentsInfrastructure(pool);
+
+  const metadata = buildComplianceFolderMetadata(competencia);
+  let pastaId = competencia.pasta_documentos_id ? Number(competencia.pasta_documentos_id) : null;
+
+  if (!pastaId) {
+    const insertResult = await runQuery(pool, `
+      INSERT INTO pastas_documentos (titulo, descricao, organizacao, criado_por)
+      VALUES (?, ?, ?, ?)
+    `, [
+      metadata.titulo,
+      metadata.descricao,
+      competencia.organizacao_criacao || null,
+      competencia.created_by || null
+    ]);
+
+    pastaId = Number(insertResult.insertId);
+
+    await runQuery(pool, `
+      UPDATE compliance_fiscal
+      SET pasta_documentos_id = ?
+      WHERE id = ?
+    `, [pastaId, competencia.id]);
+  } else {
+    await runQuery(pool, `
+      UPDATE pastas_documentos
+      SET titulo = ?, descricao = ?, updated_at = CURRENT_TIMESTAMP
+      WHERE id = ?
+    `, [metadata.titulo, metadata.descricao, pastaId]);
+  }
+
+  return pastaId;
+};
+
+const syncComplianceFolderById = async (pool, competenciaId) => {
+  await ensureComplianceDocumentsInfrastructure(pool);
+
+  const rows = await runQuery(pool, `
+    SELECT 
+      id,
+      created_by,
+      organizacao_criacao,
+      pasta_documentos_id,
+      competencia_inicio,
+      competencia_fim,
+      competencia_referencia
+    FROM compliance_fiscal
+    WHERE id = ?
+  `, [competenciaId]);
+
+  if (!rows || rows.length === 0) {
+    return null;
+  }
+
+  const competencia = rows[0];
+  competencia.id = Number(competenciaId);
+
+  return createOrUpdateComplianceFolder(pool, competencia);
+};
+
+const saveDocumentFile = (buffer, sanitizedName, complianceId) => {
+  const unique = `${Date.now()}-${complianceId}-${Math.round(Math.random() * 1e9)}`;
+  const storedName = `${unique}-${sanitizedName}`;
+  const filePath = path.join(DOCUMENTS_UPLOAD_DIR, storedName);
+  fs.writeFileSync(filePath, buffer);
+  return { storedName, filePath };
+};
+
+const removeDocumentFileIfExists = (filePath) => {
+  try {
+    if (filePath && fs.existsSync(filePath)) {
+      fs.unlinkSync(filePath);
+    }
+  } catch (error) {
+    console.log('⚠️ Erro ao remover arquivo de documentos:', error.message);
+  }
+};
+
+module.exports = {
+  DOCUMENTS_UPLOAD_DIR,
+  runQuery,
+  ensureComplianceDocumentsInfrastructure,
+  createOrUpdateComplianceFolder,
+  syncComplianceFolderById,
+  saveDocumentFile,
+  removeDocumentFileIfExists,
+  buildComplianceFolderMetadata,
+  formatDatePtBr
+};
+
