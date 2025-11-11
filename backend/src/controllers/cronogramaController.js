@@ -464,7 +464,7 @@ exports.listarAlertas = async (req, res) => {
     let whereClause = '';
 
     if (filtroOrganizacao) {
-      whereClause = 'WHERE a.organizacao = ?';
+      whereClause = 'WHERE LOWER(a.organizacao) = LOWER(?)';
       params.push(filtroOrganizacao);
     }
 

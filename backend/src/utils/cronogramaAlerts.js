@@ -75,7 +75,7 @@ const registrarAlerta = async ({
 
     const userInfo = await buscarUsuario(userId);
 
-    const insertResult = await executeQueryWithRetry(`
+    await executeQueryWithRetry(`
       INSERT INTO cronograma_alertas (
         tipo,
         cronograma_id,
@@ -97,16 +97,6 @@ const registrarAlerta = async ({
       userId,
       userInfo.nome
     ]);
-
-    const alertaId = insertResult?.insertId || (Array.isArray(insertResult) && insertResult[0]?.insertId);
-
-    if (alertaId && userId) {
-      await executeQueryWithRetry(`
-        INSERT INTO cronograma_alertas_ack (alerta_id, user_id, acknowledged_at)
-        VALUES (?, ?, NOW())
-        ON DUPLICATE KEY UPDATE acknowledged_at = NOW()
-      `, [alertaId, userId]);
-    }
   } catch (error) {
     console.error('⚠️ Erro ao registrar alerta do cronograma:', error);
   }
