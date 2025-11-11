@@ -10,10 +10,17 @@ const runQuery = async (pool, sql, params = []) => {
     const result = await pool.query(sql, params);
 
     if (Array.isArray(result)) {
-      if (Array.isArray(result[0])) {
+      if (result.length === 2 && Array.isArray(result[0])) {
+        return result[0];
+      }
+      if (result.length === 1 && Array.isArray(result[0])) {
         return result[0];
       }
       return result;
+    }
+
+    if (result && Array.isArray(result.rows)) {
+      return result.rows;
     }
 
     return result;

@@ -342,6 +342,11 @@ exports.removeAnexo = async (req, res) => {
     }
 
     const anexo = anexosArray[0];
+
+    if (!anexo || !anexo.tipo_anexo) {
+      console.warn('⚠️ Anexo encontrado sem campos esperados:', anexo);
+      return res.status(404).json({ error: 'Anexo não encontrado' });
+    }
     
     // Obter informações do usuário atual dos headers
     const userOrg = req.headers['x-user-organization'] || 'cassems';
