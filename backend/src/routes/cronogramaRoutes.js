@@ -7,6 +7,8 @@ const router = express.Router();
 // Rotas de cronograma
 router.get('/', cronogramaController.listarCronogramas);
 router.get('/estatisticas', cronogramaController.estatisticasCronograma);
+router.get('/alertas', cronogramaController.listarAlertas);
+router.post('/alertas/:id/ack', cronogramaController.acknowledgeAlerta);
 router.get('/:id', cronogramaController.buscarCronograma);
 router.post('/', cronogramaController.criarCronograma);
 router.put('/:id', cronogramaController.atualizarCronograma);

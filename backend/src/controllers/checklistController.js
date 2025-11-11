@@ -1,4 +1,5 @@
 const { getDbPoolWithTunnel } = require('../lib/db');
+const { registrarAlerta } = require('../utils/cronogramaAlerts');
 
 // Normaliza o nome da organização para um código canônico usado no banco
 const normalizeOrganization = (org) => {
@@ -124,7 +125,8 @@ const createChecklistItem = async (req, res) => {
     const { titulo, descricao, data_inicio, data_fim } = req.body;
     const userOrg = req.headers['x-user-organization'] || 'cassems';
     const normalizedOrg = normalizeOrganization(userOrg);
-    const userId = req.headers['x-user-id'];
+    const userIdHeader = req.headers['x-user-id'];
+    const numericUserId = userIdHeader ? parseInt(userIdHeader, 10) : null;
 
     if (!titulo || !titulo.trim()) {
       return res.status(400).json({ success: false, error: 'Título é obrigatório' });
@@ -134,7 +136,7 @@ const createChecklistItem = async (req, res) => {
 
     // Buscar período da demanda principal para validação
     const demandaRows = await safeQuery(pool, `
-      SELECT data_inicio, data_fim
+      SELECT titulo, organizacao, data_inicio, data_fim
       FROM cronograma 
       WHERE id = ?
     `, [cronogramaId]);
@@ -216,7 +218,7 @@ const createChecklistItem = async (req, res) => {
       INSERT INTO cronograma_checklist (
         cronograma_id, titulo, descricao, ordem, data_inicio, data_fim, created_by, organizacao
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    `, [cronogramaId, tituloLimpo, descricaoLimpa, nextOrder, data_inicio, data_fim, userId, normalizedOrg]);
+    `, [cronogramaId, tituloLimpo, descricaoLimpa, nextOrder, data_inicio, data_fim, numericUserId, normalizedOrg]);
 
     const insertId = insertResult.insertId || (insertResult[0]?.insertId);
     if (!insertId) {
@@ -234,6 +236,18 @@ const createChecklistItem = async (req, res) => {
     }
 
     const newItem = newItemRows[0];
+
+    const alertaOrganizacao = demanda.organizacao || normalizedOrg;
+    await registrarAlerta({
+      tipo: 'checklist',
+      cronogramaId: Number(cronogramaId),
+      checklistId: Number(newItem.id),
+      organizacao: alertaOrganizacao,
+      titulo: `Checklist adicionado: ${tituloLimpo}`,
+      descricao: demanda.titulo ? `Demanda: ${demanda.titulo}` : null,
+      userId: numericUserId
+    });
+
     res.status(201).json({
       success: true,
       data: {

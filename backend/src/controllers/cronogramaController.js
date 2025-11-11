@@ -1,5 +1,6 @@
 // backend/src/controllers/cronogramaController.js
 const { getDbPoolWithTunnel, executeQueryWithRetry } = require('../lib/db');
+const { ensureTables: ensureCronogramaAlertTables, registrarAlerta } = require('../utils/cronogramaAlerts');
 
 // Normaliza o nome da organização para um código canônico usado no banco
 const normalizeOrganization = (org) => {
@@ -124,6 +125,8 @@ exports.criarCronograma = async (req, res) => {
       status = 'pendente',
       motivo_atraso
     } = req.body;
+    const userIdHeader = req.headers['x-user-id'] || req.body.created_by;
+    const createdByUserId = userIdHeader ? parseInt(userIdHeader, 10) : null;
     
     if (!titulo || !organizacao) {
       return res.status(400).json({
@@ -185,6 +188,18 @@ exports.criarCronograma = async (req, res) => {
       });
     }
     
+    if (cronograma) {
+      await registrarAlerta({
+        tipo: 'cronograma',
+        cronogramaId: Number(cronograma.id),
+        checklistId: null,
+        organizacao: cronograma.organizacao || organizacaoNormalizada,
+        titulo: `Nova demanda adicionada: ${cronograma.titulo}`,
+        descricao: cronograma.descricao || null,
+        userId: createdByUserId
+      });
+    }
+
     res.status(201).json({
       success: true,
       message: 'Cronograma criado com sucesso',
@@ -416,6 +431,120 @@ exports.estatisticasCronograma = async (req, res) => {
     console.error('❌ Erro ao buscar estatísticas:', error);
     res.status(500).json({
       error: 'Erro ao buscar estatísticas',
+      details: error.message
+    });
+  }
+};
+
+// Listar alertas pendentes para o usuário
+exports.listarAlertas = async (req, res) => {
+  try {
+    await ensureCronogramaAlertTables();
+
+    const userIdHeader = req.headers['x-user-id'] || req.query.userId;
+    const userId = userIdHeader ? parseInt(userIdHeader, 10) : null;
+    if (!userId) {
+      return res.status(400).json({ success: false, error: 'Usuário não informado' });
+    }
+
+    const userOrganization = req.headers['x-user-organization'] || req.query.organizacao || null;
+    const isPortes = (userOrganization || '').toLowerCase() === 'portes';
+    let filtroOrganizacao = null;
+
+    if (!isPortes) {
+      filtroOrganizacao = userOrganization;
+    } else {
+      const orgFiltro = req.query.organizacao;
+      if (orgFiltro && orgFiltro !== 'todos') {
+        filtroOrganizacao = orgFiltro;
+      }
+    }
+
+    const params = [userId];
+    let whereClause = '';
+
+    if (filtroOrganizacao) {
+      whereClause = 'WHERE a.organizacao = ?';
+      params.push(filtroOrganizacao);
+    }
+
+    const rows = await executeQueryWithRetry(`
+      SELECT 
+        a.id,
+        a.tipo,
+        a.cronograma_id,
+        a.checklist_id,
+        a.organizacao,
+        a.titulo,
+        a.descricao,
+        a.created_by,
+        COALESCE(a.created_by_nome, u.nome) AS created_by_nome,
+        a.created_at,
+        CASE WHEN ack.id IS NULL THEN 0 ELSE 1 END AS acknowledged,
+        ack.acknowledged_at
+      FROM cronograma_alertas a
+      LEFT JOIN usuarios_cassems u ON a.created_by = u.id
+      LEFT JOIN cronograma_alertas_ack ack 
+        ON ack.alerta_id = a.id AND ack.user_id = ?
+      ${whereClause}
+      ORDER BY a.created_at DESC
+      LIMIT 100
+    `, params);
+
+    const alertas = Array.isArray(rows) ? rows : [];
+
+    const data = alertas.map((alerta) => ({
+      id: Number(alerta.id),
+      tipo: alerta.tipo,
+      cronograma_id: alerta.cronograma_id,
+      checklist_id: alerta.checklist_id,
+      organizacao: alerta.organizacao,
+      titulo: alerta.titulo,
+      descricao: alerta.descricao,
+      created_by: alerta.created_by,
+      created_by_nome: alerta.created_by_nome,
+      created_at: alerta.created_at,
+      acknowledged: Boolean(alerta.acknowledged),
+      acknowledged_at: alerta.acknowledged_at || null
+    }));
+
+    res.json({ success: true, data });
+  } catch (error) {
+    console.error('❌ Erro ao listar alertas do cronograma:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Erro ao listar alertas',
+      details: error.message
+    });
+  }
+};
+
+// Marcar alerta como reconhecido
+exports.acknowledgeAlerta = async (req, res) => {
+  try {
+    await ensureCronogramaAlertTables();
+
+    const { id } = req.params;
+    const alertaId = parseInt(id, 10);
+    const userIdHeader = req.headers['x-user-id'] || req.body.userId;
+    const userId = userIdHeader ? parseInt(userIdHeader, 10) : null;
+
+    if (!alertaId || !userId) {
+      return res.status(400).json({ success: false, error: 'Dados insuficientes para confirmação' });
+    }
+
+    await executeQueryWithRetry(`
+      INSERT INTO cronograma_alertas_ack (alerta_id, user_id, acknowledged_at)
+      VALUES (?, ?, NOW())
+      ON DUPLICATE KEY UPDATE acknowledged_at = NOW()
+    `, [alertaId, userId]);
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error('❌ Erro ao confirmar alerta do cronograma:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Erro ao confirmar alerta',
       details: error.message
     });
   }
