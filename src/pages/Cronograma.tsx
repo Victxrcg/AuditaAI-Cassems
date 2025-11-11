@@ -1,4 +1,4 @@
-﻿import { useState, useEffect } from 'react';
+﻿import { useState, useEffect, useCallback } from 'react';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 import {
@@ -14,11 +14,10 @@ import {
   LAYOUT_COLORS,
   LAYOUT_CONFIG
 } from '@/utils/pdfLayoutUtils';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
@@ -78,6 +77,7 @@ import {
   Download,
   ArrowLeft
 } from 'lucide-react';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 
 interface CronogramaItem {
   id: number;
@@ -110,6 +110,21 @@ interface Estatisticas {
   total_organizacoes: number;
 }
 
+interface CronogramaAlerta {
+  id: number;
+  tipo: 'cronograma' | 'checklist';
+  cronograma_id: number;
+  checklist_id?: number | null;
+  organizacao: string;
+  titulo: string;
+  descricao?: string | null;
+  created_at: string;
+  created_by?: number | null;
+  created_by_nome?: string | null;
+  acknowledged: boolean;
+  acknowledged_at?: string | null;
+}
+
 const Cronograma = () => {
   const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:4011';
   const [cronogramas, setCronogramas] = useState<CronogramaItem[]>([]);
@@ -140,6 +155,10 @@ const Cronograma = () => {
   const [organizacaoSelecionada, setOrganizacaoSelecionada] = useState<string | null>(null);
   const [mostrarSelecaoEmpresa, setMostrarSelecaoEmpresa] = useState(false);
   const [loadingOrganizacoes, setLoadingOrganizacoes] = useState(false);
+  const [alertasPendentes, setAlertasPendentes] = useState<CronogramaAlerta[]>([]);
+  const [alertasLoading, setAlertasLoading] = useState(false);
+  const [ackLoadingId, setAckLoadingId] = useState<number | null>(null);
+  const [ackAllLoading, setAckAllLoading] = useState(false);
   const initialFormData = () => ({
     titulo: '',
     descricao: '',
@@ -295,6 +314,13 @@ const Cronograma = () => {
     }
     setLoading(false);
   };
+
+  useEffect(() => {
+    if (!currentUser) return;
+
+    const interval = setInterval(fetchCronogramas, 60000);
+    return () => clearInterval(interval);
+  }, [currentUser, fetchCronogramas]);
 
   // Buscar usuários para atribuição
   const fetchUsuarios = async () => {
@@ -1620,6 +1646,98 @@ const Cronograma = () => {
     return diffDays > 0 ? diffDays : 0;
   };
 
+  const normalizeFileName = (name?: string | null) => {
+    if (!name) return '';
+    try {
+      if (/Ã|Â|â|œ|/.test(name)) {
+        // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+        // @ts-ignore
+        return decodeURIComponent(escape(name));
+      }
+      return name;
+    } catch (_e) {
+      return name;
+    }
+  };
+
+  const fetchAlertas = useCallback(async () => {
+    if (!currentUser?.id) return;
+
+    try {
+      setAlertasLoading(true);
+      const userOrg = currentUser.organizacao || 'cassems';
+      const params: string[] = [];
+
+      if (userOrg === 'portes') {
+        const orgFiltro = (organizacaoSelecionada && organizacaoSelecionada !== 'todos')
+          ? organizacaoSelecionada
+          : (filtroOrganizacao !== 'todos' ? filtroOrganizacao : null);
+        if (orgFiltro) {
+          params.push(`organizacao=${encodeURIComponent(orgFiltro)}`);
+        }
+      }
+
+      const query = params.length ? `?${params.join('&')}` : '';
+
+      const response = await fetch(`${API_BASE}/cronograma/alertas${query}`, {
+        headers: {
+          'x-user-organization': userOrg,
+          'x-user-id': currentUser.id?.toString() || ''
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error('Erro ao carregar alertas');
+      }
+
+      const data = await response.json();
+      const lista = Array.isArray(data?.data) ? data.data : (Array.isArray(data) ? data : []);
+      const pendentes = (lista as CronogramaAlerta[]).filter(alerta => !alerta.acknowledged);
+      console.log('🔔 Alertas recebidos do backend:', lista);
+      console.log('🔔 Alertas pendentes calculados:', pendentes);
+      setAlertasPendentes(pendentes);
+    } catch (error) {
+      console.error('Erro ao carregar alertas do cronograma:', error);
+    } finally {
+      setAlertasLoading(false);
+    }
+  }, [API_BASE, currentUser, filtroOrganizacao, organizacaoSelecionada]);
+
+  const acknowledgeAlerta = useCallback(async (alertaId: number) => {
+    if (!currentUser?.id) return;
+    try {
+      setAckLoadingId(alertaId);
+      const response = await fetch(`${API_BASE}/cronograma/alertas/${alertaId}/ack`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-user-organization': currentUser.organizacao || 'cassems',
+          'x-user-id': currentUser.id?.toString() || ''
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error('Erro ao confirmar alerta');
+      }
+
+      setAlertasPendentes(prev => prev.filter(alerta => alerta.id !== alertaId));
+    } catch (error) {
+      console.error('Erro ao confirmar alerta do cronograma:', error);
+    } finally {
+      setAckLoadingId(null);
+    }
+  }, [API_BASE, currentUser]);
+
+  const acknowledgeTodosAlertas = useCallback(async () => {
+    if (alertasPendentes.length === 0) return;
+    try {
+      setAckAllLoading(true);
+      await Promise.all(alertasPendentes.map(alerta => acknowledgeAlerta(alerta.id)));
+    } finally {
+      setAckAllLoading(false);
+    }
+  }, [acknowledgeAlerta, alertasPendentes]);
+
   // Salvar cronograma (criar ou editar)
   const salvarCronograma = async () => {
     try {
@@ -1643,7 +1761,8 @@ const Cronograma = () => {
         method,
         headers: {
           'Content-Type': 'application/json',
-          'x-user-organization': userOrg
+          'x-user-organization': userOrg,
+          'x-user-id': currentUser?.id?.toString() || ''
         },
         body: JSON.stringify(dadosParaEnvio)
       });
@@ -1661,6 +1780,7 @@ const Cronograma = () => {
         setFormData(initialFormData());
         fetchCronogramas();
         fetchEstatisticas();
++        fetchAlertas();
       } else {
         const errorData = await response.text();
         throw new Error(`Erro ${response.status}: ${errorData}`);
@@ -3109,7 +3229,7 @@ const Cronograma = () => {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
           <Card className="overflow-hidden">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 p-4 sm:p-6">
-              <CardTitle className="text-xs sm:text-sm font-medium break-words">Total</CardTitle>
+              <CardTitle className="text-xs sm:text-sm font-medium break-words">Total de Demandas</CardTitle>
               <BarChart3 className="h-3 w-3 sm:h-4 sm:w-4 text-muted-foreground flex-shrink-0 ml-2" />
             </CardHeader>
             <CardContent className="p-4 sm:p-6 pt-0">
@@ -3143,6 +3263,82 @@ const Cronograma = () => {
               <div className="text-xl sm:text-2xl font-bold text-red-600 break-words">{estatisticas.atrasados}</div>
             </CardContent>
           </Card>
+        </div>
+      )}
+      {/* Novidades */}
+      {(alertasLoading || alertasPendentes.length > 0) && (
+        <div>
+          {alertasLoading ? (
+            <Card className="border border-blue-200 bg-blue-50/60">
+              <CardContent className="py-4">
+                <span className="text-sm text-blue-700">Carregando novidades do cronograma...</span>
+              </CardContent>
+            </Card>
+          ) : (
+            <Card className="border border-blue-200 bg-blue-50/50 shadow-sm">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base sm:text-lg text-blue-900">Novidades recentes</CardTitle>
+                <CardDescription className="text-xs sm:text-sm text-blue-700">
+                  Confira atualizações criadas por sua equipe desde o último acesso.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="pt-0">
+                <div className="space-y-3">
+                  {alertasPendentes.map((alerta) => (
+                    <div
+                      key={alerta.id}
+                      className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 border border-blue-200 rounded-md bg-white/80 p-3"
+                    >
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-semibold text-blue-900 break-words">
+                          {alerta.titulo}
+                        </p>
+                        <p className="text-xs text-blue-700 mt-1 break-words">
+                          Criado em {new Date(alerta.created_at).toLocaleString('pt-BR')}
+                          {alerta.created_by_nome ? ` por ${alerta.created_by_nome}` : ''}
+                        </p>
+                        {alerta.descricao && (
+                          <p className="text-xs text-gray-700 mt-2 whitespace-pre-wrap break-words">
+                            {alerta.descricao}
+                          </p>
+                        )}
+                      </div>
+                      <div className="flex gap-2">
+                        <Button
+                          size="sm"
+                          onClick={() => acknowledgeAlerta(alerta.id)}
+                          disabled={ackLoadingId === alerta.id || ackAllLoading}
+                          className="bg-blue-600 hover:bg-blue-700 text-white"
+                        >
+                          {ackLoadingId === alerta.id ? 'Confirmando...' : 'Ciente'}
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+              <CardFooter className="flex flex-col sm:flex-row gap-2 sm:justify-between sm:items-center">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={fetchAlertas}
+                  disabled={alertasLoading}
+                >
+                  Atualizar
+                </Button>
+                {alertasPendentes.length > 1 && (
+                  <Button
+                    size="sm"
+                    onClick={acknowledgeTodosAlertas}
+                    disabled={ackAllLoading}
+                    className="bg-blue-600 hover:bg-blue-700 text-white"
+                  >
+                    {ackAllLoading ? 'Confirmando...' : 'Marcar todos como cientes'}
+                  </Button>
+                )}
+              </CardFooter>
+            </Card>
+          )}
         </div>
       )}
 

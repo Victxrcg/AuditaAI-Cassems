@@ -357,6 +357,8 @@ const ComplianceItemCard = memo(({
   const [canAccess, setCanAccess] = useState(true);
   const [canGenerateAI, setCanGenerateAI] = useState(false);
   const [isDragOver, setIsDragOver] = useState(false); // Estado para controlar drag over
+  const [anexoParaRemover, setAnexoParaRemover] = useState<Anexo | null>(null);
+  const [removendoAnexo, setRemovendoAnexo] = useState(false);
 
   // Verificar se esta etapa pode ser acessada
   useEffect(() => {
@@ -473,14 +475,34 @@ const ComplianceItemCard = memo(({
     }
   };
 
-  const handleRemoveAnexo = async (anexoId: number) => {
+  const handleConfirmRemoveAnexo = async () => {
+    if (!anexoParaRemover) return;
+
     try {
-      await removeAnexo(anexoId);
-      setAnexos(prev => prev.filter(anexo => anexo.id !== anexoId));
-      onRemoveFile(item.id, anexoId);
+      setRemovendoAnexo(true);
+      await removeAnexo(anexoParaRemover.id);
+      setAnexos(prev => prev.filter(anexo => anexo.id !== anexoParaRemover.id));
+      onRemoveFile(item.id, anexoParaRemover.id);
     } catch (error) {
       console.error('Erro ao remover anexo:', error);
       alert('Erro ao remover anexo');
+    } finally {
+      setRemovendoAnexo(false);
+      setAnexoParaRemover(null);
+    }
+  };
+
+  const normalizeFileName = (name: string | undefined | null) => {
+    if (!name) return '';
+    try {
+      if (/Ã|Â|â|œ|�/.test(name)) {
+        // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+        // @ts-ignore
+        return decodeURIComponent(escape(name));
+      }
+      return name;
+    } catch (_e) {
+      return name;
     }
   };
 
@@ -493,9 +515,51 @@ const ComplianceItemCard = memo(({
     }
   };
 
+  const removerAnexoModal = (
+    <AlertDialog
+      open={!!anexoParaRemover}
+      onOpenChange={(open) => {
+        if (!open && !removendoAnexo) {
+          setAnexoParaRemover(null);
+        }
+      }}
+    >
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle className="flex items-center gap-2 text-base sm:text-lg">
+            <Trash2 className="h-4 w-4 text-red-600" />
+            Remover anexo
+          </AlertDialogTitle>
+          <AlertDialogDescription className="text-sm sm:text-base break-words">
+            Tem certeza de que deseja remover o anexo{' '}
+            <strong>{anexoParaRemover?.nome_arquivo || 'selecionado'}</strong>?<br />
+            Essa ação não pode ser desfeita e o arquivo será excluído do compliance e da pasta de documentos correspondente.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter className="flex-col sm:flex-row gap-2">
+          <AlertDialogCancel
+            disabled={removendoAnexo}
+            onClick={() => setAnexoParaRemover(null)}
+            className="w-full sm:w-auto order-2 sm:order-1"
+          >
+            Cancelar
+          </AlertDialogCancel>
+          <AlertDialogAction
+            disabled={removendoAnexo}
+            onClick={handleConfirmRemoveAnexo}
+            className="w-full sm:w-auto bg-red-600 hover:bg-red-700 order-1 sm:order-2"
+          >
+            {removendoAnexo ? 'Removendo...' : 'Remover'}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  );
+
   // Se o card não está expandido, mostrar apenas o resumo
   if (!item.isExpanded) {
     return (
+      <>
       <Card className={`mb-6 bg-white transition-shadow ${!canAccess ? 'opacity-50' : 'shadow-sm hover:shadow-lg'} overflow-hidden`}>
         <CardHeader className="p-4 sm:p-6">
           <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-3 sm:gap-4">
@@ -539,6 +603,8 @@ const ComplianceItemCard = memo(({
           </div>
         </CardHeader>
       </Card>
+      {removerAnexoModal}
+      </>
     );
   }
 
@@ -662,7 +728,7 @@ const ComplianceItemCard = memo(({
                     <div className="flex items-center gap-2 min-w-0 flex-1">
                       <FileText className="h-4 w-4 text-green-600 flex-shrink-0" />
                       <div className="min-w-0 flex-1">
-                        <span className="text-xs sm:text-sm font-medium break-words block">{anexo.nome_arquivo || 'Arquivo sem nome'}</span>
+                        <span className="text-xs sm:text-sm font-medium break-words block">{normalizeFileName(anexo.nome_arquivo || 'Arquivo sem nome')}</span>
                         <span className="text-xs text-gray-500">
                           ({formatFileSize(anexo.tamanho_arquivo || 0)})
                         </span>
@@ -681,7 +747,7 @@ const ComplianceItemCard = memo(({
                       <Button
                         variant="outline"
                         size="sm"
-                        onClick={() => handleRemoveAnexo(anexo.id)}
+                        onClick={() => setAnexoParaRemover(anexo)}
                         className="text-red-700 border-red-300"
                       >
                         <Trash2 className="h-3 w-3 sm:h-4 sm:w-4" />
@@ -705,6 +771,7 @@ const ComplianceItemCard = memo(({
 
   // Renderização normal para outros itens
   return (
+    <>
     <Card className={`mb-6 bg-white transition-shadow ${!canAccess ? 'opacity-50' : 'shadow-sm hover:shadow-lg'} overflow-hidden`}>
       <CardHeader className="p-4 sm:p-6">
         <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-3 sm:gap-4">
@@ -1032,7 +1099,7 @@ const ComplianceItemCard = memo(({
                       <div className="flex items-center gap-2 min-w-0 flex-1">
                         <span className="text-lg flex-shrink-0">{getFileIcon(anexo.nome_arquivo || 'arquivo')}</span>
                         <div className="min-w-0 flex-1">
-                          <span className="text-xs sm:text-sm font-medium break-words block">{anexo.nome_arquivo || 'Arquivo sem nome'}</span>
+                          <span className="text-xs sm:text-sm font-medium break-words block">{normalizeFileName(anexo.nome_arquivo || 'Arquivo sem nome')}</span>
                           <span className="text-xs text-gray-500">
                             ({formatFileSize(anexo.tamanho_arquivo || 0)})
                           </span>
@@ -1051,7 +1118,7 @@ const ComplianceItemCard = memo(({
                         <Button
                           variant="outline"
                           size="sm"
-                          onClick={() => handleRemoveAnexo(anexo.id)}
+                          onClick={() => setAnexoParaRemover(anexo)}
                           className="text-red-600 hover:text-red-700"
                         >
                           <Trash2 className="h-3 w-3 sm:h-4 sm:w-4" />
@@ -1133,6 +1200,8 @@ const ComplianceItemCard = memo(({
         )}
       </CardContent>
     </Card>
+    {removerAnexoModal}
+    </>
   );
 });
 
