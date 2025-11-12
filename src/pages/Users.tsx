@@ -185,12 +185,15 @@ const Users = () => {
           });
         }
         
-        // Atualizar a lista de usuários
+        // Atualizar a lista de usuários com os dados retornados pelo backend
         setUsers(users.map(user => 
           user.id === userId 
-            ? { ...user, ...userData, updated_at: new Date().toISOString() }
+            ? { ...user, ...updatedUserData, updated_at: new Date().toISOString() }
             : user
         ));
+        
+        // Recarregar lista completa para garantir sincronização
+        await fetchUsers();
         
         setIsEditDialogOpen(false);
         setEditingUser(null);
@@ -285,7 +288,8 @@ const Users = () => {
   };
 
   const getOrganizationBadge = (user: UserRow) => {
-    const nomeEmpresa = user.nome_empresa || user.organizacao_nome || (user.organizacao === 'portes' ? 'Portes' : 'Cassems');
+    // Priorizar organizacao_nome (da tabela organizacoes) sobre nome_empresa (pode estar desatualizado)
+    const nomeEmpresa = user.organizacao_nome || user.nome_empresa || (user.organizacao === 'portes' ? 'Portes' : (user.organizacao === 'cassems' ? 'Cassems' : user.organizacao?.toUpperCase() || 'Cassems'));
     
     // Determinar cor baseada na organização
     let badgeClass = 'bg-blue-100 text-blue-800 border-blue-200'; // Padrão azul

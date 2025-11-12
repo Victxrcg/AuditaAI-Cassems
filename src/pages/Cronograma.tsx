@@ -159,6 +159,8 @@ const Cronograma = () => {
   const [alertasLoading, setAlertasLoading] = useState(false);
   const [ackLoadingId, setAckLoadingId] = useState<number | null>(null);
   const [ackAllLoading, setAckAllLoading] = useState(false);
+  const [paginaAlertas, setPaginaAlertas] = useState(1);
+  const ALERTAS_POR_PAGINA = 3;
   const initialFormData = () => ({
     titulo: '',
     descricao: '',
@@ -321,6 +323,15 @@ const Cronograma = () => {
     const interval = setInterval(fetchCronogramas, 60000);
     return () => clearInterval(interval);
   }, [currentUser, fetchCronogramas]);
+  
+  // Carregar alertas quando o usuário estiver disponível (usar fetchAlertas quando disponível)
+  useEffect(() => {
+    if (!currentUser?.id) return;
+    // Usar fetchAlertas se já estiver definido, senão não fazer nada (será carregado depois)
+    if (typeof fetchAlertas === 'function') {
+      fetchAlertas();
+    }
+  }, [currentUser?.id]);
 
   // Buscar usuários para atribuição
   const fetchUsuarios = async () => {
@@ -1362,14 +1373,16 @@ const Cronograma = () => {
       fetchEstatisticas();
       fetchUsuarios();
     }
-  }, [currentUser, organizacaoSelecionada]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentUser?.id, currentUser?.organizacao, organizacaoSelecionada]);
 
   // Expandir automaticamente meses com demandas quando os dados ou filtros mudarem
   useEffect(() => {
     if (cronogramas.length > 0) {
       expandirMesesComDemandas();
     }
-  }, [cronogramas, filtroStatus, filtroPrioridade, filtroOrganizacao]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cronogramas.length, filtroStatus, filtroPrioridade, filtroOrganizacao]);
 
   // Ativar IA automaticamente quando os modais abrirem
   useEffect(() => {
@@ -1693,9 +1706,10 @@ const Cronograma = () => {
       const data = await response.json();
       const lista = Array.isArray(data?.data) ? data.data : (Array.isArray(data) ? data : []);
       const pendentes = (lista as CronogramaAlerta[]).filter(alerta => !alerta.acknowledged);
-      console.log('🔔 Alertas recebidos do backend:', lista);
-      console.log('🔔 Alertas pendentes calculados:', pendentes);
-      setAlertasPendentes(pendentes);
+      
+        setAlertasPendentes(pendentes);
+        // Resetar para primeira página quando os alertas mudarem
+        setPaginaAlertas(1);
     } catch (error) {
       console.error('Erro ao carregar alertas do cronograma:', error);
     } finally {
@@ -2307,25 +2321,17 @@ const Cronograma = () => {
       const mesB = b.split('/')[0].toLowerCase().replace('.', '');
       const anoB = parseInt(b.split('/')[1]);
       
-      console.log(`Comparando: ${a} (${mesA}/${anoA}) vs ${b} (${mesB}/${anoB})`);
-      
       // Primeiro compara o ano
       if (anoA !== anoB) {
-        console.log(`Anos diferentes: ${anoA} vs ${anoB}, retornando ${anoA - anoB}`);
         return anoA - anoB;
       }
       
       // Se o ano for igual, compara o mês
       const numMesA = meses[mesA as keyof typeof meses] || 0;
       const numMesB = meses[mesB as keyof typeof meses] || 0;
-      console.log(`Anos iguais: ${anoA}, comparando meses: ${mesA}(${numMesA}) vs ${mesB}(${numMesB}), retornando ${numMesA - numMesB}`);
       
       return numMesA - numMesB;
     });
-    
-    // Debug: log da ordenação
-    console.log('Grupos ordenados:', gruposOrdenados.map(([mes]) => mes));
-    console.log('Timestamp:', new Date().toISOString());
     
     return gruposOrdenados;
   };
@@ -3283,39 +3289,77 @@ const Cronograma = () => {
                 </CardDescription>
               </CardHeader>
               <CardContent className="pt-0">
-                <div className="space-y-3">
-                  {alertasPendentes.map((alerta) => (
-                    <div
-                      key={alerta.id}
-                      className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 border border-blue-200 rounded-md bg-white/80 p-3"
-                    >
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-semibold text-blue-900 break-words">
-                          {alerta.titulo}
-                        </p>
-                        <p className="text-xs text-blue-700 mt-1 break-words">
-                          Criado em {new Date(alerta.created_at).toLocaleString('pt-BR')}
-                          {alerta.created_by_nome ? ` por ${alerta.created_by_nome}` : ''}
-                        </p>
-                        {alerta.descricao && (
-                          <p className="text-xs text-gray-700 mt-2 whitespace-pre-wrap break-words">
-                            {alerta.descricao}
-                          </p>
-                        )}
+                {(() => {
+                  const totalPaginas = Math.ceil(alertasPendentes.length / ALERTAS_POR_PAGINA);
+                  const inicio = (paginaAlertas - 1) * ALERTAS_POR_PAGINA;
+                  const fim = inicio + ALERTAS_POR_PAGINA;
+                  const alertasPagina = alertasPendentes.slice(inicio, fim);
+                  
+                  return (
+                    <>
+                      <div className="space-y-3">
+                        {alertasPagina.map((alerta) => (
+                          <div
+                            key={alerta.id}
+                            className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 border border-blue-200 rounded-md bg-white/80 p-3"
+                          >
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-semibold text-blue-900 break-words">
+                                {alerta.titulo}
+                              </p>
+                              <p className="text-xs text-blue-700 mt-1 break-words">
+                                Criado em {new Date(alerta.created_at).toLocaleString('pt-BR')}
+                                {alerta.created_by_nome ? ` por ${alerta.created_by_nome}` : ''}
+                              </p>
+                              {alerta.descricao && (
+                                <p className="text-xs text-gray-700 mt-2 whitespace-pre-wrap break-words">
+                                  {alerta.descricao}
+                                </p>
+                              )}
+                            </div>
+                            <div className="flex gap-2">
+                              <Button
+                                size="sm"
+                                onClick={() => acknowledgeAlerta(alerta.id)}
+                                disabled={ackLoadingId === alerta.id || ackAllLoading}
+                                className="bg-blue-600 hover:bg-blue-700 text-white"
+                              >
+                                {ackLoadingId === alerta.id ? 'Confirmando...' : 'Ciente'}
+                              </Button>
+                            </div>
+                          </div>
+                        ))}
                       </div>
-                      <div className="flex gap-2">
-                        <Button
-                          size="sm"
-                          onClick={() => acknowledgeAlerta(alerta.id)}
-                          disabled={ackLoadingId === alerta.id || ackAllLoading}
-                          className="bg-blue-600 hover:bg-blue-700 text-white"
-                        >
-                          {ackLoadingId === alerta.id ? 'Confirmando...' : 'Ciente'}
-                        </Button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
+                      
+                      {/* Controles de paginação */}
+                      {totalPaginas > 1 && (
+                        <div className="flex items-center justify-between mt-4 pt-3 border-t border-blue-200">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setPaginaAlertas(prev => Math.max(1, prev - 1))}
+                            disabled={paginaAlertas === 1}
+                            className="text-xs"
+                          >
+                            Anterior
+                          </Button>
+                          <span className="text-xs text-blue-700 font-medium">
+                            Página {paginaAlertas} de {totalPaginas}
+                          </span>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setPaginaAlertas(prev => Math.min(totalPaginas, prev + 1))}
+                            disabled={paginaAlertas === totalPaginas}
+                            className="text-xs"
+                          >
+                            Próxima
+                          </Button>
+                        </div>
+                      )}
+                    </>
+                  );
+                })()}
               </CardContent>
               <CardFooter className="flex flex-col sm:flex-row gap-2 sm:justify-between sm:items-center">
                 <Button
