@@ -1405,6 +1405,36 @@ const Cronograma = () => {
       }
     }
   }, [isViewDialogOpen, viewingCronograma]);
+
+  // Recarregar organizações quando o modal de criação/edição abrir (apenas para usuários Portes)
+  useEffect(() => {
+    if (!isEditDialogOpen || currentUser?.organizacao !== 'portes') return;
+    
+    const reloadOrgs = async () => {
+      setLoadingOrganizacoes(true);
+      try {
+        const res = await fetch(`${API_BASE}/organizacoes`, {
+          headers: {
+            'x-user-organization': currentUser?.organizacao || 'portes'
+          }
+        });
+        
+        if (res.ok) {
+          const response = await res.json();
+          const data = response.data || response;
+          const organizacoesArray = Array.isArray(data) ? data : [];
+          const organizacoesAtivas = organizacoesArray.filter((org: any) => org.ativa !== false);
+          setOrganizacoes(organizacoesAtivas);
+        }
+      } catch (error) {
+        console.error('Erro ao recarregar organizações:', error);
+      } finally {
+        setLoadingOrganizacoes(false);
+      }
+    };
+    
+    reloadOrgs();
+  }, [isEditDialogOpen, currentUser?.organizacao, API_BASE]);
   
   // Carregar alertas quando o modal abrir (separado para evitar dependência circular)
   useEffect(() => {
@@ -3478,47 +3508,60 @@ const Cronograma = () => {
                       <SelectValue placeholder="Selecione a organização" />
                     </SelectTrigger>
                   <SelectContent>
-                    {/* Sempre mostrar a organização do usuário */}
-                    <SelectItem value={currentUser?.organizacao || 'cassems'}>
-                      <div className="flex items-center gap-2">
-                        <Building className="h-4 w-4" />
-                        {currentUser?.nome_empresa || currentUser?.organizacao_nome || 
-                         (currentUser?.organizacao === 'portes' ? 'PORTES' : 
-                          currentUser?.organizacao === 'cassems' ? 'CASSEMS' : 
-                          currentUser?.organizacao === 'rede_frota' ? 'MARAJÓ / REDE FROTA' : 
-                          'SUA ORGANIZAÇÃO')}
-                      </div>
-                    </SelectItem>
-                    
-                    {/* Sempre mostrar PORTES como opção adicional */}
-                    {currentUser?.organizacao !== 'portes' && (
-                      <SelectItem value="portes">
-                        <div className="flex items-center gap-2">
-                          <Building className="h-4 w-4" />
-                          PORTES
-                        </div>
-                      </SelectItem>
-                    )}
-                    
-                    {/* Mostrar outras organizações se for Portes */}
-                    {currentUser?.organizacao === 'portes' && (
+                    {/* Se for usuário Portes, mostrar todas as organizações da lista */}
+                    {currentUser?.organizacao === 'portes' ? (
                       <>
-                        <SelectItem value="cassems">
+                        {organizacoes.length > 0 ? (
+                          organizacoes
+                            .filter((org: any) => org.ativa !== false) // Filtrar apenas organizações ativas
+                            .map((org: any) => {
+                              // Usar codigo como valor principal, com fallback para organizacao
+                              const orgValue = org.codigo || org.organizacao || org.nome?.toLowerCase().replace(/\s+/g, '_');
+                              const orgName = org.nome || org.organizacao || org.codigo;
+                              return (
+                                <SelectItem key={org.codigo || org.id} value={orgValue}>
+                                  <div className="flex items-center gap-2">
+                                    <Building className="h-4 w-4" />
+                                    {orgName}
+                                  </div>
+                                </SelectItem>
+                              );
+                            })
+                        ) : (
+                          <>
+                            {/* Fallback enquanto carrega ou se não houver organizações */}
+                            <SelectItem value={currentUser?.organizacao || 'cassems'}>
+                              <div className="flex items-center gap-2">
+                                <Building className="h-4 w-4" />
+                                {currentUser?.nome_empresa || currentUser?.organizacao_nome || 'CASSEMS'}
+                              </div>
+                            </SelectItem>
+                            <SelectItem value="portes">
+                              <div className="flex items-center gap-2">
+                                <Building className="h-4 w-4" />
+                                PORTES
+                              </div>
+                            </SelectItem>
+                          </>
+                        )}
+                      </>
+                    ) : (
+                      <>
+                        {/* Para usuários não-Portes, mostrar apenas sua organização e Portes */}
+                        <SelectItem value={currentUser?.organizacao || 'cassems'}>
                           <div className="flex items-center gap-2">
                             <Building className="h-4 w-4" />
-                            CASSEMS
+                            {currentUser?.nome_empresa || currentUser?.organizacao_nome || 
+                             (currentUser?.organizacao === 'portes' ? 'PORTES' : 
+                              currentUser?.organizacao === 'cassems' ? 'CASSEMS' : 
+                              currentUser?.organizacao === 'rede_frota' ? 'MARAJÓ / REDE FROTA' : 
+                              'SUA ORGANIZAÇÃO')}
                           </div>
                         </SelectItem>
-                        <SelectItem 
-                          value="Marajó / Rede Frota" 
-                          className="marajo-item"
-                          style={{
-                            ['--marajo-hide-indicator' as any]: 'none'
-                          }}
-                        >
+                        <SelectItem value="portes">
                           <div className="flex items-center gap-2">
                             <Building className="h-4 w-4" />
-                            MARAJÓ / REDE FROTA
+                            PORTES
                           </div>
                         </SelectItem>
                       </>
