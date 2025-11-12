@@ -237,7 +237,23 @@ const createChecklistItem = async (req, res) => {
 
     const newItem = newItemRows[0];
 
-    const alertaOrganizacao = demanda.organizacao || normalizedOrg;
+    // Normalizar organização da demanda para garantir consistência
+    const demandaOrgNormalizada = demanda.organizacao 
+      ? normalizeOrganization(demanda.organizacao) 
+      : normalizedOrg;
+    const alertaOrganizacao = demandaOrgNormalizada || normalizedOrg;
+    
+    console.log('🔔 Criando alerta de checklist:', {
+      tipo: 'checklist',
+      cronogramaId: Number(cronogramaId),
+      checklistId: Number(newItem.id),
+      organizacao: alertaOrganizacao,
+      organizacaoOriginal: demanda.organizacao,
+      organizacaoNormalizada: demandaOrgNormalizada,
+      titulo: `Checklist adicionado: ${tituloLimpo}`,
+      userId: numericUserId
+    });
+    
     await registrarAlerta({
       tipo: 'checklist',
       cronogramaId: Number(cronogramaId),

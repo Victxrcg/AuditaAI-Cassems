@@ -56,18 +56,20 @@ exports.listarUsuarios = async (req, res) => {
     
     let query = `
       SELECT 
-        id,
-        nome,
-        nome_empresa,
-        email,
-        perfil,
-        ativo,
-        created_at,
-        updated_at,
-        organizacao,
-        cor_identificacao,
-        permissoes
-      FROM usuarios_cassems
+        u.id,
+        u.nome,
+        u.nome_empresa,
+        u.email,
+        u.perfil,
+        u.ativo,
+        u.created_at,
+        u.updated_at,
+        u.organizacao,
+        u.cor_identificacao,
+        u.permissoes,
+        o.nome as organizacao_nome
+      FROM usuarios_cassems u
+      LEFT JOIN organizacoes o ON u.organizacao = o.codigo
     `;
     
     let params = [];
@@ -273,10 +275,24 @@ exports.atualizarUsuario = async (req, res) => {
       WHERE id = ?
     `, [nome, email, perfil, ativo, organizacao, permissoesJSON, id]);
     
-    // Buscar o usuário atualizado
+    // Buscar o usuário atualizado com nome da organização
     const [updatedUser] = await pool.query(`
-      SELECT id, nome, nome_empresa, email, perfil, ativo, created_at, updated_at, organizacao, cor_identificacao, permissoes
-      FROM usuarios_cassems WHERE id = ?
+      SELECT 
+        u.id, 
+        u.nome, 
+        u.nome_empresa, 
+        u.email, 
+        u.perfil, 
+        u.ativo, 
+        u.created_at, 
+        u.updated_at, 
+        u.organizacao, 
+        u.cor_identificacao, 
+        u.permissoes,
+        o.nome as organizacao_nome
+      FROM usuarios_cassems u
+      LEFT JOIN organizacoes o ON u.organizacao = o.codigo
+      WHERE u.id = ?
     `, [id]);
     
     res.json({

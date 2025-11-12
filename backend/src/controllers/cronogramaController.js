@@ -494,8 +494,11 @@ exports.listarAlertas = async (req, res) => {
     const alertas = Array.isArray(rows) ? rows : [];
     console.log('🔔 Alertas retornados para usuário:', {
       userId,
+      userOrganization,
       filtroOrganizacao,
-      total: alertas.length
+      total: alertas.length,
+      tipos: alertas.map(a => a.tipo),
+      organizacoes: [...new Set(alertas.map(a => a.organizacao))]
     });
 
     const data = alertas.map((alerta) => ({
