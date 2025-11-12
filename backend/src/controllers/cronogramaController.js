@@ -464,11 +464,14 @@ exports.listarAlertas = async (req, res) => {
     let whereClause = '';
 
     if (filtroOrganizacao) {
-      whereClause = 'WHERE LOWER(a.organizacao) = LOWER(?)';
-      params.push(filtroOrganizacao);
+      // Normalizar organização para garantir correspondência
+      const orgNormalizada = normalizeOrganization(filtroOrganizacao);
+      whereClause = 'WHERE (LOWER(a.organizacao) = LOWER(?) OR LOWER(a.organizacao) = LOWER(?))';
+      params.push(filtroOrganizacao, orgNormalizada);
     }
 
-    const rows = await executeQueryWithRetry(`
+    // Construir query com filtro de organização normalizado
+    let query = `
       SELECT 
         a.id,
         a.tipo,
@@ -486,20 +489,42 @@ exports.listarAlertas = async (req, res) => {
       LEFT JOIN usuarios_cassems u ON a.created_by = u.id
       LEFT JOIN cronograma_alertas_ack ack 
         ON ack.alerta_id = a.id AND ack.user_id = ?
-      ${whereClause}
-      ORDER BY a.created_at DESC
-      LIMIT 100
-    `, params);
+    `;
+    
+    if (whereClause) {
+      query += ` ${whereClause}`;
+    }
+    
+    query += ` ORDER BY a.created_at DESC LIMIT 100`;
+    
+    console.log('🔔 Query de alertas:', query);
+    console.log('🔔 Parâmetros:', params);
+    
+    const rows = await executeQueryWithRetry(query, params);
 
     const alertas = Array.isArray(rows) ? rows : [];
+    
+    // Log detalhado para depuração
     console.log('🔔 Alertas retornados para usuário:', {
       userId,
       userOrganization,
       filtroOrganizacao,
+      orgNormalizada: filtroOrganizacao ? normalizeOrganization(filtroOrganizacao) : null,
       total: alertas.length,
       tipos: alertas.map(a => a.tipo),
-      organizacoes: [...new Set(alertas.map(a => a.organizacao))]
+      organizacoes: [...new Set(alertas.map(a => a.organizacao))],
+      acknowledged: alertas.map(a => ({ id: a.id, tipo: a.tipo, acknowledged: a.acknowledged })),
+      whereClause
     });
+    
+    // Log de todos os alertas não reconhecidos
+    const naoReconhecidos = alertas.filter(a => !a.acknowledged);
+    console.log('🔔 Alertas NÃO reconhecidos:', naoReconhecidos.length, naoReconhecidos.map(a => ({
+      id: a.id,
+      tipo: a.tipo,
+      organizacao: a.organizacao,
+      titulo: a.titulo
+    })));
 
     const data = alertas.map((alerta) => ({
       id: Number(alerta.id),
