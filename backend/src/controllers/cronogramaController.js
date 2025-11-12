@@ -189,11 +189,24 @@ exports.criarCronograma = async (req, res) => {
     }
     
     if (cronograma) {
+      // Garantir que a organização do alerta está normalizada
+      const alertaOrganizacao = normalizeOrganization(cronograma.organizacao || organizacaoNormalizada);
+      
+      console.log('🔔 Criando alerta de nova demanda:', {
+        tipo: 'cronograma',
+        cronogramaId: Number(cronograma.id),
+        organizacaoOriginal: cronograma.organizacao,
+        organizacaoNormalizada: organizacaoNormalizada,
+        alertaOrganizacao: alertaOrganizacao,
+        titulo: `Nova demanda adicionada: ${cronograma.titulo}`,
+        userId: createdByUserId
+      });
+      
       await registrarAlerta({
         tipo: 'cronograma',
         cronogramaId: Number(cronograma.id),
         checklistId: null,
-        organizacao: cronograma.organizacao || organizacaoNormalizada,
+        organizacao: alertaOrganizacao,
         titulo: `Nova demanda adicionada: ${cronograma.titulo}`,
         descricao: cronograma.descricao || null,
         userId: createdByUserId
