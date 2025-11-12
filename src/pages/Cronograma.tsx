@@ -324,14 +324,6 @@ const Cronograma = () => {
     return () => clearInterval(interval);
   }, [currentUser, fetchCronogramas]);
   
-  // Carregar alertas quando o usuário estiver disponível (usar fetchAlertas quando disponível)
-  useEffect(() => {
-    if (!currentUser?.id) return;
-    // Usar fetchAlertas se já estiver definido, senão não fazer nada (será carregado depois)
-    if (typeof fetchAlertas === 'function') {
-      fetchAlertas();
-    }
-  }, [currentUser?.id]);
 
   // Buscar usuários para atribuição
   const fetchUsuarios = async () => {
@@ -1436,67 +1428,28 @@ const Cronograma = () => {
     reloadOrgs();
   }, [isEditDialogOpen, currentUser?.organizacao, API_BASE]);
   
-  // Carregar alertas quando o modal abrir (separado para evitar dependência circular)
+  // Recarregar alertas quando o modal abrir para garantir dados atualizados
   useEffect(() => {
-    if (!isViewDialogOpen || !viewingCronograma || !currentUser?.id) return;
-    
-    const loadAlertas = async () => {
-      try {
-        setAlertasLoading(true);
-        const userOrg = currentUser.organizacao || 'cassems';
-        const params: string[] = [];
+    if (isViewDialogOpen && viewingCronograma && currentUser?.id && typeof fetchAlertas === 'function') {
+      fetchAlertas();
+      // Resetar página de alertas quando abrir um novo cronograma
+      setPaginaAlertas(1);
+    }
+  }, [isViewDialogOpen, viewingCronograma?.id]);
 
-        if (userOrg === 'portes') {
-          const orgFiltro = (organizacaoSelecionada && organizacaoSelecionada !== 'todos')
-            ? organizacaoSelecionada
-            : (filtroOrganizacao !== 'todos' ? filtroOrganizacao : null);
-          if (orgFiltro) {
-            params.push(`organizacao=${encodeURIComponent(orgFiltro)}`);
-          }
-        }
-
-        const query = params.length ? `?${params.join('&')}` : '';
-
-        const response = await fetch(`${API_BASE}/cronograma/alertas${query}`, {
-          headers: {
-            'x-user-organization': userOrg,
-            'x-user-id': currentUser.id?.toString() || ''
-          }
-        });
-
-        if (!response.ok) {
-          throw new Error('Erro ao carregar alertas');
-        }
-
-        const data = await response.json();
-        const lista = Array.isArray(data?.data) ? data.data : (Array.isArray(data) ? data : []);
-        const pendentes = (lista as CronogramaAlerta[]).filter(alerta => !alerta.acknowledged);
-        
-        setAlertasPendentes(pendentes);
-        setPaginaAlertas(1);
-      } catch (error) {
-        console.error('Erro ao carregar alertas do cronograma:', error);
-      } finally {
-        setAlertasLoading(false);
-      }
-    };
-    
-    loadAlertas();
-  }, [isViewDialogOpen, viewingCronograma?.id, currentUser?.id, currentUser?.organizacao, organizacaoSelecionada, filtroOrganizacao, API_BASE]);
-
-  // Calcular alertas do cronograma atual usando useMemo para evitar recálculos desnecessários
-  const alertasDoCronogramaAtual = useMemo(() => {
-    if (!viewingCronograma) return [];
-    return alertasPendentes.filter(
-      alerta => alerta.cronograma_id === viewingCronograma.id
-    );
+  // Filtrar alertas por cronograma se houver um cronograma sendo visualizado
+  const alertasFiltrados = useMemo(() => {
+    if (viewingCronograma?.id) {
+      return alertasPendentes.filter(alerta => alerta.cronograma_id === viewingCronograma.id);
+    }
+    return alertasPendentes;
   }, [alertasPendentes, viewingCronograma?.id]);
 
   // Calcular paginação dos alertas
-  const totalPaginasAlertas = Math.ceil(alertasDoCronogramaAtual.length / ALERTAS_POR_PAGINA);
+  const totalPaginasAlertas = Math.ceil(alertasFiltrados.length / ALERTAS_POR_PAGINA);
   const inicioAlertas = (paginaAlertas - 1) * ALERTAS_POR_PAGINA;
   const fimAlertas = inicioAlertas + ALERTAS_POR_PAGINA;
-  const alertasPaginaAtual = alertasDoCronogramaAtual.slice(inicioAlertas, fimAlertas);
+  const alertasPaginaAtual = alertasFiltrados.slice(inicioAlertas, fimAlertas);
 
   // Função para formatar data para exibição sem problemas de timezone
   const formatDateForDisplay = (dateString: string | null) => {
@@ -1775,6 +1728,8 @@ const Cronograma = () => {
       const userOrg = currentUser.organizacao || 'cassems';
       const params: string[] = [];
 
+      // Para usuários Portes, usar organização selecionada ou filtro
+      // Para outros usuários, sempre usar a organização do usuário
       if (userOrg === 'portes') {
         const orgFiltro = (organizacaoSelecionada && organizacaoSelecionada !== 'todos')
           ? organizacaoSelecionada
@@ -1782,6 +1737,9 @@ const Cronograma = () => {
         if (orgFiltro) {
           params.push(`organizacao=${encodeURIComponent(orgFiltro)}`);
         }
+      } else {
+        // Para usuários não-Portes, sempre filtrar pela organização do usuário
+        params.push(`organizacao=${encodeURIComponent(userOrg)}`);
       }
 
       const query = params.length ? `?${params.join('&')}` : '';
@@ -1801,15 +1759,22 @@ const Cronograma = () => {
       const lista = Array.isArray(data?.data) ? data.data : (Array.isArray(data) ? data : []);
       const pendentes = (lista as CronogramaAlerta[]).filter(alerta => !alerta.acknowledged);
       
-        setAlertasPendentes(pendentes);
-        // Resetar para primeira página quando os alertas mudarem
-        setPaginaAlertas(1);
+      setAlertasPendentes(pendentes);
+      // Resetar para primeira página quando os alertas mudarem
+      setPaginaAlertas(1);
     } catch (error) {
       console.error('Erro ao carregar alertas do cronograma:', error);
     } finally {
       setAlertasLoading(false);
     }
   }, [API_BASE, currentUser, filtroOrganizacao, organizacaoSelecionada]);
+
+  // Carregar alertas quando o usuário estiver disponível ou quando a organização selecionada mudar
+  useEffect(() => {
+    if (!currentUser?.id) return;
+    // Carregar alertas na página principal
+    fetchAlertas();
+  }, [currentUser?.id, fetchAlertas, organizacaoSelecionada, filtroOrganizacao]);
 
   const acknowledgeAlerta = useCallback(async (alertaId: number) => {
     if (!currentUser?.id) return;
@@ -1888,7 +1853,6 @@ const Cronograma = () => {
         setFormData(initialFormData());
         fetchCronogramas();
         fetchEstatisticas();
-+        fetchAlertas();
       } else {
         const errorData = await response.text();
         throw new Error(`Erro ${response.status}: ${errorData}`);
@@ -3365,6 +3329,118 @@ const Cronograma = () => {
           </Card>
         </div>
       )}
+
+      {/* Card de Novidades Recentes */}
+      {(alertasLoading || alertasFiltrados.length > 0) && (
+        <div>
+          {alertasLoading ? (
+            <Card className="border border-blue-200 bg-blue-50/60">
+              <CardContent className="py-4">
+                <span className="text-sm text-blue-700">Carregando novidades do cronograma...</span>
+              </CardContent>
+            </Card>
+          ) : (
+            <Card className="border border-blue-200 bg-blue-50/50 shadow-sm">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base sm:text-lg text-blue-900">
+                  {viewingCronograma ? `Novidades deste cronograma` : 'Novidades recentes'}
+                </CardTitle>
+                <CardDescription className="text-xs sm:text-sm text-blue-700">
+                  {viewingCronograma 
+                    ? `Atualizações recentes na demanda: ${viewingCronograma.titulo}`
+                    : 'Confira atualizações criadas por sua equipe desde o último acesso. Clique em uma demanda para ver apenas suas novidades.'}
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="pt-0">
+                <div className="space-y-3">
+                  {alertasPaginaAtual.map((alerta) => (
+                    <div
+                      key={alerta.id}
+                      className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 border border-blue-200 rounded-md bg-white/80 p-3"
+                    >
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-semibold text-blue-900 break-words">
+                          {alerta.titulo}
+                        </p>
+                        <p className="text-xs text-blue-700 mt-1 break-words">
+                          Criado em {new Date(alerta.created_at).toLocaleString('pt-BR')}
+                          {alerta.created_by_nome ? ` por ${alerta.created_by_nome}` : ''}
+                        </p>
+                        {alerta.descricao && (
+                          <p className="text-xs text-gray-700 mt-2 whitespace-pre-wrap break-words">
+                            {alerta.descricao}
+                          </p>
+                        )}
+                      </div>
+                      <div className="flex gap-2">
+                        <Button
+                          size="sm"
+                          onClick={() => acknowledgeAlerta(alerta.id)}
+                          disabled={ackLoadingId === alerta.id || ackAllLoading}
+                          className="bg-blue-600 hover:bg-blue-700 text-white"
+                        >
+                          {ackLoadingId === alerta.id ? 'Confirmando...' : 'Ciente'}
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                
+                {/* Controles de paginação */}
+                {totalPaginasAlertas > 1 && (
+                  <div className="flex items-center justify-between mt-4 pt-3 border-t border-blue-200">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setPaginaAlertas(prev => Math.max(1, prev - 1))}
+                      disabled={paginaAlertas === 1}
+                      className="text-xs"
+                    >
+                      Anterior
+                    </Button>
+                    <span className="text-xs text-blue-700 font-medium">
+                      Página {paginaAlertas} de {totalPaginasAlertas}
+                    </span>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setPaginaAlertas(prev => Math.min(totalPaginasAlertas, prev + 1))}
+                      disabled={paginaAlertas === totalPaginasAlertas}
+                      className="text-xs"
+                    >
+                      Próxima
+                    </Button>
+                  </div>
+                )}
+              </CardContent>
+              <CardFooter className="flex flex-col sm:flex-row gap-2 sm:justify-between sm:items-center">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={fetchAlertas}
+                  disabled={alertasLoading}
+                >
+                  Atualizar
+                </Button>
+                {alertasFiltrados.length > 1 && (
+                  <Button
+                    size="sm"
+                    onClick={() => {
+                      const idsParaAck = alertasFiltrados.map(a => a.id);
+                      Promise.all(idsParaAck.map(id => acknowledgeAlerta(id)));
+                    }}
+                    disabled={ackAllLoading}
+                    className="bg-blue-600 hover:bg-blue-700 text-white"
+                  >
+                    {ackAllLoading ? 'Confirmando...' : 'Marcar todos como cientes'}
+                  </Button>
+                )}
+              </CardFooter>
+            </Card>
+          )}
+        </div>
+      )}
+
       {/* Filtros */}
       <Card className="overflow-hidden">
         <CardHeader 
@@ -3759,103 +3835,6 @@ const Cronograma = () => {
           
           {viewingCronograma && (
             <>
-              {/* Card de Novidades do Cronograma */}
-              {alertasDoCronogramaAtual.length > 0 && (
-                <div className="px-3 sm:px-4 lg:px-6 pt-3 sm:pt-4 lg:pt-6 pb-0">
-                  <Card className="border border-blue-200 bg-blue-50/50 shadow-sm">
-                    <CardHeader className="pb-2">
-                      <CardTitle className="text-base sm:text-lg text-blue-900">Novidades deste cronograma</CardTitle>
-                      <CardDescription className="text-xs sm:text-sm text-blue-700">
-                        Atualizações recentes nesta demanda.
-                      </CardDescription>
-                    </CardHeader>
-                    <CardContent className="pt-0">
-                      <div className="space-y-3">
-                        {alertasPaginaAtual.map((alerta) => (
-                          <div
-                            key={alerta.id}
-                            className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 border border-blue-200 rounded-md bg-white/80 p-3"
-                          >
-                            <div className="flex-1 min-w-0">
-                              <p className="text-sm font-semibold text-blue-900 break-words">
-                                {alerta.titulo}
-                              </p>
-                              <p className="text-xs text-blue-700 mt-1 break-words">
-                                Criado em {new Date(alerta.created_at).toLocaleString('pt-BR')}
-                                {alerta.created_by_nome ? ` por ${alerta.created_by_nome}` : ''}
-                              </p>
-                              {alerta.descricao && (
-                                <p className="text-xs text-gray-700 mt-2 whitespace-pre-wrap break-words">
-                                  {alerta.descricao}
-                                </p>
-                              )}
-                            </div>
-                            <div className="flex gap-2">
-                              <Button
-                                size="sm"
-                                onClick={() => {
-                                  acknowledgeAlerta(alerta.id);
-                                  // Resetar página se necessário
-                                  if (alertasPaginaAtual.length === 1 && paginaAlertas > 1) {
-                                    setPaginaAlertas(prev => Math.max(1, prev - 1));
-                                  }
-                                }}
-                                disabled={ackLoadingId === alerta.id || ackAllLoading}
-                                className="bg-blue-600 hover:bg-blue-700 text-white"
-                              >
-                                {ackLoadingId === alerta.id ? 'Confirmando...' : 'Ciente'}
-                              </Button>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                      
-                      {/* Controles de paginação */}
-                      {totalPaginasAlertas > 1 && (
-                        <div className="flex items-center justify-between mt-4 pt-3 border-t border-blue-200">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => setPaginaAlertas(prev => Math.max(1, prev - 1))}
-                            disabled={paginaAlertas === 1}
-                            className="text-xs"
-                          >
-                            Anterior
-                          </Button>
-                          <span className="text-xs text-blue-700 font-medium">
-                            Página {paginaAlertas} de {totalPaginasAlertas}
-                          </span>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => setPaginaAlertas(prev => Math.min(totalPaginasAlertas, prev + 1))}
-                            disabled={paginaAlertas === totalPaginasAlertas}
-                            className="text-xs"
-                          >
-                            Próxima
-                          </Button>
-                        </div>
-                      )}
-                    </CardContent>
-                    {alertasDoCronogramaAtual.length > 1 && (
-                      <CardFooter className="flex justify-end pt-2 pb-3">
-                        <Button
-                          size="sm"
-                          onClick={() => {
-                            const idsParaAck = alertasDoCronogramaAtual.map(a => a.id);
-                            Promise.all(idsParaAck.map(id => acknowledgeAlerta(id)));
-                          }}
-                          disabled={ackAllLoading}
-                          className="bg-blue-600 hover:bg-blue-700 text-white text-xs"
-                        >
-                          {ackAllLoading ? 'Confirmando...' : 'Marcar todos como cientes'}
-                        </Button>
-                      </CardFooter>
-                    )}
-                  </Card>
-                </div>
-              )}
-              
               <div className="flex-1 overflow-y-auto min-h-0 px-3 sm:px-4 lg:px-6 py-4 sm:py-5 lg:py-6">
                 <div className="flex flex-col lg:grid lg:grid-cols-2 gap-4 sm:gap-4 lg:gap-6">
                 {/* Grid 1: Informações da Demanda */}
