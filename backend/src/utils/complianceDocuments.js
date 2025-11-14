@@ -176,26 +176,22 @@ const buildComplianceFolderMetadata = (competencia) => {
   const folderOrganizacao = resolveFolderOrganization(competencia);
 
   let titulo;
+  let descricao;
+  
   if (inicio && fim) {
-    titulo = `Documentos Compliance Período (${inicio}) - (${fim})`;
+    titulo = `Documentos Compliance – Período: ${inicio} a ${fim}`;
+    descricao = `Documentos anexados automaticamente referentes ao período de ${inicio} a ${fim}.`;
   } else if (inicio || fim) {
-    titulo = `Documentos Compliance Período (${inicio || fim})`;
+    const data = inicio || fim;
+    titulo = `Documentos Compliance – Período: ${data}`;
+    descricao = `Documentos anexados automaticamente referentes ao período de ${data}.`;
   } else if (referencia) {
-    titulo = `Documentos Compliance Referência (${referencia})`;
+    titulo = `Documentos Compliance – Referência: ${referencia}`;
+    descricao = `Documentos anexados automaticamente referentes à competência de referência ${referencia}.`;
   } else {
-    titulo = `Documentos Compliance Competência #${competencia.id}`;
+    titulo = `Documentos Compliance – Competência #${competencia.id}`;
+    descricao = `Documentos anexados automaticamente para a competência ${competencia.id}.`;
   }
-
-  const partesDescricao = [
-    `Documentos anexados automaticamente para a competência ${competencia.id}`
-  ];
-
-  if (inicio) partesDescricao.push(`Início: ${inicio}`);
-  if (fim) partesDescricao.push(`Fim: ${fim}`);
-  if (!inicio && !fim && referencia) partesDescricao.push(`Referência: ${referencia}`);
-  if (folderOrganizacao) partesDescricao.push(`Organização: ${folderOrganizacao}`);
-
-  const descricao = partesDescricao.join(' | ');
 
   return { titulo, descricao, organizacao: folderOrganizacao };
 };
