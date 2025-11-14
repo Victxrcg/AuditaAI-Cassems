@@ -10,7 +10,7 @@ router.use('/competencias/:complianceId/anexos*', (req, res, next) => {
   console.log('🔍 CORS middleware para anexos - Origin:', req.headers.origin);
   res.header('Access-Control-Allow-Origin', req.headers.origin || '*');
   res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-user-organization, x-user-id, Accept, Origin, X-Requested-With');
+  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-user-organization, x-user-id, x-tipo-compliance, Accept, Origin, X-Requested-With');
   res.header('Access-Control-Allow-Credentials', 'true');
   next();
 });
@@ -73,7 +73,7 @@ router.options('/competencias/:complianceId/anexos/:tipoAnexo', (req, res) => {
   console.log('🔍 OPTIONS request para anexos - Origin:', req.headers.origin);
   res.header('Access-Control-Allow-Origin', req.headers.origin || '*');
   res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-user-organization, x-user-id, Accept, Origin, X-Requested-With');
+  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-user-organization, x-user-id, x-tipo-compliance, Accept, Origin, X-Requested-With');
   res.header('Access-Control-Allow-Credentials', 'true');
   res.sendStatus(200);
 });

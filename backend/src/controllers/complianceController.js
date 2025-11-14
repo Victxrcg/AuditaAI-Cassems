@@ -85,9 +85,11 @@ exports.listCompetencias = async (req, res) => {
   try {
     console.log('🔍 Iniciando listagem de competências...');
     
-    // Obter organização do usuário
+    // Obter organização do usuário e tipo_compliance
     const userOrganization = req.headers['x-user-organization'] || req.query.organizacao;
+    const tipoCompliance = req.query.tipo_compliance || req.headers['x-tipo-compliance'];
     console.log('🔍 Organização do usuário:', userOrganization);
+    console.log('🔍 Tipo compliance:', tipoCompliance);
     console.log('🔍 Headers recebidos:', req.headers);
     console.log('🔍 Query params:', req.query);
     
@@ -107,15 +109,32 @@ exports.listCompetencias = async (req, res) => {
     `;
     
     let params = [];
+    let whereConditions = [];
     
     // Se não for Portes, filtrar apenas competências da mesma organização
     // Portes vê TODAS as competências de todas as organizações
     if (userOrganization && userOrganization !== 'portes') {
-      query += ` WHERE cf.organizacao_criacao = ?`;
+      whereConditions.push(`cf.organizacao_criacao = ?`);
       params.push(userOrganization);
       console.log('🔍 FILTRO APLICADO: Apenas competências da organização:', userOrganization);
     } else {
-      console.log('🔍 SEM FILTRO: Mostrando todas as competências (usuário Portes ou sem organização definida)');
+      console.log('🔍 SEM FILTRO DE ORGANIZAÇÃO: Mostrando todas as competências (usuário Portes ou sem organização definida)');
+    }
+    
+    // Filtrar por tipo_compliance se fornecido
+    if (tipoCompliance) {
+      const tiposValidos = ['rat-fat', 'subvencao-fiscal', 'terceiros'];
+      if (tiposValidos.includes(tipoCompliance)) {
+        // Tentar filtrar por tipo_compliance (se a coluna existir)
+        // Se não existir, usar COALESCE para não filtrar competências antigas
+        whereConditions.push(`(cf.tipo_compliance = ? OR cf.tipo_compliance IS NULL)`);
+        params.push(tipoCompliance);
+        console.log('🔍 FILTRO APLICADO: Apenas competências do tipo:', tipoCompliance);
+      }
+    }
+    
+    if (whereConditions.length > 0) {
+      query += ` WHERE ${whereConditions.join(' AND ')}`;
     }
     
     query += ` ORDER BY cf.competencia_referencia DESC, cf.created_at DESC`;
@@ -217,7 +236,7 @@ exports.createCompetencia = async (req, res) => {
 
   
     
-    const { competencia_referencia, created_by, organizacao_criacao } = req.body;
+    const { competencia_referencia, created_by, organizacao_criacao, tipo_compliance } = req.body;
     
     if (!competencia_referencia || !created_by) {
       return res.status(400).json({
@@ -225,6 +244,12 @@ exports.createCompetencia = async (req, res) => {
         details: 'competencia_referencia e created_by são obrigatórios'
       });
     }
+    
+    // Validar tipo_compliance se fornecido
+    const tiposValidos = ['rat-fat', 'subvencao-fiscal', 'terceiros'];
+    const tipoComplianceFinal = tipo_compliance && tiposValidos.includes(tipo_compliance) 
+      ? tipo_compliance 
+      : 'rat-fat'; // Default para rat-fat se não especificado
     
     // Obter informações do usuário que está criando
     const userRows = await executeQueryWithRetry(`
@@ -245,10 +270,25 @@ exports.createCompetencia = async (req, res) => {
       userOrg
     });
     
-    const result = await executeQueryWithRetry(`
-      INSERT INTO compliance_fiscal (competencia_referencia, created_by, organizacao_criacao, status, ultima_alteracao_por, ultima_alteracao_em, ultima_alteracao_organizacao)
-      VALUES (?, ?, ?, 'pendente', ?, NOW(), ?)
-      `, [competencia_referencia, created_by, userOrg, created_by, userOrg]);
+    // Tentar inserir com tipo_compliance (se a coluna existir)
+    let result;
+    try {
+      result = await executeQueryWithRetry(`
+        INSERT INTO compliance_fiscal (competencia_referencia, created_by, organizacao_criacao, status, ultima_alteracao_por, ultima_alteracao_em, ultima_alteracao_organizacao, tipo_compliance)
+        VALUES (?, ?, ?, 'pendente', ?, NOW(), ?, ?)
+        `, [competencia_referencia, created_by, userOrg, created_by, userOrg, tipoComplianceFinal]);
+    } catch (error) {
+      // Se a coluna não existir, inserir sem tipo_compliance (compatibilidade retroativa)
+      if (error.message.includes('tipo_compliance') || error.code === 'ER_BAD_FIELD_ERROR') {
+        console.log('⚠️ Coluna tipo_compliance não existe, inserindo sem ela');
+        result = await executeQueryWithRetry(`
+          INSERT INTO compliance_fiscal (competencia_referencia, created_by, organizacao_criacao, status, ultima_alteracao_por, ultima_alteracao_em, ultima_alteracao_organizacao)
+          VALUES (?, ?, ?, 'pendente', ?, NOW(), ?)
+          `, [competencia_referencia, created_by, userOrg, created_by, userOrg]);
+      } else {
+        throw error;
+      }
+    }
 
     console.log('🔍 Debug - Resultado do INSERT:', result);
     

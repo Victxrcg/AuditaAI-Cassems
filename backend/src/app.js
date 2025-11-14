@@ -31,6 +31,7 @@ app.use(cors({
     'Authorization', 
     'x-user-organization',
     'x-user-id',
+    'x-tipo-compliance',
     'Range',
     'Accept',
     'Origin',
@@ -59,7 +60,7 @@ try {
 app.options('*', (req, res) => {
   res.header('Access-Control-Allow-Origin', req.headers.origin || '*');
   res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-user-organization, x-user-id, Range, Accept, Origin, X-Requested-With');
+  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-user-organization, x-user-id, x-tipo-compliance, Range, Accept, Origin, X-Requested-With');
   res.header('Access-Control-Allow-Credentials', 'true');
   res.sendStatus(200);
 });
@@ -77,7 +78,7 @@ app.use((req, res, next) => {
   if (req.path.includes('/anexos/')) {
     res.header('Access-Control-Allow-Origin', req.headers.origin || '*');
     res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-    res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-user-organization, x-user-id, Accept, Origin, X-Requested-With');
+    res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-user-organization, x-user-id, x-tipo-compliance, Accept, Origin, X-Requested-With');
     res.header('Access-Control-Allow-Credentials', 'true');
     res.header('Access-Control-Max-Age', '86400'); // 24 horas
   }
