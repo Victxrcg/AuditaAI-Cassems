@@ -114,6 +114,9 @@ router.post('/competencias/:complianceId/anexos/:tipoAnexo',
 // Listar anexos de uma competência
 router.get('/competencias/:complianceId/anexos', anexosController.listAnexos);
 
+// Listar anexos agrupados por categoria
+router.get('/competencias/:complianceId/anexos-categorias', anexosController.listAnexosByCategory);
+
 // Buscar anexo por ID
 router.get('/anexos/:anexoId', anexosController.getAnexo);
 

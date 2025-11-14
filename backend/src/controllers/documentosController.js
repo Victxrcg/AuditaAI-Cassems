@@ -34,11 +34,43 @@ async function ensureTables() {
       titulo VARCHAR(255) NOT NULL,
       descricao TEXT NULL,
       organizacao VARCHAR(50) NULL,
+      pasta_pai_id INT NULL,
       criado_por INT NULL,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      FOREIGN KEY (pasta_pai_id) REFERENCES pastas_documentos(id) ON DELETE CASCADE
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
   `, []);
+
+  // Adicionar coluna pasta_pai_id se não existir (migração)
+  try {
+    const columns = await executeQueryWithRetry(`
+      SELECT COLUMN_NAME 
+      FROM INFORMATION_SCHEMA.COLUMNS 
+      WHERE TABLE_SCHEMA = DATABASE() 
+      AND TABLE_NAME = 'pastas_documentos' 
+      AND COLUMN_NAME = 'pasta_pai_id'
+    `, []);
+
+    if (columns.length === 0) {
+      await executeQueryWithRetry(`
+        ALTER TABLE pastas_documentos 
+        ADD COLUMN pasta_pai_id INT NULL
+      `, []);
+
+      try {
+        await executeQueryWithRetry(`
+          ALTER TABLE pastas_documentos 
+          ADD CONSTRAINT fk_pasta_pai 
+          FOREIGN KEY (pasta_pai_id) REFERENCES pastas_documentos(id) ON DELETE CASCADE
+        `, []);
+      } catch (constraintError) {
+        console.log('⚠️ Constraint já existe ou erro ao criar:', constraintError.message);
+      }
+    }
+  } catch (error) {
+    console.log('⚠️ Erro ao verificar/criar coluna pasta_pai_id:', error.message);
+  }
 
   // Verificar se a coluna pasta_id existe na tabela documentos
   try {
@@ -241,6 +273,29 @@ exports.stream = async (req, res) => {
 
 // ===== FUNÇÕES PARA PASTAS =====
 
+// Função auxiliar para contar documentos recursivamente (incluindo subpastas)
+const contarDocumentosRecursivo = async (pastaId) => {
+  // Contar documentos diretos
+  const docsDiretos = await executeQueryWithRetry(
+    'SELECT COUNT(*) as count FROM documentos WHERE pasta_id = ?',
+    [pastaId]
+  );
+  let total = Number(docsDiretos[0]?.count || 0);
+
+  // Buscar subpastas
+  const subpastas = await executeQueryWithRetry(
+    'SELECT id FROM pastas_documentos WHERE pasta_pai_id = ?',
+    [pastaId]
+  );
+
+  // Contar documentos de subpastas recursivamente
+  for (const subpasta of subpastas) {
+    total += await contarDocumentosRecursivo(subpasta.id);
+  }
+
+  return total;
+};
+
 // Listar pastas
 exports.listarPastas = async (req, res) => {
   try {
@@ -248,25 +303,49 @@ exports.listarPastas = async (req, res) => {
     const userOrganization = req.headers['x-user-organization'] || req.query.organizacao;
     let where = '';
     const params = [];
+    
     if (userOrganization && userOrganization !== 'portes') {
-      where = 'WHERE p.organizacao = ?';
-      params.push(userOrganization);
+      // Para usuários não-Portes, mostrar:
+      // 1. Pastas da própria organização
+      // 2. Pastas de compliance vinculadas a competências da própria organização
+      where = `WHERE (
+        p.organizacao = ? 
+        OR (
+          p.titulo LIKE 'Documentos Compliance%' 
+          AND EXISTS (
+            SELECT 1 FROM compliance_fiscal cf 
+            WHERE cf.pasta_documentos_id = p.id 
+            AND cf.organizacao_criacao = ?
+          )
+        )
+      )`;
+      params.push(userOrganization, userOrganization);
+    } else if (userOrganization === 'portes') {
+      // Portes vê todas as pastas (sem filtro)
+      where = '';
     }
+    
     const rows = await executeQueryWithRetry(`
       SELECT p.*, 
-             COUNT(d.id) as total_documentos
+             COUNT(d.id) as total_documentos_diretos
       FROM pastas_documentos p
       LEFT JOIN documentos d ON p.id = d.pasta_id
       ${where}
-      GROUP BY p.id, p.titulo, p.descricao, p.organizacao, p.criado_por, p.created_at, p.updated_at
-      ORDER BY p.titulo ASC
+      GROUP BY p.id, p.titulo, p.descricao, p.organizacao, p.pasta_pai_id, p.criado_por, p.created_at, p.updated_at
+      ORDER BY p.pasta_pai_id IS NULL DESC, p.titulo ASC
     `, params);
     
-    const processedRows = rows.map(row => ({
-      ...row,
-      id: Number(row.id),
-      total_documentos: Number(row.total_documentos),
-      criado_por: row.criado_por ? Number(row.criado_por) : null
+    // Processar e calcular total de documentos incluindo subpastas
+    const processedRows = await Promise.all(rows.map(async (row) => {
+      const totalRecursivo = await contarDocumentosRecursivo(row.id);
+      return {
+        ...row,
+        id: Number(row.id),
+        total_documentos: totalRecursivo,
+        total_documentos_diretos: Number(row.total_documentos_diretos),
+        pasta_pai_id: row.pasta_pai_id ? Number(row.pasta_pai_id) : null,
+        criado_por: row.criado_por ? Number(row.criado_por) : null
+      };
     }));
     
     res.json(processedRows);
@@ -280,25 +359,55 @@ exports.listarPastas = async (req, res) => {
 exports.criarPasta = async (req, res) => {
   try {
     await ensureTables();
-    const { titulo, descricao } = req.body;
+    const { titulo, descricao, pasta_pai_id } = req.body;
     const userId = req.headers['x-user-id'] || req.body.userId;
     const organizacao = req.headers['x-user-organization'] || req.body.organizacao || 'cassems';
     
     if (!titulo) {
       return res.status(400).json({ error: 'Título da pasta é obrigatório' });
     }
-    
-    const result = await executeQueryWithRetry(`
-      INSERT INTO pastas_documentos (titulo, descricao, organizacao, criado_por)
-      VALUES (?, ?, ?, ?)
-    `, [titulo, descricao || null, organizacao, userId || null]);
-    
-    res.json({ 
-      success: true, 
-      id: Number(result.insertId), 
-      titulo,
-      descricao: descricao || null
-    });
+
+    // Se pasta_pai_id for fornecido, validar que existe e pertence à mesma organização
+    if (pasta_pai_id) {
+      const pastaPai = await executeQueryWithRetry(
+        'SELECT id, organizacao FROM pastas_documentos WHERE id = ?',
+        [pasta_pai_id]
+      );
+      
+      if (!pastaPai || pastaPai.length === 0) {
+        return res.status(400).json({ error: 'Pasta pai não encontrada' });
+      }
+
+      // A subpasta deve ter a mesma organização da pasta pai
+      const orgFinal = pastaPai[0].organizacao || organizacao;
+      
+      const result = await executeQueryWithRetry(`
+        INSERT INTO pastas_documentos (titulo, descricao, organizacao, pasta_pai_id, criado_por)
+        VALUES (?, ?, ?, ?, ?)
+      `, [titulo, descricao || null, orgFinal, pasta_pai_id, userId || null]);
+      
+      res.json({ 
+        success: true, 
+        id: Number(result.insertId), 
+        titulo,
+        descricao: descricao || null,
+        pasta_pai_id: Number(pasta_pai_id)
+      });
+    } else {
+      // Pasta raiz (sem pai)
+      const result = await executeQueryWithRetry(`
+        INSERT INTO pastas_documentos (titulo, descricao, organizacao, criado_por)
+        VALUES (?, ?, ?, ?)
+      `, [titulo, descricao || null, organizacao, userId || null]);
+      
+      res.json({ 
+        success: true, 
+        id: Number(result.insertId), 
+        titulo,
+        descricao: descricao || null,
+        pasta_pai_id: null
+      });
+    }
   } catch (err) {
     console.error('❌ Erro ao criar pasta:', err);
     res.status(500).json({ error: 'Erro ao criar pasta', details: err.message });
@@ -344,6 +453,18 @@ exports.removerPasta = async (req, res) => {
     if (docs[0].count > 0) {
       return res.status(400).json({ 
         error: 'Não é possível remover pasta com documentos. Mova ou remova os documentos primeiro.' 
+      });
+    }
+
+    // Verificar se a pasta tem subpastas
+    const subpastas = await executeQueryWithRetry(
+      'SELECT COUNT(*) as count FROM pastas_documentos WHERE pasta_pai_id = ?',
+      [id]
+    );
+
+    if (subpastas[0].count > 0) {
+      return res.status(400).json({
+        error: 'Não é possível remover pasta com subpastas. Remova ou mova as subpastas primeiro.'
       });
     }
     

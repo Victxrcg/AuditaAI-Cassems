@@ -268,7 +268,73 @@ const syncComplianceFolderById = async (pool, competenciaId) => {
   return createOrUpdateComplianceFolder(pool, competencia);
 };
 
-const saveDocumentFile = (buffer, sanitizedName, complianceId) => {
+// Mapeamento de tipos de anexo para nomes de categorias (pastas)
+const TIPO_ANEXO_TO_CATEGORY = {
+  'relatorio_inicial': 'relatorio_tecnico',
+  'relatorio_faturamento': 'relatorio_faturamento',
+  'imposto_compensado': 'comprovacao_compensacoes',
+  'emails': 'comprovacao_email',
+  'estabelecimento': 'notas_fiscais',
+  'valor_compensado': 'valor_compensado',
+  'resumo_folha_pagamento': 'resumo_folha_pagamento',
+  'planilha_quantidade_empregados': 'planilha_quantidade_empregados',
+  'decreto_3048_1999_vigente': 'decreto_3048_1999_vigente',
+  'solucao_consulta_cosit_79_2023_vigente': 'solucao_consulta_cosit_79_2023_vigente'
+};
+
+// Função para formatar período como string para pasta
+const formatPeriodoForFolder = (competencia) => {
+  const inicio = parseDateValue(competencia.competencia_inicio);
+  const fim = parseDateValue(competencia.competencia_fim);
+  
+  if (inicio && fim) {
+    const inicioStr = inicio.toISOString().split('T')[0].replace(/-/g, '-');
+    const fimStr = fim.toISOString().split('T')[0].replace(/-/g, '-');
+    return `${inicioStr}_${fimStr}`;
+  } else if (inicio) {
+    return inicio.toISOString().split('T')[0].replace(/-/g, '-');
+  } else if (fim) {
+    return fim.toISOString().split('T')[0].replace(/-/g, '-');
+  } else if (competencia.competencia_referencia) {
+    const ref = parseDateValue(competencia.competencia_referencia);
+    if (ref) {
+      return ref.toISOString().split('T')[0].replace(/-/g, '-');
+    }
+  }
+  
+  return `competencia_${competencia.id}`;
+};
+
+// Função para obter caminho da pasta da categoria
+const getCategoryFolderPath = (competencia, tipoAnexo) => {
+  const periodoFolder = formatPeriodoForFolder(competencia);
+  const categoryFolder = TIPO_ANEXO_TO_CATEGORY[tipoAnexo] || tipoAnexo;
+  const fullPath = path.join(DOCUMENTS_UPLOAD_DIR, periodoFolder, categoryFolder);
+  return fullPath;
+};
+
+// Função para garantir que a estrutura de pastas da categoria existe
+const ensureCategoryFolderStructure = (competencia, tipoAnexo) => {
+  const categoryPath = getCategoryFolderPath(competencia, tipoAnexo);
+  if (!fs.existsSync(categoryPath)) {
+    fs.mkdirSync(categoryPath, { recursive: true });
+    console.log(`📁 Pasta de categoria criada: ${categoryPath}`);
+  }
+  return categoryPath;
+};
+
+const saveDocumentFile = (buffer, sanitizedName, complianceId, competencia = null, tipoAnexo = null) => {
+  // Se temos informações da competência e tipo de anexo, usar estrutura hierárquica
+  if (competencia && tipoAnexo) {
+    const categoryPath = ensureCategoryFolderStructure(competencia, tipoAnexo);
+    const unique = `${Date.now()}-${complianceId}-${Math.round(Math.random() * 1e9)}`;
+    const storedName = `${unique}-${sanitizedName}`;
+    const filePath = path.join(categoryPath, storedName);
+    fs.writeFileSync(filePath, buffer);
+    return { storedName, filePath };
+  }
+  
+  // Fallback para estrutura antiga (retrocompatibilidade)
   const unique = `${Date.now()}-${complianceId}-${Math.round(Math.random() * 1e9)}`;
   const storedName = `${unique}-${sanitizedName}`;
   const filePath = path.join(DOCUMENTS_UPLOAD_DIR, storedName);
@@ -296,6 +362,10 @@ module.exports = {
   removeDocumentFileIfExists,
   buildComplianceFolderMetadata,
   formatDatePtBr,
-  resolveFolderOrganization
+  resolveFolderOrganization,
+  getCategoryFolderPath,
+  ensureCategoryFolderStructure,
+  formatPeriodoForFolder,
+  TIPO_ANEXO_TO_CATEGORY
 };
 

@@ -91,6 +91,29 @@ exports.uploadAnexo = async (req, res) => {
     console.log('🔍 Debug - Nome original:', req.file.originalname);
     console.log('🔍 Debug - Nome sanitizado:', sanitizedFileName);
     
+    // Buscar informações da competência para usar estrutura hierárquica
+    const complianceRows = await pool.query(`
+      SELECT 
+        id,
+        competencia_inicio,
+        competencia_fim,
+        competencia_referencia,
+        organizacao_criacao
+      FROM compliance_fiscal
+      WHERE id = ?
+    `, [complianceId]);
+    
+    const complianceInfo = complianceRows && complianceRows.length > 0 ? complianceRows[0] : null;
+    
+    // Determinar caminho do arquivo (usar estrutura hierárquica se possível)
+    let filePathToSave = req.file.path;
+    if (complianceInfo) {
+      // Usar estrutura hierárquica por período e categoria
+      const savedFile = saveDocumentFile(fileData, sanitizedFileName, complianceId, complianceInfo, tipoAnexo);
+      filePathToSave = savedFile.filePath;
+      console.log('📁 Arquivo salvo na estrutura hierárquica:', filePathToSave);
+    }
+    
     // Inserir anexo na tabela compliance_anexos usando a estrutura correta
     const result = await pool.query(`
       INSERT INTO compliance_anexos (
@@ -110,7 +133,7 @@ exports.uploadAnexo = async (req, res) => {
       complianceId,
       tipoAnexo,
       sanitizedFileName,
-      req.file.path,
+      filePathToSave,
       fileData,
       req.file.size,
       req.file.mimetype,
@@ -150,22 +173,25 @@ exports.uploadAnexo = async (req, res) => {
       await ensureComplianceDocumentsInfrastructure(pool);
       await syncComplianceFolderById(pool, complianceId);
 
-      const complianceRows = await runQuery(pool, `
-        SELECT 
-          id,
-          organizacao_criacao,
-          pasta_documentos_id,
-          created_by,
-          competencia_inicio,
-          competencia_fim,
-          competencia_referencia
-        FROM compliance_fiscal
-        WHERE id = ?
-      `, [complianceId]);
+      // Se complianceInfo ainda não foi buscado, buscar agora
+      if (!complianceInfo) {
+        const complianceRowsRefetch = await runQuery(pool, `
+          SELECT 
+            id,
+            organizacao_criacao,
+            pasta_documentos_id,
+            created_by,
+            competencia_inicio,
+            competencia_fim,
+            competencia_referencia
+          FROM compliance_fiscal
+          WHERE id = ?
+        `, [complianceId]);
 
-      const complianceInfo = Array.isArray(complianceRows) && complianceRows.length > 0
-        ? complianceRows[0]
-        : null;
+        complianceInfo = Array.isArray(complianceRowsRefetch) && complianceRowsRefetch.length > 0
+          ? complianceRowsRefetch[0]
+          : null;
+      }
 
       const pastaDocumentosId = complianceInfo?.pasta_documentos_id;
 
@@ -179,7 +205,8 @@ exports.uploadAnexo = async (req, res) => {
         const pastaInfo = Array.isArray(pastaRows) && pastaRows.length > 0 ? pastaRows[0] : null;
         const pastaOrganizacao = pastaInfo?.organizacao || complianceInfo?.organizacao_criacao || currentUser.organizacao || 'cassems';
 
-        const { filePath } = saveDocumentFile(fileData, sanitizedFileName, complianceId);
+        // Arquivo já foi salvo na estrutura hierárquica acima, usar o caminho já salvo
+        const filePath = filePathToSave;
 
         try {
           const documentoResult = await runQuery(pool, `
@@ -460,9 +487,60 @@ exports.getAnexosByTipo = async (req, res) => {
       data: rows
     });
   } catch (error) {
-    console.error(' Erro ao buscar anexos por tipo:', error);
+    console.error('❌ Erro ao buscar anexos por tipo:', error);
     res.status(500).json({
       error: 'Erro ao buscar anexos por tipo',
+      details: error.message
+    });
+  } finally {
+    if (server) server.close();
+  }
+};
+
+// Listar anexos agrupados por categoria
+exports.listAnexosByCategory = async (req, res) => {
+  let pool, server;
+  try {
+    const { complianceId } = req.params;
+    ({ pool, server } = await getDbPoolWithTunnel());
+    
+    const rows = await pool.query(`
+      SELECT 
+        id, 
+        nome_arquivo, 
+        tipo_anexo, 
+        tamanho_arquivo, 
+        tipo_mime,
+        created_at,
+        uploadado_por,
+        organizacao_upload
+      FROM compliance_anexos 
+      WHERE compliance_id = ?
+      ORDER BY tipo_anexo, created_at DESC
+    `, [complianceId]);
+
+    // Agrupar por tipo_anexo (categoria)
+    const anexosPorCategoria = {};
+    
+    rows.forEach(anexo => {
+      const categoria = anexo.tipo_anexo;
+      if (!anexosPorCategoria[categoria]) {
+        anexosPorCategoria[categoria] = [];
+      }
+      anexosPorCategoria[categoria].push(anexo);
+    });
+
+    res.json({
+      success: true,
+      data: {
+        categorias: anexosPorCategoria,
+        total: rows.length
+      }
+    });
+  } catch (error) {
+    console.error('❌ Erro ao listar anexos por categoria:', error);
+    res.status(500).json({
+      error: 'Erro ao listar anexos por categoria',
       details: error.message
     });
   } finally {
