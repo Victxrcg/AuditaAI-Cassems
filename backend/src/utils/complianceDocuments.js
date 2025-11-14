@@ -335,7 +335,18 @@ const syncComplianceFolderById = async (pool, competenciaId) => {
   const competencia = rows[0];
   competencia.id = Number(competenciaId);
 
-  return createOrUpdateComplianceFolder(pool, competencia);
+  const pastaId = await createOrUpdateComplianceFolder(pool, competencia);
+
+  // Migrar documentos existentes para subpastas (se houver)
+  if (pastaId) {
+    try {
+      await migrarDocumentosParaSubpastas(pool, pastaId);
+    } catch (migError) {
+      console.error('⚠️ Erro ao migrar documentos durante sincronização (continuando):', migError);
+    }
+  }
+
+  return pastaId;
 };
 
 // Mapeamento de tipos de anexo para nomes de categorias (pastas físicas)
@@ -449,19 +460,95 @@ const removeDocumentFileIfExists = (filePath) => {
 const getSubpastaIdByTipoAnexo = async (pool, pastaPaiId, tipoAnexo) => {
   const subpastaNome = TIPO_ANEXO_TO_SUBPASTA_NAME[tipoAnexo];
   if (!subpastaNome) {
+    console.log(`⚠️ Tipo de anexo ${tipoAnexo} não tem mapeamento para subpasta`);
     return null;
   }
 
+  console.log(`🔍 Buscando subpasta: pasta_pai_id=${pastaPaiId}, titulo="${subpastaNome}"`);
+
   const rows = await runQuery(pool, `
-    SELECT id FROM pastas_documentos 
+    SELECT id, titulo FROM pastas_documentos 
     WHERE pasta_pai_id = ? AND titulo = ?
   `, [pastaPaiId, subpastaNome]);
 
+  console.log(`🔍 Resultado da busca de subpasta:`, rows);
+
   if (rows && rows.length > 0) {
-    return Number(rows[0].id);
+    const subpastaId = Number(rows[0].id);
+    console.log(`✅ Subpasta encontrada: ID=${subpastaId}, Nome="${rows[0].titulo}"`);
+    return subpastaId;
+  }
+
+  // Se não encontrou, tentar criar a subpasta
+  console.log(`⚠️ Subpasta não encontrada, tentando criar: ${subpastaNome}`);
+  try {
+    const subpastaId = await getOrCreateSubpasta(pool, pastaPaiId, tipoAnexo, null, null);
+    if (subpastaId) {
+      console.log(`✅ Subpasta criada: ID=${subpastaId}`);
+      return subpastaId;
+    }
+  } catch (error) {
+    console.error(`❌ Erro ao criar subpasta:`, error);
   }
 
   return null;
+};
+
+// Função para migrar documentos existentes para subpastas corretas
+const migrarDocumentosParaSubpastas = async (pool, pastaPaiId) => {
+  console.log(`🔄 Iniciando migração de documentos para subpastas (pasta_pai_id=${pastaPaiId})`);
+  
+  try {
+    // Buscar todos os documentos na pasta principal
+    const documentos = await runQuery(pool, `
+      SELECT d.id, d.nome_arquivo, d.pasta_id, ca.tipo_anexo
+      FROM documentos d
+      INNER JOIN compliance_anexos ca ON d.id = ca.documento_id
+      WHERE d.pasta_id = ?
+    `, [pastaPaiId]);
+
+    console.log(`📋 Encontrados ${documentos.length} documentos para migrar`);
+
+    let migrados = 0;
+    let erros = 0;
+
+    for (const doc of documentos) {
+      try {
+        if (!doc.tipo_anexo) {
+          console.log(`⚠️ Documento ${doc.id} não tem tipo_anexo, pulando...`);
+          continue;
+        }
+
+        // Buscar subpasta correspondente
+        const subpastaId = await getSubpastaIdByTipoAnexo(pool, pastaPaiId, doc.tipo_anexo);
+        
+        if (subpastaId && subpastaId !== doc.pasta_id) {
+          // Atualizar pasta_id do documento
+          await runQuery(pool, `
+            UPDATE documentos 
+            SET pasta_id = ? 
+            WHERE id = ?
+          `, [subpastaId, doc.id]);
+          
+          console.log(`✅ Documento ${doc.id} (${doc.nome_arquivo}) migrado para subpasta ${subpastaId} (${doc.tipo_anexo})`);
+          migrados++;
+        } else if (!subpastaId) {
+          console.log(`⚠️ Subpasta não encontrada para tipo_anexo=${doc.tipo_anexo}, documento ${doc.id} permanece na pasta principal`);
+        } else {
+          console.log(`ℹ️ Documento ${doc.id} já está na subpasta correta`);
+        }
+      } catch (error) {
+        console.error(`❌ Erro ao migrar documento ${doc.id}:`, error);
+        erros++;
+      }
+    }
+
+    console.log(`✅ Migração concluída: ${migrados} migrados, ${erros} erros`);
+    return { migrados, erros, total: documentos.length };
+  } catch (error) {
+    console.error('❌ Erro na migração de documentos:', error);
+    throw error;
+  }
 };
 
 module.exports = {
@@ -481,6 +568,7 @@ module.exports = {
   TIPO_ANEXO_TO_CATEGORY,
   TIPO_ANEXO_TO_SUBPASTA_NAME,
   getSubpastaIdByTipoAnexo,
-  getOrCreateSubpasta
+  getOrCreateSubpasta,
+  migrarDocumentosParaSubpastas
 };
 

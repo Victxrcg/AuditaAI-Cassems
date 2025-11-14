@@ -8,7 +8,8 @@ const mammoth = require('mammoth');
 const {
   ensureComplianceDocumentsInfrastructure,
   createOrUpdateComplianceFolder,
-  syncComplianceFolderById
+  syncComplianceFolderById,
+  migrarDocumentosParaSubpastas
 } = require('../utils/complianceDocuments');
 
 // Configurar OpenAI (opcional)
@@ -523,6 +524,48 @@ exports.updateComplianceField = async (req, res) => {
     console.error('❌ Erro ao atualizar campo:', error);
     res.status(500).json({
       error: 'Erro ao atualizar campo',
+      details: error.message
+    });
+  } finally {
+    if (server) server.close();
+  }
+};
+
+// Migrar documentos de uma competência para subpastas
+exports.migrarDocumentosCompetencia = async (req, res) => {
+  let pool, server;
+  try {
+    const { id } = req.params;
+    ({ pool, server } = await getDbPoolWithTunnel());
+
+    // Buscar pasta_documentos_id da competência
+    const competenciaRows = await pool.query(`
+      SELECT pasta_documentos_id 
+      FROM compliance_fiscal 
+      WHERE id = ?
+    `, [id]);
+
+    if (!competenciaRows || competenciaRows.length === 0) {
+      return res.status(404).json({ error: 'Competência não encontrada' });
+    }
+
+    const pastaDocumentosId = competenciaRows[0].pasta_documentos_id;
+    if (!pastaDocumentosId) {
+      return res.status(400).json({ error: 'Competência não tem pasta de documentos associada' });
+    }
+
+    // Executar migração
+    const resultado = await migrarDocumentosParaSubpastas(pool, pastaDocumentosId);
+
+    res.json({
+      success: true,
+      message: 'Migração concluída',
+      data: resultado
+    });
+  } catch (error) {
+    console.error('❌ Erro ao migrar documentos:', error);
+    res.status(500).json({
+      error: 'Erro ao migrar documentos',
       details: error.message
     });
   } finally {

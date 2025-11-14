@@ -212,16 +212,20 @@ exports.uploadAnexo = async (req, res) => {
         // Buscar subpasta correspondente ao tipo de anexo
         let pastaIdParaDocumento = pastaDocumentosId; // Fallback para pasta principal
         try {
+          console.log(`🔍 Buscando subpasta para tipo_anexo="${tipoAnexo}" na pasta_pai_id=${pastaDocumentosId}`);
           const subpastaId = await getSubpastaIdByTipoAnexo(pool, pastaDocumentosId, tipoAnexo);
           if (subpastaId) {
             pastaIdParaDocumento = subpastaId;
-            console.log(`📁 Documento será vinculado à subpasta: ${subpastaId} (tipo: ${tipoAnexo})`);
+            console.log(`✅ Documento será vinculado à subpasta: ${subpastaId} (tipo: ${tipoAnexo})`);
           } else {
-            console.log(`⚠️ Subpasta não encontrada para ${tipoAnexo}, usando pasta principal`);
+            console.log(`⚠️ Subpasta não encontrada para ${tipoAnexo}, usando pasta principal ${pastaDocumentosId}`);
           }
         } catch (subpastaError) {
           console.error('❌ Erro ao buscar subpasta, usando pasta principal:', subpastaError);
+          console.error('❌ Stack trace:', subpastaError.stack);
         }
+        
+        console.log(`📁 pastaIdParaDocumento final: ${pastaIdParaDocumento}`);
 
         try {
           const documentoResult = await runQuery(pool, `

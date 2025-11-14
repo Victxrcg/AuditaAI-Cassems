@@ -144,7 +144,10 @@ router.post('/competencias/:id/gerar-parecer', (req, res, next) => {
 });
 
 // Obter histórico de alterações de uma competência
-router.get('/competencias/:id/historico', complianceController.getHistorico); // ← NOVA ROTA
+router.get('/competencias/:id/historico', complianceController.getHistorico);
+
+// Migrar documentos de uma competência para subpastas
+router.post('/competencias/:id/migrar-documentos', complianceController.migrarDocumentosCompetencia);
 
 // Debug: listar todas as rotas registradas
 console.log('🔍 Rotas compliance registradas:');
