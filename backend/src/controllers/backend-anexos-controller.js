@@ -29,15 +29,58 @@ const registrarAlteracao = async (pool, complianceId, campo, valorAnterior, valo
   }
 };
 
-// Função para sanitizar nome do arquivo
+// Função para padronizar nome do arquivo
 function sanitizeFileName(filename) {
-  // Remover caracteres especiais e acentos
-  return filename
+  if (!filename) return 'arquivo_sem_nome';
+  
+  // Separar nome e extensão
+  const lastDot = filename.lastIndexOf('.');
+  const name = lastDot > 0 ? filename.substring(0, lastDot) : filename;
+  const ext = lastDot > 0 ? filename.substring(lastDot) : '';
+  
+  // Normalizar e remover acentos de forma mais inteligente
+  let normalized = name
     .normalize('NFD') // Decompor caracteres acentuados
-    .replace(/[\u0300-\u036f]/g, '') // Remover diacríticos
-    .replace(/[^a-zA-Z0-9._-]/g, '_') // Substituir caracteres especiais por _
-    .replace(/_+/g, '_') // Remover underscores duplos
-    .replace(/^_|_$/g, ''); // Remover underscores do início/fim
+    .replace(/[\u0300-\u036f]/g, ''); // Remover diacríticos
+  
+  // Substituir caracteres problemáticos por equivalentes seguros
+  normalized = normalized
+    .replace(/[àáâãäå]/gi, 'a')
+    .replace(/[èéêë]/gi, 'e')
+    .replace(/[ìíîï]/gi, 'i')
+    .replace(/[òóôõö]/gi, 'o')
+    .replace(/[ùúûü]/gi, 'u')
+    .replace(/[ç]/gi, 'c')
+    .replace(/[ñ]/gi, 'n')
+    .replace(/[ýÿ]/gi, 'y');
+  
+  // Substituir espaços múltiplos por um único espaço
+  normalized = normalized.replace(/\s+/g, ' ');
+  
+  // Substituir espaços por hífens (mais legível que underscores)
+  normalized = normalized.replace(/\s/g, '-');
+  
+  // Remover caracteres especiais problemáticos, mantendo apenas letras, números, hífens, pontos e underscores
+  normalized = normalized.replace(/[^a-zA-Z0-9._-]/g, '');
+  
+  // Remover hífens/underscores duplos ou múltiplos
+  normalized = normalized.replace(/[-_]{2,}/g, '-');
+  
+  // Remover hífens/underscores do início e fim
+  normalized = normalized.replace(/^[-_]+|[-_]+$/g, '');
+  
+  // Limitar tamanho do nome (máximo 200 caracteres)
+  if (normalized.length > 200) {
+    normalized = normalized.substring(0, 200);
+  }
+  
+  // Se ficou vazio após sanitização, usar nome padrão
+  if (!normalized) {
+    normalized = 'arquivo';
+  }
+  
+  // Retornar nome padronizado + extensão
+  return normalized + ext.toLowerCase();
 }
 
 // Upload de anexo

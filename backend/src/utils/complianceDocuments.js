@@ -399,12 +399,19 @@ const TIPO_ANEXO_TO_SUBPASTA_NAME = {
 };
 
 // Tipos de anexo que devem ter subpastas criadas (principais categorias)
+// Ordem deve corresponder à sequência dos cards no frontend:
+// 1. Período (não é subpasta, é a pasta principal)
+// 2. Relatório Técnico (id: '2')
+// 3. Relatório Faturamento (id: '3')
+// 4. Comprovação de Compensações (id: '4')
+// 5. Comprovação de Email (id: '6')
+// 6. Notas Fiscais (id: '7')
 const TIPOS_ANEXO_PRINCIPAIS = [
-  'relatorio_inicial',
-  'relatorio_faturamento',
-  'imposto_compensado',
-  'emails',
-  'estabelecimento'
+  'relatorio_inicial',        // id: '2' - Relatório Técnico
+  'relatorio_faturamento',    // id: '3' - Relatório Faturamento
+  'imposto_compensado',       // id: '4' - Comprovação de Compensações
+  'emails',                    // id: '6' - Comprovação de Email
+  'estabelecimento'            // id: '7' - Notas Fiscais
 ];
 
 // Função para formatar período como string para pasta

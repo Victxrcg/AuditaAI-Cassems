@@ -7,6 +7,60 @@ const { executeQueryWithRetry } = require('../lib/db');
 const uploadsDir = path.join(process.cwd(), 'backend', 'uploads', 'documentos');
 fs.mkdirSync(uploadsDir, { recursive: true });
 
+// Função para padronizar nome do arquivo (mesma lógica do compliance)
+const sanitizeFileName = (filename) => {
+  if (!filename) return 'arquivo_sem_nome';
+  
+  // Separar nome e extensão
+  const lastDot = filename.lastIndexOf('.');
+  const name = lastDot > 0 ? filename.substring(0, lastDot) : filename;
+  const ext = lastDot > 0 ? filename.substring(lastDot) : '';
+  
+  // Normalizar e remover acentos de forma mais inteligente
+  let normalized = name
+    .normalize('NFD') // Decompor caracteres acentuados
+    .replace(/[\u0300-\u036f]/g, ''); // Remover diacríticos
+  
+  // Substituir caracteres problemáticos por equivalentes seguros
+  normalized = normalized
+    .replace(/[àáâãäå]/gi, 'a')
+    .replace(/[èéêë]/gi, 'e')
+    .replace(/[ìíîï]/gi, 'i')
+    .replace(/[òóôõö]/gi, 'o')
+    .replace(/[ùúûü]/gi, 'u')
+    .replace(/[ç]/gi, 'c')
+    .replace(/[ñ]/gi, 'n')
+    .replace(/[ýÿ]/gi, 'y');
+  
+  // Substituir espaços múltiplos por um único espaço
+  normalized = normalized.replace(/\s+/g, ' ');
+  
+  // Substituir espaços por hífens (mais legível que underscores)
+  normalized = normalized.replace(/\s/g, '-');
+  
+  // Remover caracteres especiais problemáticos, mantendo apenas letras, números, hífens, pontos e underscores
+  normalized = normalized.replace(/[^a-zA-Z0-9._-]/g, '');
+  
+  // Remover hífens/underscores duplos ou múltiplos
+  normalized = normalized.replace(/[-_]{2,}/g, '-');
+  
+  // Remover hífens/underscores do início e fim
+  normalized = normalized.replace(/^[-_]+|[-_]+$/g, '');
+  
+  // Limitar tamanho do nome (máximo 200 caracteres)
+  if (normalized.length > 200) {
+    normalized = normalized.substring(0, 200);
+  }
+  
+  // Se ficou vazio após sanitização, usar nome padrão
+  if (!normalized) {
+    normalized = 'arquivo';
+  }
+  
+  // Retornar nome padronizado + extensão
+  return normalized + ext.toLowerCase();
+};
+
 // Multer storage
 const storage = multer.diskStorage({
   destination: (_req, _file, cb) => {
@@ -14,7 +68,7 @@ const storage = multer.diskStorage({
   },
   filename: (_req, file, cb) => {
     const unique = Date.now() + '-' + Math.round(Math.random() * 1e9);
-    const safeName = file.originalname.replace(/[^a-zA-Z0-9_.-]/g, '_');
+    const safeName = sanitizeFileName(file.originalname);
     cb(null, unique + '-' + safeName);
   }
 });
@@ -171,11 +225,15 @@ exports.enviar = async (req, res) => {
         org = rows[0].organizacao;
       }
     }
+    
+    // Padronizar nome do arquivo para salvar no banco
+    const nomePadronizado = sanitizeFileName(originalname);
+    
     const result = await executeQueryWithRetry(`
       INSERT INTO documentos (nome_arquivo, caminho, tamanho, mimetype, organizacao, enviado_por, pasta_id)
       VALUES (?, ?, ?, ?, ?, ?, ?)
-    `, [originalname, filePath, size, mimetype, org, userId || null, pastaId || null]);
-    res.json({ success: true, id: Number(result.insertId), filename: originalname, size });
+    `, [nomePadronizado, filePath, size, mimetype, org, userId || null, pastaId || null]);
+    res.json({ success: true, id: Number(result.insertId), filename: nomePadronizado, size });
   } catch (err) {
     console.error('❌ Erro ao enviar documento:', err);
     res.status(500).json({ error: 'Erro ao enviar documento', details: err.message });
@@ -325,6 +383,15 @@ exports.listarPastas = async (req, res) => {
       where = '';
     }
     
+    // Mapeamento de ordem das subpastas de compliance (sequência dos cards)
+    const ordemSubpastas = {
+      'Relatório Técnico': 1,
+      'Relatório Faturamento': 2,
+      'Comprovação de Compensações': 3,
+      'Comprovação de Email': 4,
+      'Notas Fiscais': 5
+    };
+
     const rows = await executeQueryWithRetry(`
       SELECT p.*, 
              COUNT(d.id) as total_documentos_diretos
@@ -332,7 +399,21 @@ exports.listarPastas = async (req, res) => {
       LEFT JOIN documentos d ON p.id = d.pasta_id
       ${where}
       GROUP BY p.id, p.titulo, p.descricao, p.organizacao, p.pasta_pai_id, p.criado_por, p.created_at, p.updated_at
-      ORDER BY p.pasta_pai_id IS NULL DESC, p.titulo ASC
+      ORDER BY 
+        p.pasta_pai_id IS NULL DESC,
+        CASE 
+          WHEN p.pasta_pai_id IS NOT NULL AND p.titulo IN ('Relatório Técnico', 'Relatório Faturamento', 'Comprovação de Compensações', 'Comprovação de Email', 'Notas Fiscais') THEN
+            CASE p.titulo
+              WHEN 'Relatório Técnico' THEN 1
+              WHEN 'Relatório Faturamento' THEN 2
+              WHEN 'Comprovação de Compensações' THEN 3
+              WHEN 'Comprovação de Email' THEN 4
+              WHEN 'Notas Fiscais' THEN 5
+              ELSE 99
+            END
+          ELSE 0
+        END,
+        p.titulo ASC
     `, params);
     
     // Processar e calcular total de documentos incluindo subpastas
@@ -459,44 +540,6 @@ exports.removerPasta = async (req, res) => {
     // Verificar se é uma pasta de compliance (tem subpastas criadas automaticamente)
     const isComplianceFolder = pastaInfo[0].titulo && pastaInfo[0].titulo.includes('Documentos Compliance');
     
-    // Verificar se a pasta tem documentos (incluindo documentos em subpastas)
-    const docs = await executeQueryWithRetry(
-      'SELECT COUNT(*) as count FROM documentos WHERE pasta_id = ?', 
-      [id]
-    );
-    
-    // Contar documentos em subpastas recursivamente
-    const contarDocsSubpastas = async (pastaId) => {
-      let total = Number(docs[0]?.count || 0);
-      
-      const subpastas = await executeQueryWithRetry(
-        'SELECT id FROM pastas_documentos WHERE pasta_pai_id = ?',
-        [pastaId]
-      );
-      
-      for (const subpasta of subpastas) {
-        const docsSubpasta = await executeQueryWithRetry(
-          'SELECT COUNT(*) as count FROM documentos WHERE pasta_id = ?',
-          [subpasta.id]
-        );
-        total += Number(docsSubpasta[0]?.count || 0);
-        
-        // Recursivo para subpastas de subpastas
-        total += await contarDocsSubpastas(subpasta.id);
-      }
-      
-      return total;
-    };
-    
-    const totalDocs = await contarDocsSubpastas(id);
-    
-    if (totalDocs > 0) {
-      return res.status(400).json({ 
-        error: `Não é possível remover pasta com documentos. A pasta contém ${totalDocs} documento(s) (incluindo documentos em subpastas). Mova ou remova os documentos primeiro.`,
-        totalDocumentos: totalDocs
-      });
-    }
-
     // Se for pasta de compliance, verificar se está vinculada a uma competência
     if (isComplianceFolder) {
       const complianceVinculado = await executeQueryWithRetry(
@@ -511,15 +554,15 @@ exports.removerPasta = async (req, res) => {
         });
       }
       
-      // Se a competência foi deletada, permitir remoção recursiva das subpastas vazias
+      // Se a competência foi deletada, tratar subpastas primeiro
       const subpastas = await executeQueryWithRetry(
         'SELECT id, titulo FROM pastas_documentos WHERE pasta_pai_id = ?',
         [id]
       );
       
       if (subpastas && subpastas.length > 0) {
-        // Verificar se todas as subpastas estão vazias
-        let todasVazias = true;
+        // Verificar quais subpastas estão vazias e quais têm documentos
+        const subpastasVazias = [];
         const subpastasComDocs = [];
         
         for (const subpasta of subpastas) {
@@ -529,26 +572,29 @@ exports.removerPasta = async (req, res) => {
           );
           const count = Number(docsSubpasta[0]?.count || 0);
           if (count > 0) {
-            todasVazias = false;
             subpastasComDocs.push({
               id: subpasta.id,
               titulo: subpasta.titulo,
               totalDocs: count
             });
+          } else {
+            subpastasVazias.push(subpasta);
           }
         }
         
-        if (todasVazias) {
-          // Remover todas as subpastas vazias primeiro
-          for (const subpasta of subpastas) {
+        // Remover subpastas vazias automaticamente
+        if (subpastasVazias.length > 0) {
+          for (const subpasta of subpastasVazias) {
             await executeQueryWithRetry(
               'DELETE FROM pastas_documentos WHERE id = ?',
               [subpasta.id]
             );
           }
-          console.log(`✅ ${subpastas.length} subpastas vazias removidas automaticamente`);
-        } else {
-          // Algumas subpastas têm documentos
+          console.log(`✅ ${subpastasVazias.length} subpastas vazias removidas automaticamente`);
+        }
+        
+        // Se ainda há subpastas com documentos, bloquear remoção
+        if (subpastasComDocs.length > 0) {
           const subpastasNomes = subpastasComDocs.map(s => `${s.titulo} (${s.totalDocs} docs)`).join(', ');
           return res.status(400).json({
             error: `Não é possível remover pasta. Algumas subpastas contêm documentos: ${subpastasNomes}. Remova os documentos primeiro.`,
@@ -556,8 +602,59 @@ exports.removerPasta = async (req, res) => {
           });
         }
       }
+      
+      // Verificar documentos na pasta principal (após remover subpastas vazias)
+      const docs = await executeQueryWithRetry(
+        'SELECT COUNT(*) as count FROM documentos WHERE pasta_id = ?', 
+        [id]
+      );
+      
+      if (docs[0]?.count > 0) {
+        return res.status(400).json({ 
+          error: `Não é possível remover pasta. A pasta contém ${docs[0].count} documento(s). Mova ou remova os documentos primeiro.`,
+          totalDocumentos: docs[0].count
+        });
+      }
     } else {
-      // Para pastas normais (não compliance), verificar subpastas normalmente
+      // Para pastas normais (não compliance), verificar documentos e subpastas normalmente
+      const docs = await executeQueryWithRetry(
+        'SELECT COUNT(*) as count FROM documentos WHERE pasta_id = ?', 
+        [id]
+      );
+      
+      // Contar documentos em subpastas recursivamente
+      const contarDocsSubpastas = async (pastaId) => {
+        let total = Number(docs[0]?.count || 0);
+        
+        const subpastas = await executeQueryWithRetry(
+          'SELECT id FROM pastas_documentos WHERE pasta_pai_id = ?',
+          [pastaId]
+        );
+        
+        for (const subpasta of subpastas) {
+          const docsSubpasta = await executeQueryWithRetry(
+            'SELECT COUNT(*) as count FROM documentos WHERE pasta_id = ?',
+            [subpasta.id]
+          );
+          total += Number(docsSubpasta[0]?.count || 0);
+          
+          // Recursivo para subpastas de subpastas
+          total += await contarDocsSubpastas(subpasta.id);
+        }
+        
+        return total;
+      };
+      
+      const totalDocs = await contarDocsSubpastas(id);
+      
+      if (totalDocs > 0) {
+        return res.status(400).json({ 
+          error: `Não é possível remover pasta com documentos. A pasta contém ${totalDocs} documento(s) (incluindo documentos em subpastas). Mova ou remova os documentos primeiro.`,
+          totalDocumentos: totalDocs
+        });
+      }
+      
+      // Verificar subpastas
       const subpastas = await executeQueryWithRetry(
         'SELECT id, titulo FROM pastas_documentos WHERE pasta_pai_id = ?',
         [id]
