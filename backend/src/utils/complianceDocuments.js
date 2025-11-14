@@ -200,6 +200,38 @@ const buildComplianceFolderMetadata = (competencia) => {
   return { titulo, descricao, organizacao: folderOrganizacao };
 };
 
+// Criar ou buscar subpasta para um tipo de anexo
+const getOrCreateSubpasta = async (pool, pastaPaiId, tipoAnexo, organizacao, criadoPor) => {
+  const subpastaNome = TIPO_ANEXO_TO_SUBPASTA_NAME[tipoAnexo];
+  if (!subpastaNome) {
+    return null;
+  }
+
+  // Verificar se subpasta já existe
+  const existingSubpasta = await runQuery(pool, `
+    SELECT id FROM pastas_documentos 
+    WHERE pasta_pai_id = ? AND titulo = ?
+  `, [pastaPaiId, subpastaNome]);
+
+  if (existingSubpasta && existingSubpasta.length > 0) {
+    return Number(existingSubpasta[0].id);
+  }
+
+  // Criar subpasta
+  const subpastaResult = await runQuery(pool, `
+    INSERT INTO pastas_documentos (titulo, descricao, organizacao, pasta_pai_id, criado_por)
+    VALUES (?, ?, ?, ?, ?)
+  `, [
+    subpastaNome,
+    `Documentos da categoria ${subpastaNome}`,
+    organizacao,
+    pastaPaiId,
+    criadoPor
+  ]);
+
+  return Number(subpastaResult.insertId);
+};
+
 const createOrUpdateComplianceFolder = async (pool, competencia) => {
   await ensureComplianceDocumentsInfrastructure(pool);
 
@@ -213,7 +245,10 @@ const createOrUpdateComplianceFolder = async (pool, competencia) => {
     || competencia.ultima_alteracao_organizacao
     || null;
 
+  const criadoPor = competencia.created_by || null;
+
   if (!pastaId) {
+    // Criar pasta principal
     const insertResult = await runQuery(pool, `
       INSERT INTO pastas_documentos (titulo, descricao, organizacao, criado_por)
       VALUES (?, ?, ?, ?)
@@ -221,7 +256,7 @@ const createOrUpdateComplianceFolder = async (pool, competencia) => {
       metadata.titulo,
       metadata.descricao,
       folderOrganizacao || null,
-      competencia.created_by || null
+      criadoPor
     ]);
 
     pastaId = Number(insertResult.insertId);
@@ -231,12 +266,47 @@ const createOrUpdateComplianceFolder = async (pool, competencia) => {
       SET pasta_documentos_id = ?
       WHERE id = ?
     `, [pastaId, competencia.id]);
+
+    // Criar subpastas automaticamente para as categorias principais
+    console.log('📁 Criando subpastas para a competência:', competencia.id);
+    for (const tipoAnexo of TIPOS_ANEXO_PRINCIPAIS) {
+      try {
+        const subpastaId = await getOrCreateSubpasta(
+          pool,
+          pastaId,
+          tipoAnexo,
+          folderOrganizacao,
+          criadoPor
+        );
+        if (subpastaId) {
+          console.log(`✅ Subpasta criada: ${TIPO_ANEXO_TO_SUBPASTA_NAME[tipoAnexo]} (ID: ${subpastaId})`);
+        }
+      } catch (error) {
+        console.error(`❌ Erro ao criar subpasta ${tipoAnexo}:`, error);
+      }
+    }
   } else {
+    // Atualizar pasta principal
     await runQuery(pool, `
       UPDATE pastas_documentos
       SET titulo = ?, descricao = ?, organizacao = COALESCE(?, organizacao), updated_at = CURRENT_TIMESTAMP
       WHERE id = ?
     `, [metadata.titulo, metadata.descricao, folderOrganizacao || null, pastaId]);
+
+    // Garantir que as subpastas existem (caso a pasta já exista mas as subpastas não)
+    for (const tipoAnexo of TIPOS_ANEXO_PRINCIPAIS) {
+      try {
+        await getOrCreateSubpasta(
+          pool,
+          pastaId,
+          tipoAnexo,
+          folderOrganizacao,
+          criadoPor
+        );
+      } catch (error) {
+        console.error(`❌ Erro ao verificar/criar subpasta ${tipoAnexo}:`, error);
+      }
+    }
   }
 
   return pastaId;
@@ -268,7 +338,7 @@ const syncComplianceFolderById = async (pool, competenciaId) => {
   return createOrUpdateComplianceFolder(pool, competencia);
 };
 
-// Mapeamento de tipos de anexo para nomes de categorias (pastas)
+// Mapeamento de tipos de anexo para nomes de categorias (pastas físicas)
 const TIPO_ANEXO_TO_CATEGORY = {
   'relatorio_inicial': 'relatorio_tecnico',
   'relatorio_faturamento': 'relatorio_faturamento',
@@ -281,6 +351,29 @@ const TIPO_ANEXO_TO_CATEGORY = {
   'decreto_3048_1999_vigente': 'decreto_3048_1999_vigente',
   'solucao_consulta_cosit_79_2023_vigente': 'solucao_consulta_cosit_79_2023_vigente'
 };
+
+// Mapeamento de tipos de anexo para nomes amigáveis das subpastas
+const TIPO_ANEXO_TO_SUBPASTA_NAME = {
+  'relatorio_inicial': 'Relatório Técnico',
+  'relatorio_faturamento': 'Relatório Faturamento',
+  'imposto_compensado': 'Comprovação de Compensações',
+  'emails': 'Comprovação de Email',
+  'estabelecimento': 'Notas Fiscais',
+  'valor_compensado': 'Valor Compensado',
+  'resumo_folha_pagamento': 'Resumo Folha de Pagamento',
+  'planilha_quantidade_empregados': 'Planilha Quantidade Empregados',
+  'decreto_3048_1999_vigente': 'Decreto 3048/1999 Vigente',
+  'solucao_consulta_cosit_79_2023_vigente': 'Solução Consulta COSIT 79/2023 Vigente'
+};
+
+// Tipos de anexo que devem ter subpastas criadas (principais categorias)
+const TIPOS_ANEXO_PRINCIPAIS = [
+  'relatorio_inicial',
+  'relatorio_faturamento',
+  'imposto_compensado',
+  'emails',
+  'estabelecimento'
+];
 
 // Função para formatar período como string para pasta
 const formatPeriodoForFolder = (competencia) => {
@@ -352,6 +445,25 @@ const removeDocumentFileIfExists = (filePath) => {
   }
 };
 
+// Função para obter ID da subpasta baseado no tipo de anexo
+const getSubpastaIdByTipoAnexo = async (pool, pastaPaiId, tipoAnexo) => {
+  const subpastaNome = TIPO_ANEXO_TO_SUBPASTA_NAME[tipoAnexo];
+  if (!subpastaNome) {
+    return null;
+  }
+
+  const rows = await runQuery(pool, `
+    SELECT id FROM pastas_documentos 
+    WHERE pasta_pai_id = ? AND titulo = ?
+  `, [pastaPaiId, subpastaNome]);
+
+  if (rows && rows.length > 0) {
+    return Number(rows[0].id);
+  }
+
+  return null;
+};
+
 module.exports = {
   DOCUMENTS_UPLOAD_DIR,
   runQuery,
@@ -366,6 +478,9 @@ module.exports = {
   getCategoryFolderPath,
   ensureCategoryFolderStructure,
   formatPeriodoForFolder,
-  TIPO_ANEXO_TO_CATEGORY
+  TIPO_ANEXO_TO_CATEGORY,
+  TIPO_ANEXO_TO_SUBPASTA_NAME,
+  getSubpastaIdByTipoAnexo,
+  getOrCreateSubpasta
 };
 

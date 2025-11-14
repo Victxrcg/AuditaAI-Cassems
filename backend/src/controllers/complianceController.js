@@ -255,17 +255,23 @@ exports.createCompetencia = async (req, res) => {
 
     let pastaDocumentosId = null;
     try {
-      pastaDocumentosId = await createOrUpdateComplianceFolder(null, {
-        id: insertId,
-        created_by,
-        organizacao_criacao: userOrg,
-        competencia_referencia,
-        competencia_inicio: req.body.competencia_inicio || null,
-        competencia_fim: req.body.competencia_fim || null,
-        pasta_documentos_id: null,
-        organizacao_documentos: req.body.organizacao_documentos || userOrg
-      });
-      console.log('📁 Pasta de documentos criada/atualizada:', pastaDocumentosId);
+      // Obter pool para criar pasta e subpastas
+      const { pool: poolForFolder, server: serverForFolder } = await getDbPoolWithTunnel();
+      try {
+        pastaDocumentosId = await createOrUpdateComplianceFolder(poolForFolder, {
+          id: insertId,
+          created_by,
+          organizacao_criacao: userOrg,
+          competencia_referencia,
+          competencia_inicio: req.body.competencia_inicio || null,
+          competencia_fim: req.body.competencia_fim || null,
+          pasta_documentos_id: null,
+          organizacao_documentos: req.body.organizacao_documentos || userOrg
+        });
+        console.log('📁 Pasta de documentos criada/atualizada:', pastaDocumentosId);
+      } finally {
+        if (serverForFolder) serverForFolder.close();
+      }
     } catch (folderError) {
       console.error('⚠️ Erro ao sincronizar pasta de documentos da competência:', folderError);
     }

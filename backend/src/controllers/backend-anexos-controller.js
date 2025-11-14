@@ -6,7 +6,8 @@ const {
   syncComplianceFolderById,
   saveDocumentFile,
   removeDocumentFileIfExists,
-  runQuery
+  runQuery,
+  getSubpastaIdByTipoAnexo
 } = require('../utils/complianceDocuments');
 
 // Função auxiliar para registrar alterações no histórico
@@ -208,6 +209,20 @@ exports.uploadAnexo = async (req, res) => {
         // Arquivo já foi salvo na estrutura hierárquica acima, usar o caminho já salvo
         const filePath = filePathToSave;
 
+        // Buscar subpasta correspondente ao tipo de anexo
+        let pastaIdParaDocumento = pastaDocumentosId; // Fallback para pasta principal
+        try {
+          const subpastaId = await getSubpastaIdByTipoAnexo(pool, pastaDocumentosId, tipoAnexo);
+          if (subpastaId) {
+            pastaIdParaDocumento = subpastaId;
+            console.log(`📁 Documento será vinculado à subpasta: ${subpastaId} (tipo: ${tipoAnexo})`);
+          } else {
+            console.log(`⚠️ Subpasta não encontrada para ${tipoAnexo}, usando pasta principal`);
+          }
+        } catch (subpastaError) {
+          console.error('❌ Erro ao buscar subpasta, usando pasta principal:', subpastaError);
+        }
+
         try {
           const documentoResult = await runQuery(pool, `
             INSERT INTO documentos (nome_arquivo, caminho, tamanho, mimetype, organizacao, enviado_por, pasta_id)
@@ -219,7 +234,7 @@ exports.uploadAnexo = async (req, res) => {
             req.file.mimetype,
             pastaOrganizacao,
             currentUser.id || null,
-            pastaDocumentosId
+            pastaIdParaDocumento
           ]);
 
           const documentoId = documentoResult && documentoResult.insertId
