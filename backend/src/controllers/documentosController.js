@@ -444,28 +444,133 @@ exports.removerPasta = async (req, res) => {
     await ensureTables();
     const { id } = req.params;
     
-    // Verificar se a pasta tem documentos
+    // Verificar se a pasta existe
+    const pastaInfo = await executeQueryWithRetry(
+      'SELECT id, titulo, pasta_pai_id FROM pastas_documentos WHERE id = ?',
+      [id]
+    );
+    
+    if (!pastaInfo || pastaInfo.length === 0) {
+      return res.status(404).json({ 
+        error: 'Pasta não encontrada' 
+      });
+    }
+
+    // Verificar se é uma pasta de compliance (tem subpastas criadas automaticamente)
+    const isComplianceFolder = pastaInfo[0].titulo && pastaInfo[0].titulo.includes('Documentos Compliance');
+    
+    // Verificar se a pasta tem documentos (incluindo documentos em subpastas)
     const docs = await executeQueryWithRetry(
       'SELECT COUNT(*) as count FROM documentos WHERE pasta_id = ?', 
       [id]
     );
     
-    if (docs[0].count > 0) {
+    // Contar documentos em subpastas recursivamente
+    const contarDocsSubpastas = async (pastaId) => {
+      let total = Number(docs[0]?.count || 0);
+      
+      const subpastas = await executeQueryWithRetry(
+        'SELECT id FROM pastas_documentos WHERE pasta_pai_id = ?',
+        [pastaId]
+      );
+      
+      for (const subpasta of subpastas) {
+        const docsSubpasta = await executeQueryWithRetry(
+          'SELECT COUNT(*) as count FROM documentos WHERE pasta_id = ?',
+          [subpasta.id]
+        );
+        total += Number(docsSubpasta[0]?.count || 0);
+        
+        // Recursivo para subpastas de subpastas
+        total += await contarDocsSubpastas(subpasta.id);
+      }
+      
+      return total;
+    };
+    
+    const totalDocs = await contarDocsSubpastas(id);
+    
+    if (totalDocs > 0) {
       return res.status(400).json({ 
-        error: 'Não é possível remover pasta com documentos. Mova ou remova os documentos primeiro.' 
+        error: `Não é possível remover pasta com documentos. A pasta contém ${totalDocs} documento(s) (incluindo documentos em subpastas). Mova ou remova os documentos primeiro.`,
+        totalDocumentos: totalDocs
       });
     }
 
-    // Verificar se a pasta tem subpastas
-    const subpastas = await executeQueryWithRetry(
-      'SELECT COUNT(*) as count FROM pastas_documentos WHERE pasta_pai_id = ?',
-      [id]
-    );
+    // Se for pasta de compliance, verificar se está vinculada a uma competência
+    if (isComplianceFolder) {
+      const complianceVinculado = await executeQueryWithRetry(
+        'SELECT id FROM compliance_fiscal WHERE pasta_documentos_id = ?',
+        [id]
+      );
+      
+      if (complianceVinculado && complianceVinculado.length > 0) {
+        return res.status(400).json({
+          error: 'Não é possível remover pasta de compliance vinculada a uma competência. A pasta está associada ao compliance fiscal e não pode ser removida diretamente.',
+          complianceId: complianceVinculado[0].id
+        });
+      }
+      
+      // Se a competência foi deletada, permitir remoção recursiva das subpastas vazias
+      const subpastas = await executeQueryWithRetry(
+        'SELECT id, titulo FROM pastas_documentos WHERE pasta_pai_id = ?',
+        [id]
+      );
+      
+      if (subpastas && subpastas.length > 0) {
+        // Verificar se todas as subpastas estão vazias
+        let todasVazias = true;
+        const subpastasComDocs = [];
+        
+        for (const subpasta of subpastas) {
+          const docsSubpasta = await executeQueryWithRetry(
+            'SELECT COUNT(*) as count FROM documentos WHERE pasta_id = ?',
+            [subpasta.id]
+          );
+          const count = Number(docsSubpasta[0]?.count || 0);
+          if (count > 0) {
+            todasVazias = false;
+            subpastasComDocs.push({
+              id: subpasta.id,
+              titulo: subpasta.titulo,
+              totalDocs: count
+            });
+          }
+        }
+        
+        if (todasVazias) {
+          // Remover todas as subpastas vazias primeiro
+          for (const subpasta of subpastas) {
+            await executeQueryWithRetry(
+              'DELETE FROM pastas_documentos WHERE id = ?',
+              [subpasta.id]
+            );
+          }
+          console.log(`✅ ${subpastas.length} subpastas vazias removidas automaticamente`);
+        } else {
+          // Algumas subpastas têm documentos
+          const subpastasNomes = subpastasComDocs.map(s => `${s.titulo} (${s.totalDocs} docs)`).join(', ');
+          return res.status(400).json({
+            error: `Não é possível remover pasta. Algumas subpastas contêm documentos: ${subpastasNomes}. Remova os documentos primeiro.`,
+            subpastasComDocumentos: subpastasComDocs
+          });
+        }
+      }
+    } else {
+      // Para pastas normais (não compliance), verificar subpastas normalmente
+      const subpastas = await executeQueryWithRetry(
+        'SELECT id, titulo FROM pastas_documentos WHERE pasta_pai_id = ?',
+        [id]
+      );
 
-    if (subpastas[0].count > 0) {
-      return res.status(400).json({
-        error: 'Não é possível remover pasta com subpastas. Remova ou mova as subpastas primeiro.'
-      });
+      if (subpastas && subpastas.length > 0) {
+        const subpastasNomes = subpastas.map(s => s.titulo).join(', ');
+        return res.status(400).json({
+          error: `Não é possível remover pasta com subpastas. A pasta contém ${subpastas.length} subpasta(s): ${subpastasNomes}. Remova ou mova as subpastas primeiro.`,
+          totalSubpastas: subpastas.length,
+          subpastas: subpastas.map(s => ({ id: s.id, titulo: s.titulo }))
+        });
+      }
     }
     
     await executeQueryWithRetry('DELETE FROM pastas_documentos WHERE id = ?', [id]);
