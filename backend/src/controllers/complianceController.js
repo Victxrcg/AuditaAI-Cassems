@@ -80,6 +80,48 @@ const registrarAlteracao = async (pool, complianceId, campo, valorAnterior, valo
   }
 };
 
+// Função auxiliar para verificar se a coluna existe
+const columnExists = async () => {
+  try {
+    const result = await executeQueryWithRetry(`
+      SELECT COUNT(*) as count 
+      FROM INFORMATION_SCHEMA.COLUMNS 
+      WHERE TABLE_SCHEMA = DATABASE() 
+        AND TABLE_NAME = 'compliance_fiscal' 
+        AND COLUMN_NAME = 'tipo_compliance'
+    `);
+    return result && result.length > 0 && result[0].count > 0;
+  } catch (error) {
+    console.error('❌ Erro ao verificar se coluna existe:', error);
+    return false;
+  }
+};
+
+// Função auxiliar para garantir que a coluna tipo_compliance existe
+const ensureTipoComplianceColumn = async () => {
+  try {
+    const exists = await columnExists();
+    if (!exists) {
+      console.log('🔧 Coluna tipo_compliance não existe, criando...');
+      await executeQueryWithRetry(`
+        ALTER TABLE compliance_fiscal 
+        ADD COLUMN tipo_compliance VARCHAR(50) DEFAULT 'rat-fat'
+      `);
+      console.log('✅ Coluna tipo_compliance criada com sucesso');
+      return true;
+    }
+    return true;
+  } catch (error) {
+    console.error('❌ Erro ao criar coluna tipo_compliance:', error);
+    // Se já existir, não é um erro crítico
+    if (error.message && error.message.includes('Duplicate column')) {
+      console.log('ℹ️ Coluna tipo_compliance já existe');
+      return true;
+    }
+    return false;
+  }
+};
+
 // Listar todas as competências
 exports.listCompetencias = async (req, res) => {
   try {
@@ -92,6 +134,9 @@ exports.listCompetencias = async (req, res) => {
     console.log('🔍 Tipo compliance:', tipoCompliance);
     console.log('🔍 Headers recebidos:', req.headers);
     console.log('🔍 Query params:', req.query);
+    
+    // Garantir que a coluna tipo_compliance existe
+    await ensureTipoComplianceColumn();
     
     let query = `
       SELECT 
@@ -125,9 +170,13 @@ exports.listCompetencias = async (req, res) => {
     if (tipoCompliance) {
       const tiposValidos = ['rat-fat', 'subvencao-fiscal', 'terceiros'];
       if (tiposValidos.includes(tipoCompliance)) {
-        // Tentar filtrar por tipo_compliance (se a coluna existir)
-        // Se não existir, usar COALESCE para não filtrar competências antigas
-        whereConditions.push(`(cf.tipo_compliance = ? OR cf.tipo_compliance IS NULL)`);
+        // Para rat-fat (padrão), incluir também competências antigas sem tipo
+        // Para outros tipos, mostrar apenas as do tipo específico
+        if (tipoCompliance === 'rat-fat') {
+          whereConditions.push(`(cf.tipo_compliance = ? OR cf.tipo_compliance IS NULL)`);
+        } else {
+          whereConditions.push(`cf.tipo_compliance = ?`);
+        }
         params.push(tipoCompliance);
         console.log('🔍 FILTRO APLICADO: Apenas competências do tipo:', tipoCompliance);
       }
@@ -234,7 +283,8 @@ exports.createCompetencia = async (req, res) => {
     console.log('🔍 Debug - Body recebido:', req.body);
     console.log('🔍 Debug - Headers recebidos:', req.headers);
 
-  
+    // Garantir que a coluna tipo_compliance existe
+    await ensureTipoComplianceColumn();
     
     const { competencia_referencia, created_by, organizacao_criacao, tipo_compliance } = req.body;
     
