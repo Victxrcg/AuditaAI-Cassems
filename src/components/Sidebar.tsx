@@ -12,6 +12,7 @@ import {
   LogOut, 
   ChevronLeft, 
   ChevronRight,
+  ChevronDown,
   Shield,
   BarChart3,
   Volume2,
@@ -20,7 +21,10 @@ import {
   XCircle,
   AlertCircleIcon,
   ClipboardList,
-  Menu
+  Menu,
+  FileBarChart,
+  Landmark,
+  Briefcase
 } from "lucide-react";
 
 interface SidebarProps {
@@ -28,10 +32,20 @@ interface SidebarProps {
   onOpenChange?: (open: boolean) => void;
 }
 
+interface MenuItem {
+  name: string;
+  icon: React.ComponentType<{ className?: string }>;
+  path?: string;
+  id: string;
+  badge?: string | null;
+  subitems?: MenuItem[];
+}
+
 const Sidebar = ({ isOpen, onOpenChange }: SidebarProps) => {
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [permissionsKey, setPermissionsKey] = useState(0);
+  const [expandedMenus, setExpandedMenus] = useState<Set<string>>(new Set(['compliance'])); // Compliance expandido por padrão
   const location = useLocation();
   const navigate = useNavigate();
   const isMobile = useIsMobile();
@@ -126,7 +140,7 @@ const Sidebar = ({ isOpen, onOpenChange }: SidebarProps) => {
     }
   };
 
-  const allMenuItems = [
+  const allMenuItems: MenuItem[] = [
     { 
       name: "Cronograma", 
       icon: Calendar, 
@@ -139,7 +153,30 @@ const Sidebar = ({ isOpen, onOpenChange }: SidebarProps) => {
       icon: Shield, 
       path: "/compliance",
       id: "compliance",
-      badge: null
+      badge: null,
+      subitems: [
+        {
+          name: "RAT e FAT",
+          icon: FileBarChart,
+          path: "/compliance/rat-fat",
+          id: "compliance_rat_fat",
+          badge: null
+        },
+        {
+          name: "Subvenção fiscal",
+          icon: Landmark,
+          path: "/compliance/subvencao-fiscal",
+          id: "compliance_subvencao_fiscal",
+          badge: null
+        },
+        {
+          name: "Terceiros",
+          icon: Briefcase,
+          path: "/compliance/terceiros",
+          id: "compliance_terceiros",
+          badge: null
+        }
+      ]
     },
     {
       name: "Documentos",
@@ -199,7 +236,23 @@ const Sidebar = ({ isOpen, onOpenChange }: SidebarProps) => {
     }
   };
 
-  const isActive = (path: string) => location.pathname === path;
+  const isActive = (path?: string) => {
+    if (!path) return false;
+    // Para subitens, verificar se o path começa com o path do subitem
+    return location.pathname === path || location.pathname.startsWith(path + '/');
+  };
+
+  const toggleMenuExpansion = (menuId: string) => {
+    setExpandedMenus(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(menuId)) {
+        newSet.delete(menuId);
+      } else {
+        newSet.add(menuId);
+      }
+      return newSet;
+    });
+  };
 
   const handleNavClick = () => {
     if (isMobile) {
@@ -268,35 +321,138 @@ const Sidebar = ({ isOpen, onOpenChange }: SidebarProps) => {
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 p-4 space-y-2">
-        {menuItems.map((item) => (
-          <NavLink
-            key={item.path}
-            to={item.path}
-            onClick={handleNavClick}
-            className={`flex items-center py-2 rounded-lg transition-colors sidebar-item
-              ${(collapsed && !isMobile) ? 'justify-center px-0 gap-0' : 'gap-3 px-3'}
-              ${isActive(item.path)
-                ? 'bg-sidebar-accent text-sidebar-accent-foreground'
-                : 'text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground'}
-            `}
-          >
-            <item.icon className="h-5 w-5 flex-shrink-0" />
-            {(!collapsed || isMobile) && (
-              <>
-                <span className="text-sm font-medium">{item.name}</span>
-                {item.badge && (
-                  <Badge 
-                    variant="secondary" 
-                    className="ml-auto text-xs h-5 bg-primary/10 text-primary"
+      <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
+        {menuItems.map((item) => {
+          const hasSubitems = item.subitems && item.subitems.length > 0;
+          const isExpanded = expandedMenus.has(item.id);
+          const isItemActive = isActive(item.path);
+          
+          // Verificar se algum subitem está ativo
+          const hasActiveSubitem = item.subitems?.some(subitem => isActive(subitem.path));
+
+          return (
+            <div key={item.id} className="space-y-1">
+              {/* Item principal */}
+              <div
+                className={`flex items-center rounded-lg transition-colors sidebar-item
+                  ${(collapsed && !isMobile) ? 'justify-center px-0 gap-0' : 'gap-3 px-3'}
+                  ${(isItemActive || hasActiveSubitem)
+                    ? 'bg-sidebar-accent text-sidebar-accent-foreground'
+                    : 'text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground'}
+                `}
+              >
+                {item.path && !hasSubitems ? (
+                  <NavLink
+                    to={item.path}
+                    onClick={handleNavClick}
+                    className="flex items-center py-2 flex-1 min-w-0"
                   >
-                    {item.badge}
-                  </Badge>
+                    <item.icon className="h-5 w-5 flex-shrink-0" />
+                    {(!collapsed || isMobile) && (
+                      <>
+                        <span className="text-sm font-medium">{item.name}</span>
+                        {item.badge && (
+                          <Badge 
+                            variant="secondary" 
+                            className="ml-auto text-xs h-5 bg-primary/10 text-primary"
+                          >
+                            {item.badge}
+                          </Badge>
+                        )}
+                      </>
+                    )}
+                  </NavLink>
+                ) : (
+                  <>
+                    {item.path ? (
+                      <NavLink
+                        to={item.path}
+                        onClick={handleNavClick}
+                        className="flex items-center py-2 flex-1 min-w-0"
+                      >
+                        <item.icon className="h-5 w-5 flex-shrink-0" />
+                        {(!collapsed || isMobile) && (
+                          <>
+                            <span className="text-sm font-medium">{item.name}</span>
+                            {item.badge && (
+                              <Badge 
+                                variant="secondary" 
+                                className="ml-auto text-xs h-5 bg-primary/10 text-primary"
+                              >
+                                {item.badge}
+                              </Badge>
+                            )}
+                          </>
+                        )}
+                      </NavLink>
+                    ) : (
+                      <div className="flex items-center py-2 flex-1 min-w-0">
+                        <item.icon className="h-5 w-5 flex-shrink-0" />
+                        {(!collapsed || isMobile) && (
+                          <>
+                            <span className="text-sm font-medium">{item.name}</span>
+                            {item.badge && (
+                              <Badge 
+                                variant="secondary" 
+                                className="ml-auto text-xs h-5 bg-primary/10 text-primary"
+                              >
+                                {item.badge}
+                              </Badge>
+                            )}
+                          </>
+                        )}
+                      </div>
+                    )}
+                    {hasSubitems && (!collapsed || isMobile) && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          toggleMenuExpansion(item.id);
+                        }}
+                        className="p-1 hover:bg-sidebar-accent/50 rounded transition-colors"
+                      >
+                        {isExpanded ? (
+                          <ChevronDown className="h-4 w-4" />
+                        ) : (
+                          <ChevronRight className="h-4 w-4" />
+                        )}
+                      </button>
+                    )}
+                  </>
                 )}
-              </>
-            )}
-          </NavLink>
-        ))}
+              </div>
+
+              {/* Subitens */}
+              {hasSubitems && isExpanded && (!collapsed || isMobile) && (
+                <div className="ml-4 space-y-1 border-l border-sidebar-border pl-2">
+                  {item.subitems?.map((subitem) => (
+                    <NavLink
+                      key={subitem.path}
+                      to={subitem.path || '#'}
+                      onClick={handleNavClick}
+                      className={`flex items-center gap-3 px-3 py-2 rounded-lg transition-colors sidebar-item
+                        ${isActive(subitem.path)
+                          ? 'bg-sidebar-accent text-sidebar-accent-foreground'
+                          : 'text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground'}
+                      `}
+                    >
+                      <subitem.icon className="h-4 w-4 flex-shrink-0" />
+                      <span className="text-sm font-medium">{subitem.name}</span>
+                      {subitem.badge && (
+                        <Badge 
+                          variant="secondary" 
+                          className="ml-auto text-xs h-5 bg-primary/10 text-primary"
+                        >
+                          {subitem.badge}
+                        </Badge>
+                      )}
+                    </NavLink>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })}
         
       </nav>
 

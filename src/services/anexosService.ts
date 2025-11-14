@@ -69,6 +69,37 @@ export const getAnexosByTipo = async (complianceId: string, tipoAnexo: string): 
   return data.data;
 };
 
+// Listar anexos agrupados por categoria
+export const listAnexosByCategory = async (complianceId: string): Promise<{ categorias: Record<string, Anexo[]>, total: number }> => {
+  const response = await fetch(`${API_BASE}/compliance/competencias/${complianceId}/anexos-categorias`);
+  
+  if (!response.ok) {
+    throw new Error('Erro ao listar anexos por categoria');
+  }
+
+  const data = await response.json();
+  return data.data;
+};
+
+// Mapeamento de tipos de anexo para nomes de categorias (visuais)
+export const TIPO_ANEXO_TO_CATEGORY_NAME: Record<string, string> = {
+  'relatorio_inicial': 'Relatório Técnico',
+  'relatorio_faturamento': 'Relatório Faturamento',
+  'imposto_compensado': 'Comprovação de Compensações',
+  'emails': 'Comprovação de Email',
+  'estabelecimento': 'Notas Fiscais',
+  'valor_compensado': 'Valor Compensado',
+  'resumo_folha_pagamento': 'Resumo Folha de Pagamento',
+  'planilha_quantidade_empregados': 'Planilha Quantidade Empregados',
+  'decreto_3048_1999_vigente': 'Decreto 3048/1999 Vigente',
+  'solucao_consulta_cosit_79_2023_vigente': 'Solução Consulta COSIT 79/2023 Vigente'
+};
+
+// Função auxiliar para obter nome da categoria
+export const getCategoryName = (tipoAnexo: string): string => {
+  return TIPO_ANEXO_TO_CATEGORY_NAME[tipoAnexo] || tipoAnexo;
+};
+
 // Baixar anexo
 export const downloadAnexo = async (anexoId: number, filename: string): Promise<void> => {
   const response = await fetch(`${API_BASE}/compliance/anexos/${anexoId}`);

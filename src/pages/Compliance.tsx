@@ -37,6 +37,7 @@ import {
   Lock,
   Mail
 } from 'lucide-react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
   uploadAnexo,
   listAnexos,
@@ -47,7 +48,9 @@ import {
   validateFileType,
   validateFileSize,
   getFileIcon,
-  type Anexo
+  type Anexo,
+  listAnexosByCategory,
+  getCategoryName
 } from '@/services/anexosService';
 import { formatDateBR, formatDateTimeBR, formatCompetenciaTitle } from '@/utils/dateUtils';
 import { toast } from '@/components/ui/use-toast';
@@ -572,6 +575,13 @@ const ComplianceItemCard = memo(({
                   }
                 </CardTitle>
                 {getStatusBadge(item.status)}
+                {/* Mostrar contador de documentos para categorias (exceto Período) */}
+                {item.id !== '1' && item.id !== '8' && anexos.length > 0 && (
+                  <Badge variant="secondary" className="text-xs">
+                    <FileText className="h-3 w-3 mr-1" />
+                    {anexos.length} {anexos.length === 1 ? 'documento' : 'documentos'}
+                  </Badge>
+                )}
               </div>
               <CardDescription className={`text-sm sm:text-base mt-1 break-words ${!canAccess ? 'text-gray-400' : ''}`}>
                 {item.description}
@@ -1398,7 +1408,11 @@ const HistoricoAlteracoes = ({ historico, loading }: { historico: HistoricoAlter
 };
 
 // Mover as funções para dentro do componente principal Compliance
-export default function Compliance() {
+interface ComplianceProps {
+  tipoCompliance?: 'rat-fat' | 'subvencao-fiscal' | 'terceiros';
+}
+
+export default function Compliance({ tipoCompliance = 'rat-fat' }: ComplianceProps) {
   const navigate = useNavigate();
   
   // Sempre inicializar com a lista ao montar o componente
@@ -1441,6 +1455,10 @@ export default function Compliance() {
 
   // Estado para colapso da seção de Leis Vigentes
   const [leisVigentesExpanded, setLeisVigentesExpanded] = useState(true);
+
+  // Estado para organização selecionada (para Portes criar compliance para outra organização)
+  const [selectedOrganizacao, setSelectedOrganizacao] = useState<string>('');
+  const [organizacoesDisponiveis, setOrganizacoesDisponiveis] = useState<string[]>([]);
 
   // API base URL
   const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:4011';
@@ -1527,13 +1545,20 @@ export default function Compliance() {
       userOrg = userOrg || 'cassems';
       
       console.log('🔍 Organização detectada:', userOrg);
+      console.log('🔍 Tipo Compliance:', tipoCompliance);
       console.log('🔍 currentUser:', currentUser);
       console.log('🔍 localStorage user:', localStorage.getItem('user'));
       
-      // Fazer requisição com filtro de organização
-      const response = await fetch(`${API_BASE}/compliance/competencias?organizacao=${userOrg}`, {
+      // Fazer requisição com filtro de organização e tipo_compliance
+      const urlParams = new URLSearchParams({
+        organizacao: userOrg,
+        ...(tipoCompliance && { tipo_compliance: tipoCompliance })
+      });
+      
+      const response = await fetch(`${API_BASE}/compliance/competencias?${urlParams.toString()}`, {
         headers: {
-          'x-user-organization': userOrg
+          'x-user-organization': userOrg,
+          ...(tipoCompliance && { 'x-tipo-compliance': tipoCompliance })
         }
       });
       const data = await response.json();
@@ -1811,6 +1836,14 @@ export default function Compliance() {
     setSelectedCompetencia(null);
     setCurrentCompetenciaId(null);
     
+    // Limpar organização selecionada
+    setSelectedOrganizacao('');
+    
+    // Carregar organizações se for Portes
+    if (currentUser?.organizacao === 'portes') {
+      loadOrganizacoes();
+    }
+    
     // Mudar para modo de criação
     setCurrentView('create');
     
@@ -1860,7 +1893,26 @@ export default function Compliance() {
         return null;
       }
 
+      // Determinar organização a ser usada:
+      // - Se for Portes e tiver selecionado uma organização, usar a selecionada
+      // - Caso contrário, usar a organização do usuário
+      const organizacaoParaCriar = (currentUser.organizacao === 'portes' && selectedOrganizacao) 
+        ? selectedOrganizacao 
+        : currentUser.organizacao;
+
+      // Validação: Se for Portes, deve ter selecionado uma organização
+      if (currentUser.organizacao === 'portes' && !selectedOrganizacao) {
+        setError('Por favor, selecione uma organização antes de criar o compliance.');
+        toast({
+          title: "Organização Obrigatória",
+          description: "Selecione uma organização antes de criar o compliance.",
+          variant: "destructive",
+        });
+        return null;
+      }
+
       console.log('🔍 Criando competência com dados:', competenciaData);
+      console.log('🔍 Organização para criar:', organizacaoParaCriar);
 
       const response = await fetch(`${API_BASE}/compliance/competencias`, {
         method: 'POST',
@@ -1871,7 +1923,8 @@ export default function Compliance() {
         body: JSON.stringify({ 
           ...competenciaData,
           created_by,
-          organizacao_criacao: currentUser.organizacao || 'cassems'
+          organizacao_criacao: organizacaoParaCriar || 'cassems',
+          tipo_compliance: tipoCompliance || 'rat-fat' // Adicionar tipo_compliance
         }),
       });
 
@@ -2217,6 +2270,21 @@ export default function Compliance() {
     }
   };
 
+  // Carregar organizações disponíveis (para Portes)
+  const loadOrganizacoes = async () => {
+    try {
+      if (currentUser?.organizacao === 'portes') {
+        const response = await fetch(`${API_BASE}/documentos/organizacoes`);
+        if (response.ok) {
+          const orgs = await response.json();
+          setOrganizacoesDisponiveis(orgs || []);
+        }
+      }
+    } catch (error) {
+      console.error('Erro ao carregar organizações:', error);
+    }
+  };
+
   // Handlers estáveis com useCallback
   const handleFieldChange = useCallback((id: string, field: 'valor' | 'data' | 'observacoes' | 'emailRemetente' | 'emailDestinatario' | 'emailAssunto' | 'emailEnviado', value: string | boolean) => {
     const updatedItems = prev => prev.map(item =>
@@ -2251,9 +2319,10 @@ export default function Compliance() {
     if (!currentCompetenciaId) {
       console.log('🔍 Nenhuma competência selecionada, criando nova via upload...');
       
-      // Criar competência com data atual como referência
+      // Criar competência com data atual como referência e tipo_compliance
       const competenciaData = {
-        competencia_referencia: new Date().toISOString().split('T')[0]
+        competencia_referencia: new Date().toISOString().split('T')[0],
+        tipo_compliance: tipoCompliance || 'rat-fat'
       };
       
       const novaCompetencia = await createCompetenciaWithData(competenciaData);
@@ -2321,9 +2390,10 @@ export default function Compliance() {
     if (!competenciaIdToUse) {
       console.log('🔍 Nenhuma competência selecionada, criando nova...');
       
-      // Criar competência com data atual como referência
+      // Criar competência com data atual como referência e tipo_compliance
       const competenciaData = {
-        competencia_referencia: new Date().toISOString().split('T')[0]
+        competencia_referencia: new Date().toISOString().split('T')[0],
+        tipo_compliance: tipoCompliance || 'rat-fat'
       };
       
       const novaCompetencia = await createCompetenciaWithData(competenciaData);
@@ -2575,18 +2645,25 @@ export default function Compliance() {
     }
   };
 
-  // Carregar dados na inicialização
+  // Carregar dados na inicialização e quando tipoCompliance mudar
   useEffect(() => {
     console.log(' Carregando competências...');
     if (currentUser) {
       loadCompetencias();
     }
-  }, [currentUser]);
+  }, [currentUser, tipoCompliance]);
 
   // Carregar dados do usuário na inicialização
   useEffect(() => {
     loadCurrentUser();
   }, []);
+
+  // Carregar organizações quando usuário for Portes
+  useEffect(() => {
+    if (currentUser?.organizacao === 'portes') {
+      loadOrganizacoes();
+    }
+  }, [currentUser]);
 
   // Carregar dados da competência ao recarregar a página (se houver uma selecionada)
   useEffect(() => {
@@ -2783,28 +2860,12 @@ export default function Compliance() {
 
                 {/* Na seção de informações da competência, adicionar indicador de parecer */}
                 <div className="mt-1 text-xs sm:text-sm text-gray-600 space-y-1">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <p className="break-words">
-                      {competencia.ultima_alteracao_por 
-                        ? `Última alteração por ${competencia.ultima_alteracao_por_nome || competencia.ultima_alteracao_por} (${formatOrganizationName(competencia.ultima_alteracao_organizacao)})`
-                        : `Criado por ${competencia.created_by_nome || 'Usuário'} (${formatOrganizationName(competencia.created_by_organizacao)})`
-                      }
-                    </p>
-                    {/* Indicador visual da organização */}
-                    {competencia.created_by_organizacao && (
-                      <div className="flex items-center gap-1">
-                        <div
-                          className="w-2 h-2 rounded-full flex-shrink-0"
-                          style={{
-                            backgroundColor: competencia.created_by_cor || '#6B7280'
-                          }}
-                        />
-                        <span className="text-xs font-medium break-words">
-                          {formatOrganizationName(competencia.created_by_organizacao)}
-                        </span>
-                      </div>
-                    )}
-                  </div>
+                  <p className="break-words">
+                    {competencia.ultima_alteracao_por 
+                      ? `Última alteração por ${competencia.ultima_alteracao_por_nome || competencia.ultima_alteracao_por} (${formatOrganizationName(competencia.ultima_alteracao_organizacao)})${competencia.ultima_alteracao_em ? ` em ${formatDateTimeBR(competencia.ultima_alteracao_em)}` : ''}`
+                      : `Criado por ${competencia.created_by_nome || 'Usuário'} (${formatOrganizationName(competencia.created_by_organizacao)})`
+                    }
+                  </p>
                   <p className="break-words">Criado em: {formatDateBR(competencia.created_at)}</p>
                   
                   {/* Indicador de parecer disponível */}
@@ -2896,6 +2957,43 @@ export default function Compliance() {
           </Button>
         </div>
       </div>
+
+      {/* Seletor de Organização (apenas para Portes) */}
+      {currentUser?.organizacao === 'portes' && (
+        <Card className="bg-blue-50 border-blue-200">
+          <CardHeader>
+            <CardTitle className="text-base lg:text-lg">Selecionar Organização</CardTitle>
+            <CardDescription className="text-sm">
+              Selecione a organização para a qual será criado o compliance
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2">
+              <Label htmlFor="organizacao-select">Organização *</Label>
+              <Select value={selectedOrganizacao} onValueChange={setSelectedOrganizacao}>
+                <SelectTrigger id="organizacao-select" className={!selectedOrganizacao ? 'border-red-300' : ''}>
+                  <SelectValue placeholder="Selecione a organização" />
+                </SelectTrigger>
+                <SelectContent>
+                  {organizacoesDisponiveis.map((org) => (
+                    <SelectItem key={org} value={org}>
+                      {org.toUpperCase()}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {!selectedOrganizacao && (
+                <p className="text-xs text-red-600 mt-1">
+                  ⚠️ É obrigatório selecionar uma organização antes de criar o compliance.
+                </p>
+              )}
+              <p className="text-xs text-gray-500 mt-1">
+                A pasta de documentos será criada para esta organização e ficará visível para Portes e para a organização selecionada.
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       <div className="space-y-6">
         {complianceItems.map((item) => (

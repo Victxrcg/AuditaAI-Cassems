@@ -36,7 +36,31 @@ const AppContent = () => {
           path="/compliance" 
           element={
             <ProtectedRoute requiredPermission="compliance">
-              <Layout><Compliance /></Layout>
+              <Layout><Compliance tipoCompliance="rat-fat" /></Layout>
+            </ProtectedRoute>
+          } 
+        />
+        <Route 
+          path="/compliance/rat-fat" 
+          element={
+            <ProtectedRoute requiredPermission="compliance">
+              <Layout><Compliance tipoCompliance="rat-fat" /></Layout>
+            </ProtectedRoute>
+          } 
+        />
+        <Route 
+          path="/compliance/subvencao-fiscal" 
+          element={
+            <ProtectedRoute requiredPermission="compliance">
+              <Layout><Compliance tipoCompliance="subvencao-fiscal" /></Layout>
+            </ProtectedRoute>
+          } 
+        />
+        <Route 
+          path="/compliance/terceiros" 
+          element={
+            <ProtectedRoute requiredPermission="compliance">
+              <Layout><Compliance tipoCompliance="terceiros" /></Layout>
             </ProtectedRoute>
           } 
         />

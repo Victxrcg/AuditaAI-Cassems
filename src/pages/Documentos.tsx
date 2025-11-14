@@ -36,7 +36,9 @@ import {
   Edit, 
   Move,
   X,
-  AlertTriangle
+  AlertTriangle,
+  ChevronRight,
+  ChevronDown
 } from 'lucide-react';
 import { Play } from 'lucide-react';
 import { Eye } from 'lucide-react';
@@ -77,7 +79,9 @@ export default function Documentos() {
   const [pastaTitulo, setPastaTitulo] = useState('');
   const [pastaDescricao, setPastaDescricao] = useState('');
   const [pastaOrganizacao, setPastaOrganizacao] = useState<string>('');
+  const [pastaPaiId, setPastaPaiId] = useState<number | null | undefined>(undefined);
   const [organizacoesDisponiveis, setOrganizacoesDisponiveis] = useState<string[]>([]);
+  const [expandedPastas, setExpandedPastas] = useState<Set<number>>(new Set());
 
   // Corrige nomes com acentos que vieram em mojibake (ex.: "Ã§" -> "ç")
   const normalizeFileName = (name: string) => {
@@ -205,20 +209,100 @@ export default function Documentos() {
   };
 
 
+  // Mapeamento de ordem das subpastas de compliance (sequência dos cards)
+  const ordemSubpastas: Record<string, number> = {
+    'Relatório Técnico': 1,
+    'Relatório Faturamento': 2,
+    'Comprovação de Compensações': 3,
+    'Comprovação de Email': 4,
+    'Notas Fiscais': 5
+  };
+
+  // Função para ordenar subpastas de compliance
+  const ordenarSubpastas = (subpastas: Pasta[]): Pasta[] => {
+    return [...subpastas].sort((a, b) => {
+      const ordemA = ordemSubpastas[a.titulo] ?? 99;
+      const ordemB = ordemSubpastas[b.titulo] ?? 99;
+      
+      // Se ambas são subpastas de compliance, ordenar pela ordem definida
+      if (ordemA !== 99 || ordemB !== 99) {
+        return ordemA - ordemB;
+      }
+      
+      // Caso contrário, ordenar alfabeticamente
+      return a.titulo.localeCompare(b.titulo);
+    });
+  };
+
+  // Organizar pastas em hierarquia
+  const organizarPastasHierarquia = (pastasList: Pasta[]): Pasta[] => {
+    const pastasMap = new Map<number, Pasta>();
+    const pastasRaiz: Pasta[] = [];
+
+    // Criar mapa de pastas
+    pastasList.forEach(pasta => {
+      pastasMap.set(pasta.id, { ...pasta, subpastas: [] });
+    });
+
+    // Organizar hierarquia
+    pastasList.forEach(pasta => {
+      const pastaComSubpastas = pastasMap.get(pasta.id)!;
+      if (pasta.pasta_pai_id) {
+        const pastaPai = pastasMap.get(pasta.pasta_pai_id);
+        if (pastaPai) {
+          if (!pastaPai.subpastas) pastaPai.subpastas = [];
+          pastaPai.subpastas.push(pastaComSubpastas);
+        }
+      } else {
+        pastasRaiz.push(pastaComSubpastas);
+      }
+    });
+
+    // Ordenar subpastas de compliance em cada pasta pai
+    const ordenarRecursivo = (pasta: Pasta): Pasta => {
+      if (pasta.subpastas && pasta.subpastas.length > 0) {
+        pasta.subpastas = ordenarSubpastas(pasta.subpastas.map(ordenarRecursivo));
+      }
+      return pasta;
+    };
+
+    return pastasRaiz.map(ordenarRecursivo);
+  };
+
+  // Toggle expandir/colapsar pasta
+  const toggleExpandPasta = (pastaId: number) => {
+    setExpandedPastas(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(pastaId)) {
+        newSet.delete(pastaId);
+      } else {
+        newSet.add(pastaId);
+      }
+      return newSet;
+    });
+  };
+
   // Funções para pastas
   const handleCreatePasta = async () => {
     if (!pastaTitulo.trim()) return;
     try {
       const orgDestino = currentUser?.organizacao === 'portes' ? (pastaOrganizacao || currentUser?.organizacao) : currentUser?.organizacao;
-      await criarPasta(pastaTitulo, pastaDescricao, currentUser?.id, orgDestino);
+      await criarPasta(pastaTitulo, pastaDescricao, currentUser?.id, orgDestino, pastaPaiId);
       setPastaTitulo('');
       setPastaDescricao('');
       setPastaOrganizacao('');
+      setPastaPaiId(undefined);
       setShowCreatePasta(false);
       await load();
     } catch (error) {
       console.error('Erro ao criar pasta:', error);
     }
+  };
+
+  // Criar subpasta
+  const handleCreateSubpasta = (pastaPai: Pasta) => {
+    setPastaPaiId(pastaPai.id);
+    setShowCreatePasta(true);
   };
 
   const handleEditPasta = async () => {
@@ -249,7 +333,8 @@ export default function Documentos() {
       await load();
     } catch (error) {
       console.error('Erro ao remover pasta:', error);
-      alert('Erro ao remover pasta. Verifique se ela está vazia.');
+      const errorMessage = error instanceof Error ? error.message : 'Erro ao remover pasta. Verifique se ela está vazia e não tem subpastas.';
+      alert(errorMessage);
     }
   };
 
@@ -294,8 +379,110 @@ export default function Documentos() {
     setPastaTitulo('');
     setPastaDescricao('');
     setPastaOrganizacao('');
+    setPastaPaiId(undefined);
     setShowCreatePasta(false);
   };
+
+  // Renderizar pasta com subpastas (recursivo)
+  const renderPasta = (pasta: Pasta, nivel: number = 0) => {
+    const temSubpastas = pasta.subpastas && pasta.subpastas.length > 0;
+    const isExpanded = expandedPastas.has(pasta.id);
+    const indent = nivel * 24;
+
+    return (
+      <div key={pasta.id}>
+        <div 
+          className={`flex items-center justify-between p-3 rounded-lg cursor-pointer transition-colors ${
+            selectedPasta === pasta.id 
+              ? 'bg-blue-50 border-2 border-blue-500' 
+              : 'hover:bg-gray-50 border-2 border-transparent'
+          }`}
+          onClick={() => setSelectedPasta(pasta.id)}
+          style={{ paddingLeft: `${12 + indent}px` }}
+        >
+          <div className="flex items-center gap-2 min-w-0 flex-1">
+            {temSubpastas && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  toggleExpandPasta(pasta.id);
+                }}
+                className="p-1 hover:bg-gray-200 rounded"
+              >
+                {isExpanded ? (
+                  <ChevronDown className="w-4 h-4 text-gray-600" />
+                ) : (
+                  <ChevronRight className="w-4 h-4 text-gray-600" />
+                )}
+              </button>
+            )}
+            {!temSubpastas && <div className="w-6" />}
+            {isExpanded ? (
+              <FolderOpen className="w-5 h-5 text-blue-500 flex-shrink-0" />
+            ) : (
+              <Folder className="w-5 h-5 text-blue-500 flex-shrink-0" />
+            )}
+            <div className="min-w-0 flex-1">
+              <h3 className="font-medium truncate" title={pasta.titulo}>
+                {pasta.titulo}
+              </h3>
+              <p className="text-sm text-gray-500 truncate">
+                {pasta.descricao || 'Sem descrição'}
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <Badge variant="secondary" className="text-xs">
+              {pasta.total_documentos} docs
+            </Badge>
+            <div className="flex gap-1">
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleCreateSubpasta(pasta);
+                }}
+                className="h-8 w-8 p-0"
+                title="Criar subpasta"
+              >
+                <Plus className="w-4 h-4" />
+              </Button>
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                onClick={(e) => {
+                  e.stopPropagation();
+                  startEditPasta(pasta);
+                }}
+                className="h-8 w-8 p-0"
+              >
+                <Edit className="w-4 h-4" />
+              </Button>
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleDeletePasta(pasta.id);
+                }}
+                className="h-8 w-8 p-0 text-red-600 hover:text-red-700 hover:bg-red-50"
+              >
+                <Trash2 className="w-4 h-4" />
+              </Button>
+            </div>
+          </div>
+        </div>
+        {temSubpastas && isExpanded && (
+          <div>
+            {pasta.subpastas!.map(subpasta => renderPasta(subpasta, nivel + 1))}
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  const pastasHierarquia = organizarPastasHierarquia(pastas);
 
   return (
     <div className="space-y-6">
@@ -314,61 +501,13 @@ export default function Documentos() {
         </CardHeader>
         <CardContent>
           <div className="space-y-2">
-            {/* Sem pasta removido */}
-
-            {/* Pastas criadas */}
-            {pastas.map((pasta) => (
-              <div 
-                key={pasta.id}
-                className={`flex items-center justify-between p-3 rounded-lg cursor-pointer transition-colors ${
-                  selectedPasta === pasta.id 
-                    ? 'bg-blue-50 border-2 border-blue-500' 
-                    : 'hover:bg-gray-50 border-2 border-transparent'
-                }`}
-                onClick={() => setSelectedPasta(pasta.id)}
-              >
-                <div className="flex items-center gap-3 min-w-0 flex-1">
-                  <FolderOpen className="w-5 h-5 text-blue-500" />
-                  <div className="min-w-0 flex-1">
-                    <h3 className="font-medium truncate" title={pasta.titulo}>
-                      {pasta.titulo}
-                    </h3>
-                    <p className="text-sm text-gray-500 truncate">
-                      {pasta.descricao || 'Sem descrição'}
-                    </p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Badge variant="secondary" className="text-xs">
-                    {pasta.total_documentos} docs
-                  </Badge>
-                  <div className="flex gap-1">
-                    <Button 
-                      variant="ghost" 
-                      size="sm" 
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        startEditPasta(pasta);
-                      }}
-                      className="h-8 w-8 p-0"
-                    >
-                      <Edit className="w-4 h-4" />
-                    </Button>
-                    <Button 
-                      variant="ghost" 
-                      size="sm" 
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleDeletePasta(pasta.id);
-                      }}
-                      className="h-8 w-8 p-0 text-red-600 hover:text-red-700 hover:bg-red-50"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </Button>
-                  </div>
-                </div>
-              </div>
-            ))}
+            {/* Pastas organizadas em hierarquia */}
+            {pastasHierarquia.map((pasta) => renderPasta(pasta))}
+            {pastasHierarquia.length === 0 && (
+              <p className="text-sm text-gray-500 text-center py-4">
+                Nenhuma pasta criada. Clique em "Nova Pasta" para começar.
+              </p>
+            )}
           </div>
         </CardContent>
       </Card>
@@ -400,23 +539,49 @@ export default function Documentos() {
                   rows={3}
                 />
               </div>
-              {currentUser?.organizacao === 'portes' && !editingPasta && (
-                <div>
-                  <Label>Organização destino (apenas Portes)</Label>
-                  <Select value={pastaOrganizacao} onValueChange={setPastaOrganizacao}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Selecione a organização" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {organizacoesDisponiveis.map((org) => (
-                        <SelectItem key={org} value={org}>
-                          {org.toUpperCase()}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <p className="text-xs text-gray-500 mt-1">A pasta será criada na organização selecionada.</p>
-                </div>
+              {!editingPasta && (
+                <>
+                  {pastaPaiId !== undefined && (
+                    <div>
+                      <Label>Pasta Pai</Label>
+                      <Input
+                        value={pastas.find(p => p.id === pastaPaiId)?.titulo || ''}
+                        disabled
+                        className="bg-gray-50"
+                      />
+                      <p className="text-xs text-gray-500 mt-1">
+                        Esta será uma subpasta de "{pastas.find(p => p.id === pastaPaiId)?.titulo}"
+                      </p>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setPastaPaiId(undefined)}
+                        className="mt-2"
+                      >
+                        Criar como pasta raiz
+                      </Button>
+                    </div>
+                  )}
+                  {currentUser?.organizacao === 'portes' && (
+                    <div>
+                      <Label>Organização destino (apenas Portes)</Label>
+                      <Select value={pastaOrganizacao} onValueChange={setPastaOrganizacao}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Selecione a organização" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {organizacoesDisponiveis.map((org) => (
+                            <SelectItem key={org} value={org}>
+                              {org.toUpperCase()}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <p className="text-xs text-gray-500 mt-1">A pasta será criada na organização selecionada.</p>
+                    </div>
+                  )}
+                </>
               )}
               <div className="flex gap-2">
                 <Button 
