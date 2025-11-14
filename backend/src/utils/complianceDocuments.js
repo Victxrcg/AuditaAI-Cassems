@@ -204,18 +204,37 @@ const buildComplianceFolderMetadata = (competencia) => {
 const getOrCreateSubpasta = async (pool, pastaPaiId, tipoAnexo, organizacao, criadoPor) => {
   const subpastaNome = TIPO_ANEXO_TO_SUBPASTA_NAME[tipoAnexo];
   if (!subpastaNome) {
+    console.log(`⚠️ getOrCreateSubpasta: Tipo de anexo ${tipoAnexo} não tem mapeamento`);
     return null;
   }
 
+  console.log(`🔍 getOrCreateSubpasta: Buscando subpasta "${subpastaNome}" com pasta_pai_id=${pastaPaiId}`);
+
   // Verificar se subpasta já existe
   const existingSubpasta = await runQuery(pool, `
-    SELECT id FROM pastas_documentos 
+    SELECT id, titulo, pasta_pai_id FROM pastas_documentos 
     WHERE pasta_pai_id = ? AND titulo = ?
   `, [pastaPaiId, subpastaNome]);
 
+  console.log(`🔍 getOrCreateSubpasta: Resultado da busca:`, existingSubpasta);
+
   if (existingSubpasta && existingSubpasta.length > 0) {
-    return Number(existingSubpasta[0].id);
+    const subpastaId = Number(existingSubpasta[0].id);
+    console.log(`✅ getOrCreateSubpasta: Subpasta já existe: ID=${subpastaId}`);
+    return subpastaId;
   }
+
+  // Buscar organização da pasta pai se não foi fornecida
+  if (!organizacao) {
+    const pastaPaiRows = await runQuery(pool, `
+      SELECT organizacao FROM pastas_documentos WHERE id = ?
+    `, [pastaPaiId]);
+    if (pastaPaiRows && pastaPaiRows.length > 0) {
+      organizacao = pastaPaiRows[0].organizacao;
+    }
+  }
+
+  console.log(`📁 getOrCreateSubpasta: Criando subpasta "${subpastaNome}" com organizacao=${organizacao}`);
 
   // Criar subpasta
   const subpastaResult = await runQuery(pool, `
@@ -224,12 +243,14 @@ const getOrCreateSubpasta = async (pool, pastaPaiId, tipoAnexo, organizacao, cri
   `, [
     subpastaNome,
     `Documentos da categoria ${subpastaNome}`,
-    organizacao,
+    organizacao || null,
     pastaPaiId,
-    criadoPor
+    criadoPor || null
   ]);
 
-  return Number(subpastaResult.insertId);
+  const subpastaId = Number(subpastaResult.insertId);
+  console.log(`✅ getOrCreateSubpasta: Subpasta criada: ID=${subpastaId}`);
+  return subpastaId;
 };
 
 const createOrUpdateComplianceFolder = async (pool, competencia) => {
@@ -460,37 +481,67 @@ const removeDocumentFileIfExists = (filePath) => {
 const getSubpastaIdByTipoAnexo = async (pool, pastaPaiId, tipoAnexo) => {
   const subpastaNome = TIPO_ANEXO_TO_SUBPASTA_NAME[tipoAnexo];
   if (!subpastaNome) {
-    console.log(`⚠️ Tipo de anexo ${tipoAnexo} não tem mapeamento para subpasta`);
+    console.log(`⚠️ getSubpastaIdByTipoAnexo: Tipo de anexo ${tipoAnexo} não tem mapeamento para subpasta`);
     return null;
   }
 
-  console.log(`🔍 Buscando subpasta: pasta_pai_id=${pastaPaiId}, titulo="${subpastaNome}"`);
+  console.log(`🔍 getSubpastaIdByTipoAnexo: Buscando subpasta pasta_pai_id=${pastaPaiId}, titulo="${subpastaNome}"`);
 
+  // Primeiro, verificar se a pasta pai existe
+  const pastaPaiCheck = await runQuery(pool, `
+    SELECT id, titulo FROM pastas_documentos WHERE id = ?
+  `, [pastaPaiId]);
+
+  if (!pastaPaiCheck || pastaPaiCheck.length === 0) {
+    console.error(`❌ getSubpastaIdByTipoAnexo: Pasta pai ${pastaPaiId} não encontrada!`);
+    return null;
+  }
+
+  console.log(`✅ getSubpastaIdByTipoAnexo: Pasta pai encontrada: "${pastaPaiCheck[0].titulo}"`);
+
+  // Buscar todas as subpastas da pasta pai para debug
+  const todasSubpastas = await runQuery(pool, `
+    SELECT id, titulo, pasta_pai_id FROM pastas_documentos 
+    WHERE pasta_pai_id = ?
+  `, [pastaPaiId]);
+
+  console.log(`🔍 getSubpastaIdByTipoAnexo: Todas as subpastas da pasta ${pastaPaiId}:`, todasSubpastas);
+
+  // Buscar subpasta específica
   const rows = await runQuery(pool, `
-    SELECT id, titulo FROM pastas_documentos 
+    SELECT id, titulo, pasta_pai_id FROM pastas_documentos 
     WHERE pasta_pai_id = ? AND titulo = ?
   `, [pastaPaiId, subpastaNome]);
 
-  console.log(`🔍 Resultado da busca de subpasta:`, rows);
+  console.log(`🔍 getSubpastaIdByTipoAnexo: Resultado da busca específica:`, rows);
 
   if (rows && rows.length > 0) {
     const subpastaId = Number(rows[0].id);
-    console.log(`✅ Subpasta encontrada: ID=${subpastaId}, Nome="${rows[0].titulo}"`);
+    console.log(`✅ getSubpastaIdByTipoAnexo: Subpasta encontrada: ID=${subpastaId}, Nome="${rows[0].titulo}"`);
     return subpastaId;
   }
 
   // Se não encontrou, tentar criar a subpasta
-  console.log(`⚠️ Subpasta não encontrada, tentando criar: ${subpastaNome}`);
+  console.log(`⚠️ getSubpastaIdByTipoAnexo: Subpasta não encontrada, tentando criar: ${subpastaNome}`);
   try {
-    const subpastaId = await getOrCreateSubpasta(pool, pastaPaiId, tipoAnexo, null, null);
+    // Buscar organização da pasta pai
+    const pastaPaiInfo = await runQuery(pool, `
+      SELECT organizacao FROM pastas_documentos WHERE id = ?
+    `, [pastaPaiId]);
+    
+    const organizacao = pastaPaiInfo && pastaPaiInfo.length > 0 ? pastaPaiInfo[0].organizacao : null;
+    
+    const subpastaId = await getOrCreateSubpasta(pool, pastaPaiId, tipoAnexo, organizacao, null);
     if (subpastaId) {
-      console.log(`✅ Subpasta criada: ID=${subpastaId}`);
+      console.log(`✅ getSubpastaIdByTipoAnexo: Subpasta criada com sucesso: ID=${subpastaId}`);
       return subpastaId;
     }
   } catch (error) {
-    console.error(`❌ Erro ao criar subpasta:`, error);
+    console.error(`❌ getSubpastaIdByTipoAnexo: Erro ao criar subpasta:`, error);
+    console.error(`❌ Stack trace:`, error.stack);
   }
 
+  console.log(`❌ getSubpastaIdByTipoAnexo: Não foi possível obter/criar subpasta para ${tipoAnexo}`);
   return null;
 };
 

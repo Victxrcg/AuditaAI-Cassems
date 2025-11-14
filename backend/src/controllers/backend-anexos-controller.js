@@ -172,9 +172,8 @@ exports.uploadAnexo = async (req, res) => {
 
     try {
       await ensureComplianceDocumentsInfrastructure(pool);
-      await syncComplianceFolderById(pool, complianceId);
-
-      // Se complianceInfo ainda não foi buscado, buscar agora
+      
+      // Se complianceInfo ainda não foi buscado, buscar agora ANTES de sincronizar
       if (!complianceInfo) {
         const complianceRowsRefetch = await runQuery(pool, `
           SELECT 
@@ -194,7 +193,21 @@ exports.uploadAnexo = async (req, res) => {
           : null;
       }
 
-      const pastaDocumentosId = complianceInfo?.pasta_documentos_id;
+      // Sincronizar pasta (cria subpastas se necessário)
+      console.log(`🔄 Sincronizando pasta de documentos para competência ${complianceId}...`);
+      await syncComplianceFolderById(pool, complianceId);
+      console.log(`✅ Sincronização concluída`);
+
+      // Buscar pasta_documentos_id novamente após sincronização
+      const complianceRowsAfterSync = await runQuery(pool, `
+        SELECT pasta_documentos_id
+        FROM compliance_fiscal
+        WHERE id = ?
+      `, [complianceId]);
+
+      const pastaDocumentosId = complianceRowsAfterSync && complianceRowsAfterSync.length > 0
+        ? complianceRowsAfterSync[0].pasta_documentos_id
+        : complianceInfo?.pasta_documentos_id;
 
       if (pastaDocumentosId) {
         const pastaRows = await runQuery(pool, `
@@ -246,12 +259,20 @@ exports.uploadAnexo = async (req, res) => {
             : null;
 
           if (documentoId) {
+            // Verificar se o documento foi realmente inserido na pasta correta
+            const docVerificacao = await runQuery(pool, `
+              SELECT id, nome_arquivo, pasta_id FROM documentos WHERE id = ?
+            `, [documentoId]);
+            
+            console.log(`📁 Documento criado:`, docVerificacao);
+            console.log(`📁 Documento foi inserido na pasta_id=${pastaIdParaDocumento}`);
+
             await runQuery(pool, `
               UPDATE compliance_anexos
               SET documento_id = ?
               WHERE id = ?
             `, [documentoId, anexoId]);
-            console.log('📁 Documento sincronizado com módulo Documentos:', documentoId);
+            console.log(`✅ Documento ${documentoId} sincronizado com módulo Documentos na pasta ${pastaIdParaDocumento}`);
           } else {
             console.warn('⚠️ Documento criado sem insertId. Mantendo arquivo local.');
           }
