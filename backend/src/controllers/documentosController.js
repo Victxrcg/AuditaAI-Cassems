@@ -713,21 +713,52 @@ exports.moverDocumento = async (req, res) => {
 exports.listarOrganizacoes = async (_req, res) => {
   try {
     await ensureTables();
-    // Buscar organizações a partir de cronograma; se vazio, complementar com documentos e pastas
+    const set = new Set();
+    
+    // Primeiro, buscar da tabela organizacoes (prioridade - organizações criadas oficialmente)
+    try {
+      const orgsOficiais = await executeQueryWithRetry(`
+        SELECT DISTINCT codigo FROM organizacoes 
+        WHERE codigo IS NOT NULL AND codigo <> '' AND ativa = 1
+        ORDER BY codigo
+      `, []);
+      orgsOficiais.forEach(o => {
+        const codigo = (o.codigo || '').toLowerCase().trim();
+        if (codigo) set.add(codigo);
+      });
+      console.log('✅ Organizações oficiais encontradas:', orgsOficiais.length);
+    } catch (orgError) {
+      console.log('⚠️ Tabela organizacoes pode não existir ainda:', orgError.message);
+      // Continuar mesmo se a tabela não existir
+    }
+    
+    // Complementar com organizações de outras tabelas (para compatibilidade)
     const orgsCrono = await executeQueryWithRetry(`
       SELECT DISTINCT organizacao FROM cronograma WHERE organizacao IS NOT NULL AND organizacao <> '' ORDER BY organizacao
     `, []);
-    const set = new Set(orgsCrono.map(o => (o.organizacao || '').toLowerCase()));
+    orgsCrono.forEach(o => {
+      const org = (o.organizacao || '').toLowerCase().trim();
+      if (org) set.add(org);
+    });
+    
     const orgsDocs = await executeQueryWithRetry(`
       SELECT DISTINCT organizacao FROM documentos WHERE organizacao IS NOT NULL AND organizacao <> ''
     `, []);
-    orgsDocs.forEach(o => set.add((o.organizacao || '').toLowerCase()));
+    orgsDocs.forEach(o => {
+      const org = (o.organizacao || '').toLowerCase().trim();
+      if (org) set.add(org);
+    });
+    
     const orgsPastas = await executeQueryWithRetry(`
       SELECT DISTINCT organizacao FROM pastas_documentos WHERE organizacao IS NOT NULL AND organizacao <> ''
     `, []);
-    orgsPastas.forEach(o => set.add((o.organizacao || '').toLowerCase()));
+    orgsPastas.forEach(o => {
+      const org = (o.organizacao || '').toLowerCase().trim();
+      if (org) set.add(org);
+    });
 
     const list = Array.from(set).filter(Boolean).sort();
+    console.log('✅ Total de organizações encontradas:', list.length);
     res.json(list);
   } catch (err) {
     console.error('❌ Erro ao listar organizações:', err);

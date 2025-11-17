@@ -123,6 +123,18 @@ export default function Documentos() {
 
   useEffect(() => { if (currentUser) load(); }, [currentUser]);
 
+  // Função para formatar código de organização para exibição
+  const formatarNomeOrganizacao = (codigo: string) => {
+    if (!codigo) return '';
+    // Converter underscores e hífens em espaços e capitalizar
+    return codigo
+      .replace(/_/g, ' ')
+      .replace(/-/g, ' ')
+      .split(' ')
+      .map(palavra => palavra.charAt(0).toUpperCase() + palavra.slice(1).toLowerCase())
+      .join(' ');
+  };
+
   // Carregar organizações para Portes
   useEffect(() => {
     (async () => {
@@ -573,7 +585,7 @@ export default function Documentos() {
                         <SelectContent>
                           {organizacoesDisponiveis.map((org) => (
                             <SelectItem key={org} value={org}>
-                              {org.toUpperCase()}
+                              {formatarNomeOrganizacao(org)}
                             </SelectItem>
                           ))}
                         </SelectContent>
