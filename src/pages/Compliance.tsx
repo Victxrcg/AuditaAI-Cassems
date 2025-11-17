@@ -2645,6 +2645,19 @@ export default function Compliance({ tipoCompliance = 'rat-fat' }: CompliancePro
     }
   };
 
+  // Resetar estado quando tipoCompliance mudar
+  useEffect(() => {
+    console.log('🔄 Tipo Compliance mudou para:', tipoCompliance);
+    // Resetar para a visualização de lista
+    setCurrentView('list');
+    setSelectedCompetencia(null);
+    setCurrentCompetenciaId(null);
+    setCompetenciaData('');
+    setCompetenciaPeriodo('');
+    setComplianceItems(initializeComplianceItems());
+    setError(null);
+  }, [tipoCompliance]);
+
   // Carregar dados na inicialização e quando tipoCompliance mudar
   useEffect(() => {
     console.log(' Carregando competências...');

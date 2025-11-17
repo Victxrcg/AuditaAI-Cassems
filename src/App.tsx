@@ -36,7 +36,7 @@ const AppContent = () => {
           path="/compliance" 
           element={
             <ProtectedRoute requiredPermission="compliance">
-              <Layout><Compliance tipoCompliance="rat-fat" /></Layout>
+              <Layout><Compliance key="rat-fat" tipoCompliance="rat-fat" /></Layout>
             </ProtectedRoute>
           } 
         />
@@ -44,7 +44,7 @@ const AppContent = () => {
           path="/compliance/rat-fat" 
           element={
             <ProtectedRoute requiredPermission="compliance">
-              <Layout><Compliance tipoCompliance="rat-fat" /></Layout>
+              <Layout><Compliance key="rat-fat" tipoCompliance="rat-fat" /></Layout>
             </ProtectedRoute>
           } 
         />
@@ -52,7 +52,7 @@ const AppContent = () => {
           path="/compliance/subvencao-fiscal" 
           element={
             <ProtectedRoute requiredPermission="compliance">
-              <Layout><Compliance tipoCompliance="subvencao-fiscal" /></Layout>
+              <Layout><Compliance key="subvencao-fiscal" tipoCompliance="subvencao-fiscal" /></Layout>
             </ProtectedRoute>
           } 
         />
@@ -60,7 +60,7 @@ const AppContent = () => {
           path="/compliance/terceiros" 
           element={
             <ProtectedRoute requiredPermission="compliance">
-              <Layout><Compliance tipoCompliance="terceiros" /></Layout>
+              <Layout><Compliance key="terceiros" tipoCompliance="terceiros" /></Layout>
             </ProtectedRoute>
           } 
         />
