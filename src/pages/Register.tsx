@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Eye, EyeOff, Building } from "lucide-react";
+import { Eye, EyeOff, Building, Mail, ArrowLeft } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -12,14 +12,18 @@ const Register = () => {
   const [searchParams] = useSearchParams();
   const orgCodigo = searchParams.get('org'); // Pega o parâmetro 'org' da URL
   
+  const [step, setStep] = useState<'register' | 'verify'>('register');
   const [nome, setNome] = useState("");
   const [email, setEmail] = useState("");
   const [senha, setSenha] = useState("");
   const [confirmSenha, setConfirmSenha] = useState("");
   const [nomeEmpresa, setNomeEmpresa] = useState("");
+  const [verificationCode, setVerificationCode] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [isVerifying, setIsVerifying] = useState(false);
+  const [isResending, setIsResending] = useState(false);
   const [orgInfo, setOrgInfo] = useState<{ nome: string; codigo: string } | null>(null);
   const { toast } = useToast();
   const navigate = useNavigate();
@@ -151,23 +155,30 @@ const Register = () => {
       if (res.ok && data.success) {
         toast({ 
           title: 'Cadastro realizado!', 
-          description: 'Agora você já pode fazer login.' 
+          description: 'Enviamos um código de verificação para seu email. Verifique sua caixa de entrada.' 
         });
-        setNome(""); 
-        setEmail(""); 
+        // Mudar para a etapa de verificação
+        setStep('verify');
+        // Limpar campos sensíveis, mas manter email
         setSenha(""); 
         setConfirmSenha("");
-        setNomeEmpresa("");
-        // Redirecionar para login após 2 segundos
-        setTimeout(() => {
-          navigate('/login');
-        }, 2000);
       } else {
-        toast({ 
-          title: 'Erro no cadastro', 
-          description: data.error || 'Tente novamente.', 
-          variant: 'destructive' 
-        });
+        // Se o erro for de email não verificado, mostrar tela de verificação
+        if (data.needsVerification) {
+          toast({ 
+            title: 'Email já cadastrado', 
+            description: data.message || 'Reenviamos um código de verificação para seu email.' 
+          });
+          setStep('verify');
+          setSenha("");
+          setConfirmSenha("");
+        } else {
+          toast({ 
+            title: 'Erro no cadastro', 
+            description: data.error || 'Tente novamente.', 
+            variant: 'destructive' 
+          });
+        }
       }
     } catch (err) {
       toast({ 
@@ -178,6 +189,151 @@ const Register = () => {
     }
     setIsLoading(false);
   };
+
+  const handleVerifyCode = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsVerifying(true);
+
+    try {
+      const res = await fetch(`${API_BASE}/auth/verify-code`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, code: verificationCode })
+      });
+      
+      const data = await res.json();
+      
+      if (res.ok && data.success) {
+        toast({ 
+          title: 'Email verificado!', 
+          description: 'Sua conta foi ativada. Você já pode fazer login.' 
+        });
+        // Redirecionar para login após 2 segundos
+        setTimeout(() => {
+          navigate('/login');
+        }, 2000);
+      } else {
+        toast({ 
+          title: 'Código inválido', 
+          description: data.error || 'Verifique o código e tente novamente.', 
+          variant: 'destructive' 
+        });
+      }
+    } catch (err) {
+      toast({ 
+        title: 'Erro de conexão', 
+        description: 'Não foi possível verificar o código.', 
+        variant: 'destructive' 
+      });
+    }
+    
+    setIsVerifying(false);
+  };
+
+  const handleResendCode = async () => {
+    setIsResending(true);
+    
+    try {
+      const res = await fetch(`${API_BASE}/auth/send-code`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email })
+      });
+      
+      const data = await res.json();
+      
+      if (res.ok && data.success) {
+        toast({ 
+          title: 'Código reenviado!', 
+          description: 'Um novo código foi enviado para seu email.' 
+        });
+      } else {
+        toast({ 
+          title: 'Erro ao reenviar', 
+          description: data.error || 'Tente novamente mais tarde.', 
+          variant: 'destructive' 
+        });
+      }
+    } catch (err) {
+      toast({ 
+        title: 'Erro de conexão', 
+        description: 'Não foi possível reenviar o código.', 
+        variant: 'destructive' 
+      });
+    }
+    
+    setIsResending(false);
+  };
+
+  // Se estiver na etapa de verificação, mostrar tela de código
+  if (step === 'verify') {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-primary/10 via-background to-primary/5 flex items-center justify-center p-4">
+        <Card className="w-full max-w-md bg-white/90 shadow-2xl border border-gray-200 rounded-2xl backdrop-blur-sm">
+          <CardHeader className="text-center">
+            <div className="flex justify-center mb-4">
+              <div className="p-3 bg-primary rounded-xl">
+                <Mail className="h-8 w-8 text-primary-foreground" />
+              </div>
+            </div>
+            <CardTitle className="text-2xl">Verificar Email</CardTitle>
+            <CardDescription>
+              Digite o código de 6 dígitos que enviamos para {email}
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={handleVerifyCode} className="space-y-4">
+              <div>
+                <Label>Código de verificação</Label>
+                <Input 
+                  type="text" 
+                  placeholder="000000" 
+                  value={verificationCode}
+                  onChange={e => setVerificationCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                  required
+                  maxLength={6}
+                  className="text-center text-2xl tracking-widest font-mono"
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Digite o código de 6 dígitos enviado para seu email
+                </p>
+              </div>
+              
+              <Button 
+                type="submit" 
+                className="w-full" 
+                disabled={isVerifying || verificationCode.length !== 6}
+              >
+                {isVerifying ? 'Verificando...' : 'Verificar código'}
+              </Button>
+              
+              <div className="text-center space-y-2">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  onClick={handleResendCode}
+                  disabled={isResending}
+                  className="w-full text-sm"
+                >
+                  {isResending ? 'Reenviando...' : 'Não recebeu o código? Reenviar'}
+                </Button>
+                
+                <Button
+                  type="button"
+                  variant="ghost"
+                  onClick={() => setStep('register')}
+                  className="w-full text-sm"
+                >
+                  <ArrowLeft className="h-4 w-4 mr-2" />
+                  Voltar ao cadastro
+                </Button>
+              </div>
+            </form>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-primary/10 via-background to-primary/5 flex items-center justify-center p-4">

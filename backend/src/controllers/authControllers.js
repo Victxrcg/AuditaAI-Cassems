@@ -138,10 +138,40 @@ exports.registrar = async (req, res) => {
     ({ pool, server } = await getDbPoolWithTunnel());
 
     // Verificar se email já existe
-    const existingUser = await pool.query(`SELECT id FROM usuarios_cassems WHERE email = ?`, [email]);
+    const existingUser = await pool.query(`SELECT id, ativo FROM usuarios_cassems WHERE email = ?`, [email]);
 
     if (existingUser && existingUser.length > 0) {
-      return res.status(400).json({ error: 'Email já está em uso' });
+      const user = existingUser[0];
+      // Se o usuário existe mas está inativo, permitir reenvio do código
+      if (user.ativo === 0) {
+        // Gerar novo código de verificação
+        const code = Math.floor(100000 + Math.random() * 900000).toString();
+        const expiresAt = Date.now() + 10 * 60 * 1000; // 10 minutos
+        emailVerificationStore.set(email, { code, expiresAt });
+        
+        const appName = process.env.APP_NAME || 'Compliance App';
+        const from = process.env.SMTP_FROM || 'no-reply@portes.com.br';
+        await mailer.sendMail({
+          from,
+          to: email,
+          subject: `${appName} - Confirme seu email`,
+          text: `Bem-vindo ao ${appName}! Seu código de verificação é: ${code}. Expira em 10 minutos.`,
+          html: `<div style="font-family: Arial, sans-serif; line-height:1.6;">
+            <h2>Bem-vindo ao ${appName}!</h2>
+            <p>Use o código abaixo para confirmar seu email e ativar sua conta:</p>
+            <div style="font-size:28px; font-weight:bold; letter-spacing:6px;">${code}</div>
+            <p style="color:#555;">O código expira em 10 minutos.</p>
+          </div>`
+        });
+        
+        return res.status(400).json({ 
+          error: 'Email já cadastrado mas não verificado', 
+          needsVerification: true,
+          message: 'Reenviamos um novo código de verificação para seu email.'
+        });
+      }
+      // Se está ativo, não permitir cadastro novamente
+      return res.status(400).json({ error: 'Email já está em uso e verificado' });
     }
 
     // Criar tabela de organizações se não existir (compatibilidade)
