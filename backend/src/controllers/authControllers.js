@@ -121,10 +121,18 @@ exports.login = async (req, res) => {
 exports.registrar = async (req, res) => {
   let pool, server;
   try {
-    const { nome, email, senha, nomeEmpresa, perfil = 'usuario' } = req.body;
+    const { nome, email, senha, nomeEmpresa, perfil = 'usuario', organizacaoCodigo } = req.body;
+    // Também aceita código de organização via query param (para links diretos)
+    const orgCodigoFromQuery = req.query.org || organizacaoCodigo;
 
-    if (!nome || !email || !senha || !nomeEmpresa) {
-      return res.status(400).json({ error: 'Nome, email, senha e nome da empresa são obrigatórios' });
+    // Se tiver código de organização na query/body, não precisa de nomeEmpresa
+    if (!nome || !email || !senha) {
+      return res.status(400).json({ error: 'Nome, email e senha são obrigatórios' });
+    }
+
+    // Se não tiver código de organização, nomeEmpresa é obrigatório
+    if (!orgCodigoFromQuery && !nomeEmpresa) {
+      return res.status(400).json({ error: 'Nome da empresa ou código de organização é obrigatório' });
     }
 
     ({ pool, server } = await getDbPoolWithTunnel());
@@ -156,72 +164,114 @@ exports.registrar = async (req, res) => {
       console.log('Tabela organizacoes já existe ou erro ao criar:', err.message);
     }
 
-    // Determinar organização baseada no email e nome da empresa
+    // Determinar organização
     let organizacao = 'cassems';
     let cor_identificacao = '#3B82F6';
     
-    // Se for email da Portes, sempre é portes
-    if (email.includes('@portes.com')) {
-      organizacao = 'portes';
-      cor_identificacao = '#10B981';
-    }
-    // Se o nome da empresa contém "Portes", também é portes
-    else if (nomeEmpresa && nomeEmpresa.toLowerCase().includes('portes')) {
-      organizacao = 'portes';
-      cor_identificacao = '#10B981';
-    }
-    // Se o nome da empresa contém "Rede Frota", é uma organização específica
-    else if (nomeEmpresa && nomeEmpresa.toLowerCase().includes('rede frota')) {
-      organizacao = 'rede_frota';
-      cor_identificacao = '#8B5CF6'; // Cor roxa para Rede Frota
-    }
-    // Para outras empresas, usar o nome da empresa como organização (normalizado)
-    else if (nomeEmpresa && nomeEmpresa.trim()) {
-      // Normalizar nome da empresa para usar como organização
-      organizacao = nomeEmpresa.toLowerCase()
-        .replace(/[^a-z0-9\s]/g, '') // Remove caracteres especiais
+    // Se tiver código de organização fornecido (link direto), usar ele
+    if (orgCodigoFromQuery) {
+      organizacao = orgCodigoFromQuery.toLowerCase()
+        .replace(/[^a-z0-9\s_-]/g, '') // Remove caracteres especiais, mantém underscore e hífen
         .replace(/\s+/g, '_') // Substitui espaços por underscore
-        .substring(0, 50); // Limita tamanho
-      cor_identificacao = '#6366F1'; // Cor azul padrão para organizações terceiras
+        .substring(0, 100); // Limita tamanho
+      
+      // Buscar organização na tabela para pegar cor e nome
+      try {
+        const [orgExiste] = await pool.query(
+          'SELECT id, cor_identificacao, nome FROM organizacoes WHERE codigo = ?',
+          [organizacao]
+        );
+
+        if (orgExiste && orgExiste.length > 0) {
+          cor_identificacao = orgExiste[0].cor_identificacao || cor_identificacao;
+          // Se não tiver nomeEmpresa, usar o nome da organização
+          if (!nomeEmpresa) {
+            nomeEmpresa = orgExiste[0].nome;
+          }
+        } else {
+          // Organização não existe, criar automaticamente
+          const nomeOrg = nomeEmpresa || 
+            organizacao.split('_').map(p => p.charAt(0).toUpperCase() + p.slice(1)).join(' ');
+          
+          await pool.query(`
+            INSERT INTO organizacoes (nome, codigo, cor_identificacao, ativa)
+            VALUES (?, ?, ?, 1)
+            ON DUPLICATE KEY UPDATE nome = VALUES(nome)
+          `, [nomeOrg, organizacao, cor_identificacao]);
+          
+          console.log(`✅ Organização criada automaticamente via link direto: ${nomeOrg} (${organizacao})`);
+        }
+      } catch (err) {
+        console.log('⚠️ Erro ao verificar/criar organização via código (continuando):', err.message);
+      }
     }
-    // Caso contrário, é cassems (padrão)
+    // Caso contrário, determinar organização baseada no email e nome da empresa (comportamento original)
     else {
-      organizacao = 'cassems';
-      cor_identificacao = '#3B82F6';
+      // Se for email da Portes, sempre é portes
+      if (email.includes('@portes.com')) {
+        organizacao = 'portes';
+        cor_identificacao = '#10B981';
+      }
+      // Se o nome da empresa contém "Portes", também é portes
+      else if (nomeEmpresa && nomeEmpresa.toLowerCase().includes('portes')) {
+        organizacao = 'portes';
+        cor_identificacao = '#10B981';
+      }
+      // Se o nome da empresa contém "Rede Frota", é uma organização específica
+      else if (nomeEmpresa && nomeEmpresa.toLowerCase().includes('rede frota')) {
+        organizacao = 'rede_frota';
+        cor_identificacao = '#8B5CF6'; // Cor roxa para Rede Frota
+      }
+      // Para outras empresas, usar o nome da empresa como organização (normalizado)
+      else if (nomeEmpresa && nomeEmpresa.trim()) {
+        // Normalizar nome da empresa para usar como organização
+        organizacao = nomeEmpresa.toLowerCase()
+          .replace(/[^a-z0-9\s]/g, '') // Remove caracteres especiais
+          .replace(/\s+/g, '_') // Substitui espaços por underscore
+          .substring(0, 50); // Limita tamanho
+        cor_identificacao = '#6366F1'; // Cor azul padrão para organizações terceiras
+      }
+      // Caso contrário, é cassems (padrão)
+      else {
+        organizacao = 'cassems';
+        cor_identificacao = '#3B82F6';
+      }
     }
 
     // Definir perfil baseado na organização: Portes = admin, outras = usuario
     const perfilFinal = organizacao === 'portes' ? 'admin' : (perfil || 'usuario');
     
-    // Buscar organização na tabela ou criar se não existir
-    try {
-      const [orgExiste] = await pool.query(
-        'SELECT id, cor_identificacao FROM organizacoes WHERE codigo = ?',
-        [organizacao]
-      );
+    // Buscar organização na tabela ou criar se não existir (apenas se não foi criada acima)
+    if (!orgCodigoFromQuery) {
+      try {
+        const [orgExiste] = await pool.query(
+          'SELECT id, cor_identificacao FROM organizacoes WHERE codigo = ?',
+          [organizacao]
+        );
 
-      if (orgExiste && orgExiste.length > 0) {
-        // Usar cor da tabela se existir
-        cor_identificacao = orgExiste[0].cor_identificacao || cor_identificacao;
-      } else {
-        // Criar organização automaticamente se não existir
-        const nomeOrg = nomeEmpresa || 
-          (organizacao === 'portes' ? 'PORTES ADVOGADOS' : 
-           organizacao === 'cassems' ? 'CASSEMS' : 
-           organizacao === 'rede_frota' ? 'MARAJÓ / REDE FROTA' : 
-           organizacao.split('_').map(p => p.charAt(0).toUpperCase() + p.slice(1)).join(' '));
-        
-        await pool.query(`
-          INSERT INTO organizacoes (nome, codigo, cor_identificacao, ativa)
-          VALUES (?, ?, ?, 1)
-          ON DUPLICATE KEY UPDATE nome = VALUES(nome)
-        `, [nomeOrg, organizacao, cor_identificacao]);
-        
-        console.log(`✅ Organização criada automaticamente: ${nomeOrg} (${organizacao})`);
+        if (orgExiste && orgExiste.length > 0) {
+          // Usar cor da tabela se existir
+          cor_identificacao = orgExiste[0].cor_identificacao || cor_identificacao;
+        } else {
+          // Criar organização automaticamente se não existir
+          const nomeOrg = nomeEmpresa || 
+            (organizacao === 'portes' ? 'PORTES ADVOGADOS' : 
+             organizacao === 'cassems' ? 'CASSEMS' : 
+             organizacao === 'rede_frota' ? 'MARAJÓ / REDE FROTA' : 
+             organizacao.split('_').map(p => p.charAt(0).toUpperCase() + p.slice(1)).join(' '));
+          
+          await pool.query(`
+            INSERT INTO organizacoes (nome, codigo, cor_identificacao, ativa)
+            VALUES (?, ?, ?, 1)
+            ON DUPLICATE KEY UPDATE nome = VALUES(nome)
+          `, [nomeOrg, organizacao, cor_identificacao]);
+          
+          console.log(`✅ Organização criada automaticamente: ${nomeOrg} (${organizacao})`);
+        }
+      } catch (err) {
+        console.log('⚠️ Erro ao verificar/criar organização na tabela (continuando com padrão):', err.message);
+        // Continuar com valores padrão se houver erro
       }
-    } catch (err) {
-      console.log('⚠️ Erro ao verificar/criar organização na tabela (continuando com padrão):', err.message);
-      // Continuar com valores padrão se houver erro
     }
 
     // Hash da senha (simplificado - produção: bcrypt)

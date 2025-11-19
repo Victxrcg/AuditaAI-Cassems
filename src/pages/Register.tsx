@@ -6,9 +6,12 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 
 const Register = () => {
+  const [searchParams] = useSearchParams();
+  const orgCodigo = searchParams.get('org'); // Pega o parâmetro 'org' da URL
+  
   const [nome, setNome] = useState("");
   const [email, setEmail] = useState("");
   const [senha, setSenha] = useState("");
@@ -17,6 +20,7 @@ const Register = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [orgInfo, setOrgInfo] = useState<{ nome: string; codigo: string } | null>(null);
   const { toast } = useToast();
   const navigate = useNavigate();
   const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:4011';
@@ -62,6 +66,43 @@ const Register = () => {
     fetchOrganizacoes();
   }, []);
 
+  // Se tiver código de organização na URL, buscar informações da organização
+  useEffect(() => {
+    if (orgCodigo) {
+      const fetchOrgInfo = async () => {
+        try {
+          const res = await fetch(`${API_BASE}/organizacoes`, {
+            headers: {
+              'x-user-organization': 'portes'
+            }
+          });
+          
+          if (res.ok) {
+            const data = await res.json();
+            const orgs = data.data || data || [];
+            const org = orgs.find((o: any) => o.codigo === orgCodigo);
+            
+            if (org) {
+              setOrgInfo({ nome: org.nome, codigo: org.codigo });
+              setNomeEmpresa(org.codigo); // Pré-selecionar a organização
+            } else {
+              // Organização não encontrada, mas ainda podemos usar o código
+              setOrgInfo({ nome: orgCodigo.split('_').map((p: string) => p.charAt(0).toUpperCase() + p.slice(1)).join(' '), codigo: orgCodigo });
+              setNomeEmpresa(orgCodigo);
+            }
+          }
+        } catch (error) {
+          console.error('Erro ao buscar informações da organização:', error);
+          // Mesmo com erro, usar o código fornecido
+          setOrgInfo({ nome: orgCodigo.split('_').map((p: string) => p.charAt(0).toUpperCase() + p.slice(1)).join(' '), codigo: orgCodigo });
+          setNomeEmpresa(orgCodigo);
+        }
+      };
+
+      fetchOrgInfo();
+    }
+  }, [orgCodigo, API_BASE]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
@@ -79,18 +120,32 @@ const Register = () => {
       return;
     }
 
-    // Validação do nome da empresa
-    if (!nomeEmpresa.trim()) {
+    // Validação do nome da empresa (não obrigatório se tiver código de organização na URL)
+    if (!orgCodigo && !nomeEmpresa.trim()) {
       toast({ title: 'Empresa obrigatória', description: 'Selecione uma empresa da lista.', variant: 'destructive' });
       setIsLoading(false);
       return;
     }
 
     try {
-      const res = await fetch(`${API_BASE}/auth/registrar`, { // Mudança: de /api/register para /api/auth/registrar
+      const body: any = { nome, email, senha };
+      
+      // Se tiver código de organização na URL, enviar ele
+      if (orgCodigo) {
+        body.organizacaoCodigo = orgCodigo;
+        // Se tiver nome da empresa, também enviar
+        if (nomeEmpresa) {
+          body.nomeEmpresa = nomeEmpresa;
+        }
+      } else {
+        // Comportamento normal: enviar nomeEmpresa
+        body.nomeEmpresa = nomeEmpresa;
+      }
+
+      const res = await fetch(`${API_BASE}/auth/registrar`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ nome, email, senha, nomeEmpresa })
+        body: JSON.stringify(body)
       });
       const data = await res.json();
       if (res.ok && data.success) {
@@ -149,27 +204,40 @@ const Register = () => {
                 minLength={2}
               />
             </div>
-            <div>
-              <Label>Empresa</Label>
-              <Select value={nomeEmpresa} onValueChange={setNomeEmpresa} required>
-                <SelectTrigger>
-                  <SelectValue placeholder="Selecione sua empresa" />
-                </SelectTrigger>
-                <SelectContent>
-                  {empresasDisponiveis.map((empresa) => (
-                    <SelectItem key={empresa.value} value={empresa.value}>
-                      <div className="flex items-center gap-2">
-                        <Building className="h-4 w-4" />
-                        <span>{empresa.label}</span>
-                      </div>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <p className="text-xs text-gray-500 mt-1">
-                Selecione a empresa onde você trabalha
-              </p>
-            </div>
+            {orgCodigo && orgInfo ? (
+              <div>
+                <Label>Organização</Label>
+                <div className="flex items-center gap-2 p-3 bg-primary/10 rounded-md border border-primary/20">
+                  <Building className="h-4 w-4 text-primary" />
+                  <span className="font-medium">{orgInfo.nome}</span>
+                </div>
+                <p className="text-xs text-gray-500 mt-1">
+                  Você está se cadastrando para a organização {orgInfo.nome}
+                </p>
+              </div>
+            ) : (
+              <div>
+                <Label>Empresa</Label>
+                <Select value={nomeEmpresa} onValueChange={setNomeEmpresa} required>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione sua empresa" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {empresasDisponiveis.map((empresa) => (
+                      <SelectItem key={empresa.value} value={empresa.value}>
+                        <div className="flex items-center gap-2">
+                          <Building className="h-4 w-4" />
+                          <span>{empresa.label}</span>
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-gray-500 mt-1">
+                  Selecione a empresa onde você trabalha
+                </p>
+              </div>
+            )}
             <div>
               <Label>Email</Label>
               <Input 

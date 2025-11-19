@@ -18,7 +18,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Plus, RefreshCw, User, Users as UsersIcon, Mail, Shield, CheckCircle, XCircle, Key, Calendar, Clock, Building, Edit, Save, X, Trash2, Filter, FileText, HelpCircle, LayoutDashboard, Lock, Upload, Image as ImageIcon } from 'lucide-react';
+import { Plus, RefreshCw, User, Users as UsersIcon, Mail, Shield, CheckCircle, XCircle, Key, Calendar, Clock, Building, Edit, Save, X, Trash2, Filter, FileText, HelpCircle, LayoutDashboard, Lock, Upload, Image as ImageIcon, Copy, Link as LinkIcon } from 'lucide-react';
 import { toast } from '@/components/ui/use-toast';
 
 interface UserRow {
@@ -683,6 +683,30 @@ const Users = () => {
 
   const isPortes = currentUser?.organizacao === 'portes';
 
+  // Função para gerar e copiar link de cadastro direto
+  const copiarLinkCadastro = async (orgCodigo: string, orgNome: string) => {
+    try {
+      // Obter a URL base (do ambiente ou window.location)
+      const baseUrl = import.meta.env.VITE_APP_URL || window.location.origin;
+      const linkCadastro = `${baseUrl}/registrar?org=${orgCodigo}`;
+      
+      // Copiar para a área de transferência
+      await navigator.clipboard.writeText(linkCadastro);
+      
+      toast({
+        title: "Link copiado!",
+        description: `Link de cadastro para ${orgNome} copiado para a área de transferência.`,
+      });
+    } catch (error) {
+      console.error('Erro ao copiar link:', error);
+      toast({
+        title: "Erro ao copiar",
+        description: "Não foi possível copiar o link. Tente novamente.",
+        variant: "destructive",
+      });
+    }
+  };
+
   return (
     <>
     <div className="p-4 sm:p-6 space-y-4 sm:space-y-6 max-w-full overflow-hidden">
@@ -1059,6 +1083,16 @@ const Users = () => {
                             <div className="space-y-1">
                               <div className="text-xs text-gray-500 font-medium">Ações</div>
                               <div className="flex flex-col sm:flex-row gap-2">
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => copiarLinkCadastro(org.codigo, org.nome)}
+                                  className="text-green-600 border-green-300 hover:bg-green-50 text-xs sm:text-sm"
+                                  title="Copiar link de cadastro direto"
+                                >
+                                  <LinkIcon className="h-3 w-3 sm:h-4 sm:w-4 mr-1" />
+                                  Copiar Link
+                                </Button>
                                 <Button
                                   variant="outline"
                                   size="sm"
