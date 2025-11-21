@@ -960,6 +960,394 @@ exports.analisarCronogramaIA = async (req, res) => {
   }
 };
 
+// Endpoint para gerar overview com streaming (Server-Sent Events)
+exports.gerarOverviewStream = async (req, res) => {
+  let pool, server;
+  try {
+    // Verificar se OpenAI está disponível
+    if (!openai) {
+      return res.status(503).json({
+        success: false,
+        error: 'Serviço de IA temporariamente indisponível',
+        details: 'OpenAI não configurado. Entre em contato com o administrador.'
+      });
+    }
+    
+    const { organizacao, status } = req.body;
+    const userOrg = req.headers['x-user-organization'] || 'cassems';
+    
+    console.log('🤖 Iniciando geração de overview com streaming - Organização:', organizacao || 'todas');
+    console.log('🤖 Status solicitado:', status || 'todos');
+    
+    // Configurar headers para Server-Sent Events
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, x-user-organization, x-user-id');
+    
+    // Função auxiliar para enviar eventos SSE
+    const sendEvent = (event, data) => {
+      res.write(`event: ${event}\n`);
+      res.write(`data: ${JSON.stringify(data)}\n\n`);
+    };
+    
+    try {
+      ({ pool, server } = await getDbPoolWithTunnel());
+      
+      sendEvent('status', { message: 'Buscando dados do cronograma...' });
+      
+      // Query para buscar cronogramas (mesma lógica do analisarCronogramaIA)
+      let query = `
+        SELECT 
+          c.*,
+          u.nome as responsavel_nome,
+          u.email as responsavel_email
+        FROM cronograma c
+        LEFT JOIN usuarios_cassems u ON c.responsavel_id = u.id
+        WHERE 1=1
+      `;
+      
+      const params = [];
+      
+      // Filtrar por organização baseado no usuário
+      if (userOrg === 'portes') {
+        if (organizacao && organizacao !== 'todos') {
+          query += ` AND c.organizacao = ?`;
+          params.push(organizacao);
+        }
+      } else {
+        query += ` AND c.organizacao = ?`;
+        params.push(userOrg);
+      }
+      
+      // Filtrar por status se especificado
+      if (status && status !== 'todos') {
+        query += ` AND c.status = ?`;
+        params.push(status);
+      }
+      
+      query += ` ORDER BY c.prioridade DESC, c.data_inicio ASC, c.created_at DESC`;
+      
+      const cronogramas = await pool.query(query, params);
+      console.log(`📋 Encontrados ${cronogramas.length} cronogramas`);
+      
+      if (cronogramas.length === 0) {
+        sendEvent('error', { message: 'Nenhum cronograma encontrado para análise' });
+        res.end();
+        return;
+      }
+      
+      sendEvent('status', { message: `Processando ${cronogramas.length} demandas...` });
+      
+      // Processar cada cronograma
+      const cronogramasFormatados = [];
+      
+      for (const cronograma of cronogramas) {
+        const tituloLimpo = limparTitulo(cronograma.titulo);
+        
+        const checklists = await pool.query(`
+          SELECT id, titulo, descricao, concluido, ordem, updated_at
+          FROM cronograma_checklist 
+          WHERE cronograma_id = ?
+          ORDER BY ordem ASC
+        `, [cronograma.id]);
+        
+        const checklistsFormatados = checklists.map(item => ({
+          id: item.id,
+          titulo: limparTituloChecklist(item.titulo),
+          descricao: item.descricao ? limparTituloChecklist(item.descricao) : null,
+          concluido: Boolean(item.concluido),
+          ordem: item.ordem,
+          updated_at: item.updated_at
+        }));
+        
+        const cronogramaFormatado = {
+          id: cronograma.id,
+          titulo: tituloLimpo,
+          descricao: cronograma.descricao,
+          organizacao: cronograma.organizacao,
+          status: cronograma.status,
+          prioridade: cronograma.prioridade,
+          fase_atual: cronograma.fase_atual,
+          data_inicio: cronograma.data_inicio,
+          data_fim: cronograma.data_fim,
+          responsavel_nome: cronograma.responsavel_nome || 'Não definido',
+          responsavel_email: cronograma.responsavel_email,
+          observacoes: cronograma.observacoes,
+          motivo_atraso: cronograma.motivo_atraso,
+          created_at: cronograma.created_at,
+          updated_at: cronograma.updated_at,
+          checklists: checklistsFormatados
+        };
+        
+        cronogramasFormatados.push(cronogramaFormatado);
+      }
+      
+      // Agrupar por organização
+      const organizacoes = {};
+      cronogramasFormatados.forEach(cronograma => {
+        if (!organizacoes[cronograma.organizacao]) {
+          organizacoes[cronograma.organizacao] = [];
+        }
+        organizacoes[cronograma.organizacao].push(cronograma);
+      });
+      
+      sendEvent('status', { message: 'Gerando resumo com IA...' });
+      
+      // Preparar dados para a IA (mesma lógica do analisarCronogramaComIA)
+      const organizacoesList = Object.keys(organizacoes);
+      const isComparativo = userOrg === 'portes' && (organizacao === 'todos' || !organizacao);
+      
+      // Identificar período
+      let primeiraData = null;
+      let ultimaData = null;
+      cronogramasFormatados.forEach(cronograma => {
+        if (cronograma.data_inicio) {
+          const data = new Date(cronograma.data_inicio);
+          if (!primeiraData || data < primeiraData) {
+            primeiraData = data;
+          }
+        }
+        if (cronograma.data_fim) {
+          const data = new Date(cronograma.data_fim);
+          if (!ultimaData || data > ultimaData) {
+            ultimaData = data;
+          }
+        }
+        if (cronograma.updated_at) {
+          const data = new Date(cronograma.updated_at);
+          if (!ultimaData || data > ultimaData) {
+            ultimaData = data;
+          }
+        }
+      });
+      
+      if (!primeiraData || !ultimaData) {
+        sendEvent('error', { message: 'Não foi possível identificar o período do cronograma' });
+        res.end();
+        return;
+      }
+      
+      // Calcular estatísticas
+      const totalDemandas = cronogramasFormatados.length;
+      const demandasConcluidas = cronogramasFormatados.filter(d => d.status === 'concluido').length;
+      const demandasEmAndamento = cronogramasFormatados.filter(d => d.status === 'em_andamento').length;
+      const demandasPendentes = cronogramasFormatados.filter(d => d.status === 'pendente').length;
+      const demandasAtrasadas = cronogramasFormatados.filter(d => d.status === 'atrasado').length;
+      const percentualConclusao = totalDemandas > 0 ? Math.round((demandasConcluidas / totalDemandas) * 100) : 0;
+      
+      let totalChecklists = 0;
+      let checklistsConcluidos = 0;
+      cronogramasFormatados.forEach(d => {
+        if (d.checklists && d.checklists.length > 0) {
+          totalChecklists += d.checklists.length;
+          checklistsConcluidos += d.checklists.filter(c => c.concluido).length;
+        }
+      });
+      const percentualChecklists = totalChecklists > 0 ? Math.round((checklistsConcluidos / totalChecklists) * 100) : 0;
+      
+      const demandasPorPrioridade = {
+        critica: cronogramasFormatados.filter(d => d.prioridade === 'critica').length,
+        alta: cronogramasFormatados.filter(d => d.prioridade === 'alta').length,
+        media: cronogramasFormatados.filter(d => d.prioridade === 'media').length,
+        baixa: cronogramasFormatados.filter(d => d.prioridade === 'baixa').length
+      };
+      
+      const hoje = new Date();
+      hoje.setHours(0, 0, 0, 0);
+      let demandasProximasPrazo = 0;
+      let demandasSemPrazo = 0;
+      cronogramasFormatados.forEach(d => {
+        if (d.status !== 'concluido') {
+          if (d.data_fim) {
+            const prazo = new Date(d.data_fim);
+            prazo.setHours(0, 0, 0, 0);
+            const diffDays = Math.ceil((prazo - hoje) / (1000 * 60 * 60 * 24));
+            if (diffDays >= 0 && diffDays <= 7) {
+              demandasProximasPrazo++;
+            }
+          } else {
+            demandasSemPrazo++;
+          }
+        }
+      });
+      
+      // Preparar dados completos de demandas
+      const demandasCompletas = cronogramasFormatados.map(d => ({
+        titulo: d.titulo,
+        descricao: d.descricao || 'Sem descrição',
+        responsavel: d.responsavel_nome || 'Não definido',
+        status: d.status,
+        prioridade: d.prioridade || 'media',
+        dataInicio: d.data_inicio,
+        dataFim: d.data_fim,
+        motivoAtraso: d.motivo_atraso || null,
+        checklists: d.checklists || [],
+        faseAtual: d.fase_atual || null,
+        organizacao: d.organizacao
+      }));
+      
+      // Calcular stats por organização
+      const statsPorOrganizacao = {};
+      organizacoesList.forEach(org => {
+        const demandas = organizacoes[org];
+        const total = demandas.length;
+        const concluidas = demandas.filter(d => d.status === 'concluido').length;
+        const emAndamento = demandas.filter(d => d.status === 'em_andamento').length;
+        const pendentes = demandas.filter(d => d.status === 'pendente').length;
+        const atrasadas = demandas.filter(d => d.status === 'atrasado').length;
+        
+        let checklistsTotal = 0;
+        let checklistsConcluidos = 0;
+        demandas.forEach(d => {
+          if (d.checklists) {
+            checklistsTotal += d.checklists.length;
+            checklistsConcluidos += d.checklists.filter(c => c.concluido).length;
+          }
+        });
+        
+        statsPorOrganizacao[org] = {
+          total,
+          concluidas,
+          emAndamento,
+          pendentes,
+          atrasadas,
+          percentualConclusao: total > 0 ? Math.round((concluidas / total) * 100) : 0,
+          checklistsTotal,
+          checklistsConcluidos,
+          percentualChecklists: checklistsTotal > 0 ? Math.round((checklistsConcluidos / checklistsTotal) * 100) : 0
+        };
+      });
+      
+      // Montar prompt
+      let prompt = `Você é um especialista em análise de cronogramas. Gere um RESUMO SIMPLES e DIRETO em pt-BR sobre o que está sendo feito, seguindo EXATAMENTE este formato:
+
+PERÍODO: ${primeiraData.toLocaleDateString('pt-BR')} até ${ultimaData.toLocaleDateString('pt-BR')}
+
+${isComparativo ? `ORGANIZAÇÕES: ${organizacoesList.join(', ')}` : `ORGANIZAÇÃO: ${organizacoesList[0] || 'N/A'}`}
+
+ESTATÍSTICAS:
+- Total: ${totalDemandas} demandas
+- Concluídas: ${demandasConcluidas} (${percentualConclusao}%)
+- Em Andamento: ${demandasEmAndamento}
+- Pendentes: ${demandasPendentes}
+- Atrasadas: ${demandasAtrasadas}
+- Checklists: ${checklistsConcluidos}/${totalChecklists} concluídos (${percentualChecklists}%)
+${demandasProximasPrazo > 0 ? `- ⚠️ ${demandasProximasPrazo} demanda(s) com prazo nos próximos 7 dias` : ''}
+${demandasSemPrazo > 0 ? `- ⚠️ ${demandasSemPrazo} demanda(s) sem prazo definido` : ''}
+
+${isComparativo ? `\nESTATÍSTICAS POR ORGANIZAÇÃO:\n${Object.entries(statsPorOrganizacao).map(([org, stats]) => 
+  `- ${org}: ${stats.total} demanda(s) | ${stats.concluidas} concluída(s) (${stats.percentualConclusao}%)`
+).join('\n')}\n` : ''}
+
+DADOS DAS DEMANDAS:
+${JSON.stringify(demandasCompletas, null, 2)}
+
+FORMATO OBRIGATÓRIO (Markdown):
+
+## Resumo Geral
+
+[Máximo 4-5 linhas. Resumo simples do que está sendo feito, principais entregas e status geral.]
+
+## Demandas
+
+Para CADA demanda, use este formato (seja CONCISO - máximo 2 linhas por demanda):
+
+### [Nome da Demanda] - [Responsável]${isComparativo ? ' - [Organização]' : ''}
+
+**Status:** [concluída/em andamento/atrasada/pendente] | **Prioridade:** [Crítica/Alta/Média/Baixa]
+
+[Se concluída:]
+✅ Concluída em [data]. [Breve resumo do que foi entregue]
+
+[Se em andamento:]
+🔄 Em andamento. [O que está sendo feito atualmente em 1 linha]
+
+[Se atrasada:]
+⚠️ Atrasada. [Motivo se disponível]. [O que precisa ser feito]
+
+[Se pendente:]
+⏳ Pendente. [Breve contexto do que precisa ser iniciado]
+
+REGRAS IMPORTANTES:
+- Seja SIMPLES e DIRETO. Foco em mostrar o que está sendo feito.
+- Máximo 2 linhas por demanda
+- Use linguagem clara e objetiva
+- Se a demanda tem data_inicio, ela JÁ INICIOU
+- NÃO invente dados. Use apenas o que está no JSON.
+- Para checklists, mencione apenas se for relevante (ex: "X/Y checklists concluídos")`;
+
+      sendEvent('status', { message: 'IA está gerando o resumo...' });
+      
+      // Chamar OpenAI com streaming
+      const stream = await openai.chat.completions.create({
+        model: "gpt-4o-mini",
+        messages: [
+          {
+            role: "system",
+            content: "Você gera resumos SIMPLES e DIRETOS em pt-BR sobre o que está sendo feito em cronogramas. Foco em mostrar de forma clara o status das demandas e o que está acontecendo. Seja objetivo, use Markdown e apenas os dados fornecidos."
+          },
+          { role: "user", content: prompt }
+        ],
+        stream: true,
+        max_tokens: 6000,
+        temperature: 0.2
+      });
+      
+      let fullText = '';
+      
+      // Enviar chunks de texto conforme vão sendo gerados
+      for await (const chunk of stream) {
+        const content = chunk.choices[0]?.delta?.content || '';
+        if (content) {
+          fullText += content;
+          sendEvent('chunk', { text: content });
+        }
+      }
+      
+      // Enviar dados finais
+      sendEvent('complete', {
+        fullText,
+        periodo: {
+          inicio: primeiraData.toISOString(),
+          fim: ultimaData.toISOString(),
+          inicioFormatado: primeiraData.toLocaleDateString('pt-BR'),
+          fimFormatado: ultimaData.toLocaleDateString('pt-BR')
+        },
+        metadata: {
+          totalDemandas,
+          organizacaoFiltro: organizacao || 'todas',
+          usuarioOrganizacao: userOrg,
+          geradoEm: new Date().toISOString()
+        }
+      });
+      
+      res.end();
+      
+    } catch (error) {
+      console.error('❌ Erro ao gerar overview com streaming:', error);
+      sendEvent('error', { message: error.message || 'Erro ao gerar overview' });
+      res.end();
+    } finally {
+      if (server) {
+        try {
+          server.close();
+        } catch (err) {
+          console.error('Erro ao fechar tunnel:', err);
+        }
+      }
+    }
+  } catch (error) {
+    console.error('❌ Erro ao gerar overview com streaming:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Erro ao gerar overview',
+      details: error.message
+    });
+  }
+};
+
 // Função para analisar cronograma por mês específico com IA
 const analisarCronogramaPorMesComIA = async (cronogramasFormatados, organizacoes, userOrg, organizacaoFiltro, ano, mes) => {
   try {
