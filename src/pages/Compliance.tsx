@@ -1658,16 +1658,27 @@ export default function Compliance({ tipoCompliance }: ComplianceProps) {
       console.log('🔍 currentUser:', currentUser);
       console.log('🔍 localStorage user:', localStorage.getItem('user'));
       
+      // Validar que tipoCompliance está definido
+      if (!tipoCompliance) {
+        console.error('❌ Erro: tipoCompliance não está definido');
+        setError('Tipo de compliance não definido. Por favor, selecione um tipo de compliance.');
+        setLoading(false);
+        return;
+      }
+      
       // Fazer requisição com filtro de organização e tipo_compliance
       const urlParams = new URLSearchParams({
         organizacao: userOrg,
-        ...(tipoCompliance && { tipo_compliance: tipoCompliance })
+        tipo_compliance: tipoCompliance // Sempre enviar tipo_compliance
       });
+      
+      console.log('🔍 URL Params:', urlParams.toString());
+      console.log('🔍 Tipo Compliance sendo enviado:', tipoCompliance);
       
       const response = await fetch(`${API_BASE}/compliance/competencias?${urlParams.toString()}`, {
         headers: {
           'x-user-organization': userOrg,
-          ...(tipoCompliance && { 'x-tipo-compliance': tipoCompliance })
+          'x-tipo-compliance': tipoCompliance // Sempre enviar no header
         }
       });
       const data = await response.json();
@@ -2020,20 +2031,33 @@ export default function Compliance({ tipoCompliance }: ComplianceProps) {
         return null;
       }
 
+      // Validar que tipoCompliance está definido
+      if (!tipoCompliance) {
+        toast({
+          title: "Erro",
+          description: "Tipo de compliance não definido. Por favor, selecione um tipo de compliance.",
+          variant: "destructive",
+        });
+        setLoading(false);
+        return null;
+      }
+
       console.log('🔍 Criando competência com dados:', competenciaData);
       console.log('🔍 Organização para criar:', organizacaoParaCriar);
+      console.log('🔍 Tipo Compliance:', tipoCompliance);
 
       const response = await fetch(`${API_BASE}/compliance/competencias`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'x-user-organization': currentUser.organizacao || 'cassems'
+          'x-user-organization': currentUser.organizacao || 'cassems',
+          'x-tipo-compliance': tipoCompliance
         },
         body: JSON.stringify({ 
           ...competenciaData,
           created_by,
           organizacao_criacao: organizacaoParaCriar || 'cassems',
-          tipo_compliance: tipoCompliance || 'rat-fat' // Adicionar tipo_compliance
+          tipo_compliance: tipoCompliance // tipo_compliance é obrigatório
         }),
       });
 
@@ -2431,7 +2455,7 @@ export default function Compliance({ tipoCompliance }: ComplianceProps) {
       // Criar competência com data atual como referência e tipo_compliance
       const competenciaData = {
         competencia_referencia: new Date().toISOString().split('T')[0],
-        tipo_compliance: tipoCompliance || 'rat-fat'
+        tipo_compliance: tipoCompliance
       };
       
       const novaCompetencia = await createCompetenciaWithData(competenciaData);
@@ -2502,7 +2526,7 @@ export default function Compliance({ tipoCompliance }: ComplianceProps) {
       // Criar competência com data atual como referência e tipo_compliance
       const competenciaData = {
         competencia_referencia: new Date().toISOString().split('T')[0],
-        tipo_compliance: tipoCompliance || 'rat-fat'
+        tipo_compliance: tipoCompliance
       };
       
       const novaCompetencia = await createCompetenciaWithData(competenciaData);
