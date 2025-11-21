@@ -168,18 +168,37 @@ exports.listCompetencias = async (req, res) => {
     
     // Filtrar por tipo_compliance se fornecido
     if (tipoCompliance) {
-      const tiposValidos = ['rat-fat', 'subvencao-fiscal', 'terceiros'];
+      const tiposValidos = ['rat-fat', 'subvencao-fiscal', 'terceiros', 'creditos-nao-alocados'];
       if (tiposValidos.includes(tipoCompliance)) {
         // Para rat-fat (padrão), incluir também competências antigas sem tipo
-        // Para outros tipos, mostrar apenas as do tipo específico
+        // Para outros tipos, mostrar apenas as do tipo específico (SEM incluir NULL)
         if (tipoCompliance === 'rat-fat') {
           whereConditions.push(`(cf.tipo_compliance = ? OR cf.tipo_compliance IS NULL)`);
         } else {
+          // Para outros tipos, filtrar APENAS pelo tipo específico (não incluir NULL)
           whereConditions.push(`cf.tipo_compliance = ?`);
         }
         params.push(tipoCompliance);
         console.log('🔍 FILTRO APLICADO: Apenas competências do tipo:', tipoCompliance);
+        console.log('🔍 Condição SQL aplicada:', tipoCompliance === 'rat-fat' 
+          ? `(cf.tipo_compliance = ? OR cf.tipo_compliance IS NULL)` 
+          : `cf.tipo_compliance = ?`);
+      } else {
+        console.log('⚠️ Tipo de compliance não reconhecido:', tipoCompliance);
+        console.log('⚠️ Tipos válidos:', tiposValidos);
+        // Se o tipo não for válido, retornar array vazio ao invés de todas as competências
+        return res.json({
+          success: true,
+          data: []
+        });
       }
+    } else {
+      // Se tipoCompliance não for fornecido, retornar array vazio
+      console.log('⚠️ Tipo de compliance não fornecido - retornando array vazio');
+      return res.json({
+        success: true,
+        data: []
+      });
     }
     
     if (whereConditions.length > 0) {
@@ -194,7 +213,22 @@ exports.listCompetencias = async (req, res) => {
     const rows = await executeQueryWithRetry(query, params);
     
     console.log('🔍 Total de competências encontradas:', rows.length);
-    console.log('🔍 Primeiras 3 competências:', rows.slice(0, 3).map(r => ({ id: r.id, organizacao_criacao: r.organizacao_criacao })));
+    console.log('🔍 Primeiras 3 competências:', rows.slice(0, 3).map(r => ({ 
+      id: r.id, 
+      organizacao_criacao: r.organizacao_criacao,
+      tipo_compliance: r.tipo_compliance 
+    })));
+    
+    // Verificar se todas as competências retornadas têm o tipo_compliance correto
+    if (tipoCompliance && rows.length > 0) {
+      const tiposIncorretos = rows.filter(r => r.tipo_compliance !== tipoCompliance);
+      if (tiposIncorretos.length > 0) {
+        console.error('⚠️ ATENÇÃO: Encontradas', tiposIncorretos.length, 'competências com tipo_compliance incorreto:');
+        tiposIncorretos.forEach(r => {
+          console.error(`  - ID: ${r.id}, tipo_compliance: ${r.tipo_compliance}, esperado: ${tipoCompliance}`);
+        });
+      }
+    }
     
     // Log adicional para debug
     if (userOrganization && userOrganization !== 'portes') {
@@ -295,11 +329,17 @@ exports.createCompetencia = async (req, res) => {
       });
     }
     
-    // Validar tipo_compliance se fornecido
-    const tiposValidos = ['rat-fat', 'subvencao-fiscal', 'terceiros'];
-    const tipoComplianceFinal = tipo_compliance && tiposValidos.includes(tipo_compliance) 
-      ? tipo_compliance 
-      : 'rat-fat'; // Default para rat-fat se não especificado
+    // Validar tipo_compliance se fornecido - OBRIGATÓRIO
+    const tiposValidos = ['rat-fat', 'subvencao-fiscal', 'terceiros', 'creditos-nao-alocados'];
+    if (!tipo_compliance || !tiposValidos.includes(tipo_compliance)) {
+      console.error('❌ Erro: tipo_compliance não fornecido ou inválido:', tipo_compliance);
+      return res.status(400).json({
+        success: false,
+        error: 'Tipo de compliance é obrigatório e deve ser um dos seguintes: ' + tiposValidos.join(', ')
+      });
+    }
+    const tipoComplianceFinal = tipo_compliance;
+    console.log('🔍 Tipo compliance final a ser salvo:', tipoComplianceFinal);
     
     // Obter informações do usuário que está criando
     const userRows = await executeQueryWithRetry(`
@@ -323,10 +363,18 @@ exports.createCompetencia = async (req, res) => {
     // Tentar inserir com tipo_compliance (se a coluna existir)
     let result;
     try {
+      console.log('🔍 Inserindo competência com tipo_compliance:', tipoComplianceFinal);
       result = await executeQueryWithRetry(`
         INSERT INTO compliance_fiscal (competencia_referencia, created_by, organizacao_criacao, status, ultima_alteracao_por, ultima_alteracao_em, ultima_alteracao_organizacao, tipo_compliance)
         VALUES (?, ?, ?, 'pendente', ?, NOW(), ?, ?)
         `, [competencia_referencia, created_by, userOrg, created_by, userOrg, tipoComplianceFinal]);
+      
+      // Verificar se o tipo_compliance foi salvo corretamente
+      const insertId = result.insertId ? parseInt(result.insertId.toString()) : result.affectedRows;
+      const verifyRows = await executeQueryWithRetry(`
+        SELECT tipo_compliance FROM compliance_fiscal WHERE id = ?
+      `, [insertId]);
+      console.log('🔍 Tipo compliance salvo na competência ID', insertId + ':', verifyRows[0]?.tipo_compliance);
     } catch (error) {
       // Se a coluna não existir, inserir sem tipo_compliance (compatibilidade retroativa)
       if (error.message.includes('tipo_compliance') || error.code === 'ER_BAD_FIELD_ERROR') {
