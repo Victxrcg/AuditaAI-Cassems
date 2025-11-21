@@ -214,6 +214,81 @@ exports.obterDadosParaPDF = async (req, res) => {
       filtroStatus: status
     });
     
+    // Calcular métricas adicionais para o resumo
+    let totalChecklists = 0;
+    let checklistsConcluidos = 0;
+    const responsaveisStats = {};
+    const demandasPorPrioridade = {
+      critica: 0,
+      alta: 0,
+      media: 0,
+      baixa: 0
+    };
+    const hoje = new Date();
+    hoje.setHours(0, 0, 0, 0);
+    let demandasProximasPrazo = 0; // Próximas 7 dias
+    let demandasSemPrazo = 0;
+    
+    cronogramasFormatados.forEach(cronograma => {
+      // Contar checklists
+      if (cronograma.checklists && cronograma.checklists.length > 0) {
+        totalChecklists += cronograma.checklists.length;
+        checklistsConcluidos += cronograma.checklists.filter(c => c.concluido).length;
+      }
+      
+      // Estatísticas por responsável
+      const responsavel = cronograma.responsavel_nome || 'Não definido';
+      if (!responsaveisStats[responsavel]) {
+        responsaveisStats[responsavel] = {
+          total: 0,
+          concluidas: 0,
+          emAndamento: 0,
+          pendentes: 0,
+          atrasadas: 0
+        };
+      }
+      responsaveisStats[responsavel].total++;
+      if (cronograma.status === 'concluido') responsaveisStats[responsavel].concluidas++;
+      else if (cronograma.status === 'em_andamento') responsaveisStats[responsavel].emAndamento++;
+      else if (cronograma.status === 'pendente') responsaveisStats[responsavel].pendentes++;
+      else if (cronograma.status === 'atrasado') responsaveisStats[responsavel].atrasadas++;
+      
+      // Contar por prioridade
+      if (cronograma.prioridade) {
+        demandasPorPrioridade[cronograma.prioridade] = (demandasPorPrioridade[cronograma.prioridade] || 0) + 1;
+      }
+      
+      // Verificar prazos
+      if (cronograma.data_fim) {
+        const prazo = new Date(cronograma.data_fim);
+        prazo.setHours(0, 0, 0, 0);
+        const diffDays = Math.ceil((prazo - hoje) / (1000 * 60 * 60 * 24));
+        if (diffDays >= 0 && diffDays <= 7 && cronograma.status !== 'concluido') {
+          demandasProximasPrazo++;
+        }
+      } else {
+        demandasSemPrazo++;
+      }
+    });
+    
+    const percentualChecklists = totalChecklists > 0 
+      ? Math.round((checklistsConcluidos / totalChecklists) * 100) 
+      : 0;
+    
+    // Top 5 responsáveis por total de demandas
+    const topResponsaveis = Object.entries(responsaveisStats)
+      .sort((a, b) => b[1].total - a[1].total)
+      .slice(0, 5)
+      .map(([nome, stats]) => ({
+        nome,
+        total: stats.total,
+        concluidas: stats.concluidas,
+        emAndamento: stats.emAndamento,
+        pendentes: stats.pendentes,
+        atrasadas: stats.atrasadas,
+        percentualConclusao: stats.total > 0 ? Math.round((stats.concluidas / stats.total) * 100) : 0
+      }));
+    
     // Agrupar por organização
     const organizacoes = {};
     cronogramasFormatados.forEach(cronograma => {
@@ -221,6 +296,38 @@ exports.obterDadosParaPDF = async (req, res) => {
         organizacoes[cronograma.organizacao] = [];
       }
       organizacoes[cronograma.organizacao].push(cronograma);
+    });
+    
+    // Calcular estatísticas por organização
+    const statsPorOrganizacao = {};
+    Object.keys(organizacoes).forEach(org => {
+      const demandas = organizacoes[org];
+      const total = demandas.length;
+      const concluidas = demandas.filter(d => d.status === 'concluido').length;
+      const emAndamento = demandas.filter(d => d.status === 'em_andamento').length;
+      const pendentes = demandas.filter(d => d.status === 'pendente').length;
+      const atrasadas = demandas.filter(d => d.status === 'atrasado').length;
+      
+      let checklistsTotal = 0;
+      let checklistsConcluidos = 0;
+      demandas.forEach(d => {
+        if (d.checklists) {
+          checklistsTotal += d.checklists.length;
+          checklistsConcluidos += d.checklists.filter(c => c.concluido).length;
+        }
+      });
+      
+      statsPorOrganizacao[org] = {
+        total,
+        concluidas,
+        emAndamento,
+        pendentes,
+        atrasadas,
+        percentualConclusao: total > 0 ? Math.round((concluidas / total) * 100) : 0,
+        checklistsTotal,
+        checklistsConcluidos,
+        percentualChecklists: checklistsTotal > 0 ? Math.round((checklistsConcluidos / checklistsTotal) * 100) : 0
+      };
     });
     
     // Resposta formatada
@@ -233,9 +340,18 @@ exports.obterDadosParaPDF = async (req, res) => {
           demandasEmAndamento,
           demandasPendentes,
           demandasAtrasadas,
-          percentualConclusao
+          percentualConclusao,
+          // Métricas adicionais
+          totalChecklists,
+          checklistsConcluidos,
+          percentualChecklists,
+          demandasPorPrioridade,
+          demandasProximasPrazo,
+          demandasSemPrazo,
+          topResponsaveis
         },
         organizacoes,
+        statsPorOrganizacao,
         cronogramas: cronogramasFormatados,
         metadata: {
           geradoEm: new Date().toISOString(),
@@ -514,67 +630,124 @@ const analisarCronogramaComIA = async (cronogramasFormatados, organizacoes, user
     // Montar prompt para a IA
     const isComparativo = userOrg === 'portes' && organizacaoFiltro === 'todos';
     
+    // Calcular estatísticas gerais para o resumo
+    const totalDemandas = cronogramasFormatados.length;
+    const demandasConcluidas = cronogramasFormatados.filter(d => d.status === 'concluido').length;
+    const demandasEmAndamento = cronogramasFormatados.filter(d => d.status === 'em_andamento').length;
+    const demandasPendentes = cronogramasFormatados.filter(d => d.status === 'pendente').length;
+    const demandasAtrasadas = cronogramasFormatados.filter(d => d.status === 'atrasado').length;
+    const percentualConclusao = totalDemandas > 0 ? Math.round((demandasConcluidas / totalDemandas) * 100) : 0;
+    
+    // Calcular métricas de checklists
+    let totalChecklists = 0;
+    let checklistsConcluidos = 0;
+    cronogramasFormatados.forEach(d => {
+      if (d.checklists && d.checklists.length > 0) {
+        totalChecklists += d.checklists.length;
+        checklistsConcluidos += d.checklists.filter(c => c.concluido).length;
+      }
+    });
+    const percentualChecklists = totalChecklists > 0 ? Math.round((checklistsConcluidos / totalChecklists) * 100) : 0;
+    
+    // Calcular distribuição por prioridade
+    const demandasPorPrioridade = {
+      critica: cronogramasFormatados.filter(d => d.prioridade === 'critica').length,
+      alta: cronogramasFormatados.filter(d => d.prioridade === 'alta').length,
+      media: cronogramasFormatados.filter(d => d.prioridade === 'media').length,
+      baixa: cronogramasFormatados.filter(d => d.prioridade === 'baixa').length
+    };
+    
+    // Calcular alertas de prazo
+    const hoje = new Date();
+    hoje.setHours(0, 0, 0, 0);
+    let demandasProximasPrazo = 0;
+    let demandasSemPrazo = 0;
+    cronogramasFormatados.forEach(d => {
+      if (d.status !== 'concluido') {
+        if (d.data_fim) {
+          const prazo = new Date(d.data_fim);
+          prazo.setHours(0, 0, 0, 0);
+          const diffDays = Math.ceil((prazo - hoje) / (1000 * 60 * 60 * 24));
+          if (diffDays >= 0 && diffDays <= 7) {
+            demandasProximasPrazo++;
+          }
+        } else {
+          demandasSemPrazo++;
+        }
+      }
+    });
+    
     // Preparar dados completos de demandas para análise
     const demandasCompletas = cronogramasFormatados.map(d => ({
       titulo: d.titulo,
       descricao: d.descricao || 'Sem descrição',
       responsavel: d.responsavel_nome || 'Não definido',
       status: d.status,
+      prioridade: d.prioridade || 'media',
       dataInicio: d.data_inicio,
       dataFim: d.data_fim,
       motivoAtraso: d.motivo_atraso || null,
       checklists: d.checklists || [],
-      faseAtual: d.fase_atual || null
+      faseAtual: d.fase_atual || null,
+      organizacao: d.organizacao
     }));
 
-    let prompt = `Você é um especialista em análise de cronogramas. Gere um relatório SIMPLES, DIRETO e RÁPIDO em pt-BR, seguindo EXATAMENTE este formato:
+    let prompt = `Você é um especialista em análise de cronogramas. Gere um RESUMO SIMPLES e DIRETO em pt-BR sobre o que está sendo feito, seguindo EXATAMENTE este formato:
 
 PERÍODO: ${primeiraData.toLocaleDateString('pt-BR')} até ${ultimaData.toLocaleDateString('pt-BR')}
 
 ${isComparativo ? `ORGANIZAÇÕES: ${organizacoesList.join(', ')}` : `ORGANIZAÇÃO: ${organizacoesList[0] || 'N/A'}`}
 
-DADOS COMPLETOS DAS DEMANDAS:
+ESTATÍSTICAS:
+- Total: ${totalDemandas} demandas
+- Concluídas: ${demandasConcluidas} (${percentualConclusao}%)
+- Em Andamento: ${demandasEmAndamento}
+- Pendentes: ${demandasPendentes}
+- Atrasadas: ${demandasAtrasadas}
+- Checklists: ${checklistsConcluidos}/${totalChecklists} concluídos (${percentualChecklists}%)
+${demandasProximasPrazo > 0 ? `- ⚠️ ${demandasProximasPrazo} demanda(s) com prazo nos próximos 7 dias` : ''}
+${demandasSemPrazo > 0 ? `- ⚠️ ${demandasSemPrazo} demanda(s) sem prazo definido` : ''}
+
+${isComparativo ? `\nESTATÍSTICAS POR ORGANIZAÇÃO:\n${Object.entries(statsPorOrganizacao).map(([org, stats]) => 
+  `- ${org}: ${stats.total} demanda(s) | ${stats.concluidas} concluída(s) (${stats.percentualConclusao}%)`
+).join('\n')}\n` : ''}
+
+DADOS DAS DEMANDAS:
 ${JSON.stringify(demandasCompletas, null, 2)}
 
 FORMATO OBRIGATÓRIO (Markdown):
 
-## Resumo do Período
-[Máximo 5 linhas. Resumo geral do que aconteceu no período, sem enrolação.]
+## Resumo Geral
+
+[Máximo 4-5 linhas. Resumo simples do que está sendo feito, principais entregas e status geral.]
 
 ## Demandas
 
-Para CADA demanda, use EXATAMENTE este formato:
+Para CADA demanda, use este formato (seja CONCISO - máximo 2 linhas por demanda):
 
-### [Nome da Demanda] - ([Responsável])
+### [Nome da Demanda] - [Responsável]${isComparativo ? ' - [Organização]' : ''}
 
-**Status:** [concluída/em andamento/atrasada/pendente]
-
-**Descrição:** [Breve resumo da demanda em 1-2 linhas]
+**Status:** [concluída/em andamento/atrasada/pendente] | **Prioridade:** [Crítica/Alta/Média/Baixa]
 
 [Se concluída:]
-- Concluída em: [data de conclusão]
-- Checklists concluídos: [resumo dos checklists concluídos, listando apenas os que foram concluídos]
+✅ Concluída em [data]. [Breve resumo do que foi entregue]
 
 [Se em andamento:]
-- Ainda em andamento. [Breve explicação do status atual]
-- Checklists: [resumo dos checklists - quais concluídos e quais pendentes]
+🔄 Em andamento. [O que está sendo feito atualmente em 1 linha]
 
 [Se atrasada:]
-- Atrasada. Motivo: [motivo do atraso se disponível]
-- Checklists: [resumo dos checklists - quais concluídos e quais pendentes]
+⚠️ Atrasada. [Motivo se disponível]. [O que precisa ser feito]
 
 [Se pendente:]
-- Pendente. [Breve explicação]
-- Checklists: [resumo dos checklists pendentes]
+⏳ Pendente. [Breve contexto do que precisa ser iniciado]
 
 REGRAS IMPORTANTES:
-- Seja DIRETO. Sem enrolação.
-- Máximo 3-4 linhas por demanda.
-- Se a demanda tem data_inicio, ela JÁ INICIOU. Nunca diga "ainda não iniciou" se tiver data_inicio.
-- Para checklists concluídos, liste apenas os títulos em 1 linha: "Checklists concluídos: X, Y, Z"
-- Para checklists pendentes, liste apenas os títulos em 1 linha: "Checklists pendentes: X, Y, Z"
-- Use linguagem simples e objetiva.
-- NÃO invente dados. Use apenas o que está no JSON.`;
+- Seja SIMPLES e DIRETO. Foco em mostrar o que está sendo feito.
+- Máximo 2 linhas por demanda
+- Use linguagem clara e objetiva
+- Se a demanda tem data_inicio, ela JÁ INICIOU
+- NÃO invente dados. Use apenas o que está no JSON.
+- Para checklists, mencione apenas se for relevante (ex: "X/Y checklists concluídos")`;
 
     // Chamar OpenAI
     const completion = await openai.chat.completions.create({
@@ -582,7 +755,7 @@ REGRAS IMPORTANTES:
       messages: [
         {
           role: "system",
-          content: "Você gera relatórios SIMPLES, DIRETOS e RÁPIDOS em pt-BR, para leigos, sempre em Markdown determinístico. Sem enrolação. Foco em clareza e objetividade. Use apenas os dados fornecidos."
+          content: "Você gera resumos SIMPLES e DIRETOS em pt-BR sobre o que está sendo feito em cronogramas. Foco em mostrar de forma clara o status das demandas e o que está acontecendo. Seja objetivo, use Markdown e apenas os dados fornecidos."
         },
         { role: "user", content: prompt }
       ],
@@ -591,24 +764,6 @@ REGRAS IMPORTANTES:
     });
     
     const analiseIA = completion.choices[0].message.content;
-    
-    // Calcular top responsáveis com contagem de concluídas e atrasadas
-    const responsaveisCount = {};
-    cronogramasFormatados.forEach(c => {
-      const nome = c.responsavel_nome || 'Não definido';
-      if (!responsaveisCount[nome]) {
-        responsaveisCount[nome] = { concluidas: 0, atrasadas: 0 };
-      }
-      if (c.status === 'concluido') {
-        responsaveisCount[nome].concluidas += 1;
-      } else if (c.status === 'atrasado') {
-        responsaveisCount[nome].atrasadas += 1;
-      }
-    });
-    const topResponsaveis = Object.entries(responsaveisCount)
-      .sort((a, b) => (b[1].concluidas + b[1].atrasadas) - (a[1].concluidas + a[1].atrasadas))
-      .slice(0, 5)
-      .map(([nome, stats]) => ({ nome, concluidas: stats.concluidas, atrasadas: stats.atrasadas }));
     
     return {
       analise: analiseIA,
@@ -627,7 +782,6 @@ REGRAS IMPORTANTES:
         atrasadas: (r.demandasAtrasadas || []).length,
         pendentes: (r.demandasPendentes || []).length
       })),
-      topResponsaveis,
       statsPorOrganizacao: isComparativo ? statsPorOrganizacao : null,
       isComparativo
     };
