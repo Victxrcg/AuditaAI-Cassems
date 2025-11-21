@@ -6,6 +6,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Bell, Search, Menu, ArrowLeft } from "lucide-react";
 import { useIsMobile } from "@/hooks/use-mobile";
 import Sidebar from "./Sidebar";
+import NotificationBell from "./NotificationBell";
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -112,6 +113,7 @@ const Layout = ({ children }: LayoutProps) => {
                 Voltar
               </Button>
             )}
+            <NotificationBell />
           </div>
           <style>{`
             @keyframes slideInFromRight {
