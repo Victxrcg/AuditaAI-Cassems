@@ -3155,13 +3155,10 @@ const Cronograma = () => {
                           )}
                         </div>
                         <div className="flex-1 min-w-0">
-                          <h3 className="text-lg sm:text-xl font-bold text-gray-900 mb-1 break-words">
+                          <h3 className="text-lg sm:text-xl font-bold text-gray-900 mb-3 sm:mb-4 break-words">
                             {org.nome}
                           </h3>
-                          <p className="text-xs sm:text-sm text-gray-500 mb-2 break-words">
-                            {org.codigo.toUpperCase()}
-                          </p>
-                          <div className="flex items-center gap-2 mt-3 sm:mt-4">
+                          <div className="flex items-center gap-2">
                             <span className="text-xs font-medium text-blue-600 bg-blue-50 px-2 sm:px-3 py-1 rounded-full whitespace-nowrap">
                               Acessar Cronograma
                             </span>

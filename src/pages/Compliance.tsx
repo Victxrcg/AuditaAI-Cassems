@@ -35,7 +35,15 @@ import {
   Brain,
   ChevronDown,
   Lock,
-  Mail
+  Mail,
+  FileBarChart,
+  Landmark,
+  Briefcase,
+  ArrowRight,
+  Users,
+  Receipt,
+  Wallet,
+  Search
 } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
@@ -1409,11 +1417,112 @@ const HistoricoAlteracoes = ({ historico, loading }: { historico: HistoricoAlter
 
 // Mover as funções para dentro do componente principal Compliance
 interface ComplianceProps {
-  tipoCompliance?: 'rat-fat' | 'subvencao-fiscal' | 'terceiros';
+  tipoCompliance?: 'rat-fat' | 'subvencao-fiscal' | 'terceiros' | 'creditos-nao-alocados';
 }
 
-export default function Compliance({ tipoCompliance = 'rat-fat' }: ComplianceProps) {
+// Função auxiliar para obter o nome do tipo de compliance
+const getTipoComplianceName = (tipo?: 'rat-fat' | 'subvencao-fiscal' | 'terceiros' | 'creditos-nao-alocados'): string => {
+  if (!tipo) return 'Compliance';
+  const names: Record<string, string> = {
+    'rat-fat': 'RAT e FAP',
+    'subvencao-fiscal': 'Subvenção Fiscal',
+    'terceiros': 'Terceiros',
+    'creditos-nao-alocados': 'Créditos não alocados'
+  };
+  return names[tipo] || 'Compliance';
+};
+
+// Componente de seleção de tipo de Compliance
+const ComplianceSelection = () => {
   const navigate = useNavigate();
+
+  const complianceTypes = [
+    {
+      id: 'rat-fat',
+      title: 'RAT e FAP',
+      description: 'Relatórios de Análise Técnica e Faturamento',
+      icon: FileBarChart,
+      path: '/compliance/rat-fat',
+      color: 'bg-blue-50 hover:bg-blue-100 border-blue-200',
+      iconColor: 'text-blue-600'
+    },
+    {
+      id: 'subvencao-fiscal',
+      title: 'Subvenção Fiscal',
+      description: 'Gestão de subvenções e incentivos fiscais',
+      icon: Receipt,
+      path: '/compliance/subvencao-fiscal',
+      color: 'bg-green-50 hover:bg-green-100 border-green-200',
+      iconColor: 'text-green-600'
+    },
+    {
+      id: 'terceiros',
+      title: 'Terceiros',
+      description: 'Compliance e gestão de terceiros',
+      icon: Users,
+      path: '/compliance/terceiros',
+      color: 'bg-purple-50 hover:bg-purple-100 border-purple-200',
+      iconColor: 'text-purple-600'
+    },
+    {
+      id: 'creditos-nao-alocados',
+      title: 'Créditos não alocados',
+      description: 'Gestão de créditos fiscais não alocados',
+      icon: Search,
+      path: '/compliance/creditos-nao-alocados',
+      color: 'bg-orange-50 hover:bg-orange-100 border-orange-200',
+      iconColor: 'text-orange-600'
+    }
+  ];
+
+  return (
+    <div className="container mx-auto p-6 max-w-6xl">
+      <div className="mb-8">
+        <h1 className="text-3xl font-bold text-gray-900 mb-2">Compliance</h1>
+        <p className="text-gray-600">Selecione o tipo de compliance que deseja gerenciar</p>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        {complianceTypes.map((type) => {
+          const Icon = type.icon;
+          return (
+            <Card
+              key={type.id}
+              className={`${type.color} cursor-pointer transition-all duration-200 hover:shadow-lg hover:scale-105 border-2`}
+              onClick={() => navigate(type.path)}
+            >
+              <CardHeader className="pb-4">
+                <div className={`w-12 h-12 rounded-lg ${type.color} flex items-center justify-center mb-4`}>
+                  <Icon className={`h-6 w-6 ${type.iconColor}`} />
+                </div>
+                <CardTitle className="text-xl font-semibold text-gray-900">
+                  {type.title}
+                </CardTitle>
+                <CardDescription className="text-gray-600 mt-2">
+                  {type.description}
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="flex items-center text-sm font-medium text-gray-700 group">
+                  Acessar
+                  <ArrowRight className="ml-2 h-4 w-4 transition-transform group-hover:translate-x-1" />
+                </div>
+              </CardContent>
+            </Card>
+          );
+        })}
+      </div>
+    </div>
+  );
+};
+
+export default function Compliance({ tipoCompliance }: ComplianceProps) {
+  const navigate = useNavigate();
+  
+  // Se não houver tipoCompliance, mostrar tela de seleção
+  if (!tipoCompliance) {
+    return <ComplianceSelection />;
+  }
   
   // Sempre inicializar com a lista ao montar o componente
   // O localStorage é usado apenas para manter estado durante refresh de página
@@ -2716,7 +2825,7 @@ export default function Compliance({ tipoCompliance = 'rat-fat' }: CompliancePro
       <div className="flex flex-col lg:flex-row lg:justify-between lg:items-center space-y-4 lg:space-y-0">
         <div className="flex-1">
           <h1 className="text-2xl lg:text-3xl font-bold">
-            Compliance Fiscal
+            Compliance Fiscal - {getTipoComplianceName(tipoCompliance)}
           </h1>
           {currentUser?.organizacao === 'portes' ? (
             <p className="text-xs lg:text-sm text-green-600 mt-1">
@@ -2729,6 +2838,15 @@ export default function Compliance({ tipoCompliance = 'rat-fat' }: CompliancePro
           )}
         </div>
         <div className="flex flex-col sm:flex-row gap-2">
+          <Button 
+            variant="outline" 
+            onClick={() => navigate('/compliance')}
+            className="text-xs lg:text-sm font-medium border-gray-300 hover:bg-gray-50 hover:border-gray-400 transition-all duration-200"
+          >
+            <ArrowLeft className="h-4 w-4 lg:h-5 lg:w-5 mr-1.5 lg:mr-2" />
+            <span className="hidden sm:inline">Voltar</span>
+            <span className="sm:hidden">Voltar</span>
+          </Button>
           <Button 
             onClick={createCompetencia} 
             className="bg-blue-600 hover:bg-blue-700 text-xs lg:text-sm font-medium" 

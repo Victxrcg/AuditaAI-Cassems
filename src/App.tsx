@@ -36,7 +36,7 @@ const AppContent = () => {
           path="/compliance" 
           element={
             <ProtectedRoute requiredPermission="compliance">
-              <Layout><Compliance key="rat-fat" tipoCompliance="rat-fat" /></Layout>
+              <Layout><Compliance key="compliance-selection" /></Layout>
             </ProtectedRoute>
           } 
         />
@@ -61,6 +61,14 @@ const AppContent = () => {
           element={
             <ProtectedRoute requiredPermission="compliance">
               <Layout><Compliance key="terceiros" tipoCompliance="terceiros" /></Layout>
+            </ProtectedRoute>
+          } 
+        />
+        <Route 
+          path="/compliance/creditos-nao-alocados" 
+          element={
+            <ProtectedRoute requiredPermission="compliance">
+              <Layout><Compliance key="creditos-nao-alocados" tipoCompliance="creditos-nao-alocados" /></Layout>
             </ProtectedRoute>
           } 
         />

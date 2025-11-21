@@ -21,10 +21,7 @@ import {
   XCircle,
   AlertCircleIcon,
   ClipboardList,
-  Menu,
-  FileBarChart,
-  Landmark,
-  Briefcase
+  Menu
 } from "lucide-react";
 
 interface SidebarProps {
@@ -45,7 +42,7 @@ const Sidebar = ({ isOpen, onOpenChange }: SidebarProps) => {
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [permissionsKey, setPermissionsKey] = useState(0);
-  const [expandedMenus, setExpandedMenus] = useState<Set<string>>(new Set(['compliance'])); // Compliance expandido por padrão
+  const [expandedMenus, setExpandedMenus] = useState<Set<string>>(new Set());
   const location = useLocation();
   const navigate = useNavigate();
   const isMobile = useIsMobile();
@@ -153,30 +150,7 @@ const Sidebar = ({ isOpen, onOpenChange }: SidebarProps) => {
       icon: Shield, 
       path: "/compliance",
       id: "compliance",
-      badge: null,
-      subitems: [
-        {
-          name: "RAT e FAT",
-          icon: FileBarChart,
-          path: "/compliance/rat-fat",
-          id: "compliance_rat_fat",
-          badge: null
-        },
-        {
-          name: "Subvenção fiscal",
-          icon: Landmark,
-          path: "/compliance/subvencao-fiscal",
-          id: "compliance_subvencao_fiscal",
-          badge: null
-        },
-        {
-          name: "Terceiros",
-          icon: Briefcase,
-          path: "/compliance/terceiros",
-          id: "compliance_terceiros",
-          badge: null
-        }
-      ]
+      badge: null
     },
     {
       name: "Documentos",
