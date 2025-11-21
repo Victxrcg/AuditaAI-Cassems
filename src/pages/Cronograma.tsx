@@ -1,4 +1,4 @@
-﻿import { useState, useEffect, useCallback, useMemo } from 'react';
+﻿import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 import {
@@ -151,7 +151,21 @@ const Cronograma = () => {
   const [usarIA, setUsarIA] = useState(false);
   const [loadingIA, setLoadingIA] = useState(false);
   const [loadingMesIA, setLoadingMesIA] = useState(false);
+  // Estados para o overview com streaming
+  const [isOverviewModalOpen, setIsOverviewModalOpen] = useState(false);
+  const [overviewText, setOverviewText] = useState('');
+  const [overviewStatus, setOverviewStatus] = useState('');
+  const [isGeneratingOverview, setIsGeneratingOverview] = useState(false);
+  const [overviewMetadata, setOverviewMetadata] = useState<any>(null);
+  const overviewTextRef = useRef<HTMLDivElement>(null);
   const [organizacoes, setOrganizacoes] = useState<any[]>([]);
+  
+  // Scroll automático quando novo texto chega
+  useEffect(() => {
+    if (overviewTextRef.current && isGeneratingOverview) {
+      overviewTextRef.current.scrollTop = overviewTextRef.current.scrollHeight;
+    }
+  }, [overviewText, isGeneratingOverview]);
   const [organizacaoSelecionada, setOrganizacaoSelecionada] = useState<string | null>(null);
   const [mostrarSelecaoEmpresa, setMostrarSelecaoEmpresa] = useState(false);
   const [loadingOrganizacoes, setLoadingOrganizacoes] = useState(false);
@@ -416,11 +430,12 @@ const Cronograma = () => {
         throw new Error(data.error || 'Erro ao processar dados');
       }
       
-      const { resumo, organizacoes, metadata } = data.data;
+      const { resumo, organizacoes, statsPorOrganizacao, metadata } = data.data;
       
       console.log('📄 Dados recebidos da API:', {
         resumo,
         organizacoes: Object.keys(organizacoes),
+        statsPorOrganizacao,
         metadata
       });
       
@@ -478,18 +493,18 @@ const Cronograma = () => {
       
       yPosition = addDivider(pdf, yPosition);
       
-      // Estatísticas gerais
+      // RESUMO EXECUTIVO
       if (statusParaFiltrar !== 'todos') {
         const statusLabel = statusParaFiltrar === 'concluido' ? 'Concluídas' : 
                            statusParaFiltrar === 'em_andamento' ? 'Em Andamento' :
                            statusParaFiltrar === 'pendente' ? 'Pendentes' :
                            statusParaFiltrar === 'atrasado' ? 'Atrasadas' : statusParaFiltrar;
-        yPosition = addSectionTitle(pdf, `RESUMO - DEMANDAS ${statusLabel.toUpperCase()}`, yPosition, 2);
+        yPosition = addSectionTitle(pdf, `RESUMO EXECUTIVO - DEMANDAS ${statusLabel.toUpperCase()}`, yPosition, 2);
       } else {
-        yPosition = addSectionTitle(pdf, 'RESUMO GERAL', yPosition, 2);
+        yPosition = addSectionTitle(pdf, 'RESUMO EXECUTIVO', yPosition, 2);
       }
       
-      // Tabela de estatísticas
+      // Métricas principais em tabela
       const headers = ['Total', 'Concluídas', 'Em Andamento', 'Pendentes', 'Atrasadas'];
       const statsRow = [
         resumo.totalDemandas.toString(),
@@ -523,62 +538,139 @@ const Cronograma = () => {
       
       yPosition = addDivider(pdf, yPosition);
       
-      // Detalhes por organização
+      // MÉTRICAS ADICIONAIS (apenas se não houver filtro de status)
+      if (statusParaFiltrar === 'todos' && resumo.totalChecklists !== undefined) {
+        yPosition = addSectionTitle(pdf, 'MÉTRICAS DE CHECKLISTS', yPosition, 3);
+        
+        const checklistsInfo = [
+          `Total de Checklists: ${resumo.totalChecklists || 0}`,
+          `Checklists Concluídos: ${resumo.checklistsConcluidos || 0}`,
+          `Percentual de Conclusão: ${resumo.percentualChecklists || 0}%`
+        ];
+        
+        yPosition = addListItem(pdf, checklistsInfo, yPosition, {
+          fontSize: 10,
+          indent: 5
+        });
+        
+        yPosition = addDivider(pdf, yPosition);
+      }
+      
+      // DEMANDAS POR PRIORIDADE
+      if (statusParaFiltrar === 'todos' && resumo.demandasPorPrioridade) {
+        yPosition = addSectionTitle(pdf, 'DISTRIBUIÇÃO POR PRIORIDADE', yPosition, 3);
+        
+        const prioridadesInfo = [
+          `Crítica: ${resumo.demandasPorPrioridade.critica || 0}`,
+          `Alta: ${resumo.demandasPorPrioridade.alta || 0}`,
+          `Média: ${resumo.demandasPorPrioridade.media || 0}`,
+          `Baixa: ${resumo.demandasPorPrioridade.baixa || 0}`
+        ];
+        
+        yPosition = addListItem(pdf, prioridadesInfo, yPosition, {
+          fontSize: 10,
+          indent: 5
+        });
+        
+        yPosition = addDivider(pdf, yPosition);
+      }
+      
+      // ALERTAS DE PRAZO
+      if (statusParaFiltrar === 'todos' && resumo.demandasProximasPrazo !== undefined && resumo.demandasSemPrazo !== undefined && 
+          (resumo.demandasProximasPrazo > 0 || resumo.demandasSemPrazo > 0)) {
+        yPosition = addSectionTitle(pdf, 'ALERTAS DE PRAZO', yPosition, 3);
+        
+        const alertasInfo: string[] = [];
+        if (resumo.demandasProximasPrazo > 0) {
+          alertasInfo.push(`⚠️ ${resumo.demandasProximasPrazo} demanda(s) com prazo nos próximos 7 dias`);
+        }
+        if (resumo.demandasSemPrazo > 0) {
+          alertasInfo.push(`⚠️ ${resumo.demandasSemPrazo} demanda(s) sem prazo definido`);
+        }
+        
+        if (alertasInfo.length > 0) {
+          yPosition = addListItem(pdf, alertasInfo, yPosition, {
+            fontSize: 10,
+            indent: 5
+          });
+        }
+        
+        yPosition = addDivider(pdf, yPosition);
+      }
+      
+      // DETALHES POR ORGANIZAÇÃO
+      yPosition = addSectionTitle(pdf, 'DETALHES POR ORGANIZAÇÃO', yPosition, 2);
+      
       Object.keys(organizacoes).forEach(organizacao => {
         const demandasOrg = organizacoes[organizacao];
+        const orgStats = statsPorOrganizacao && statsPorOrganizacao[organizacao] 
+          ? statsPorOrganizacao[organizacao]
+          : null;
         
-        yPosition = addSectionTitle(pdf, `ORGANIZAÇÃO: ${organizacao.toUpperCase()}`, yPosition, 2);
+        yPosition = addSectionTitle(pdf, `ORGANIZAÇÃO: ${organizacao.toUpperCase()}`, yPosition, 3);
         
-        const concluidasOrg = demandasOrg.filter(c => c.status === 'concluido').length;
-        const emAndamentoOrg = demandasOrg.filter(c => c.status === 'em_andamento').length;
-        const pendentesOrg = demandasOrg.filter(c => c.status === 'pendente').length;
-        const atrasadasOrg = demandasOrg.filter(c => c.status === 'atrasado').length;
+        // Usar estatísticas calculadas se disponíveis, senão calcular
+        const concluidasOrg = orgStats ? orgStats.concluidas : demandasOrg.filter(c => c.status === 'concluido').length;
+        const emAndamentoOrg = orgStats ? orgStats.emAndamento : demandasOrg.filter(c => c.status === 'em_andamento').length;
+        const pendentesOrg = orgStats ? orgStats.pendentes : demandasOrg.filter(c => c.status === 'pendente').length;
+        const atrasadasOrg = orgStats ? orgStats.atrasadas : demandasOrg.filter(c => c.status === 'atrasado').length;
         
-        const orgHeaders = ['Total', 'Concluídas', 'Em Andamento', 'Pendentes', 'Atrasadas'];
+        const orgHeaders = ['Total', 'Concluídas', 'Em Andamento', 'Pendentes', 'Atrasadas', '% Conclusão'];
         const orgStatsRow = [
           demandasOrg.length.toString(),
           concluidasOrg.toString(),
           emAndamentoOrg.toString(),
           pendentesOrg.toString(),
-          atrasadasOrg.toString()
+          atrasadasOrg.toString(),
+          orgStats ? `${orgStats.percentualConclusao}%` : '0%'
         ];
         
         yPosition = addTable(pdf, orgHeaders, [orgStatsRow], yPosition, {
           fontSize: 10
         });
         
-        // Listar demandas da organização
+        // Adicionar informações de checklists se disponível
+        if (orgStats && orgStats.checklistsTotal > 0) {
+          yPosition = addBodyText(pdf, 
+            `Checklists: ${orgStats.checklistsConcluidos}/${orgStats.checklistsTotal} concluídos (${orgStats.percentualChecklists}%)`, 
+            yPosition, {
+            fontSize: 9,
+            color: LAYOUT_COLORS.lightGray
+          });
+        }
+        
+        // Listar demandas da organização de forma resumida
         const demandasList: string[] = [];
         demandasOrg.forEach((demanda, index) => {
           const statusLabel = {
-            'concluido': '[OK]',
-            'em_andamento': '[EM ANDAMENTO]',
-            'pendente': '[PENDENTE]',
-            'atrasado': '[ATRASADA]'
+            'concluido': '[✓]',
+            'em_andamento': '[→]',
+            'pendente': '[○]',
+            'atrasado': '[⚠]'
           }[demanda.status] || '[?]';
           
-          let itemText = `${statusLabel} ${index + 1}. ${demanda.titulo}`;
-          if (demanda.descricao) {
-            itemText += ` - ${demanda.descricao}`;
-          }
-          itemText += ` | Responsável: ${demanda.responsavel_nome || 'Não definido'}`;
+          const prioridadeLabel = demanda.prioridade === 'critica' ? '🔴' :
+                                  demanda.prioridade === 'alta' ? '🟠' :
+                                  demanda.prioridade === 'media' ? '🟡' : '🟢';
+          
+          let itemText = `${statusLabel} ${prioridadeLabel} ${index + 1}. ${demanda.titulo}`;
+          itemText += ` | ${demanda.responsavel_nome || 'Sem responsável'}`;
           if (demanda.data_fim) {
-            itemText += ` | Prazo: ${new Date(demanda.data_fim).toLocaleDateString('pt-BR')}`;
+            const prazo = new Date(demanda.data_fim).toLocaleDateString('pt-BR');
+            itemText += ` | Prazo: ${prazo}`;
+          }
+          
+          // Adicionar informações de checklists se houver
+          if (demanda.checklists && demanda.checklists.length > 0) {
+            const checklistsConcluidos = demanda.checklists.filter(c => c.concluido).length;
+            itemText += ` | Checklists: ${checklistsConcluidos}/${demanda.checklists.length}`;
           }
           
           demandasList.push(itemText);
-          
-          // Incluir checklists
-          if (demanda.checklists && demanda.checklists.length > 0) {
-            demanda.checklists.forEach((item) => {
-              const itemStatus = item.concluido ? '[OK]' : '[PENDENTE]';
-              demandasList.push(`  ${itemStatus} ${item.titulo}${item.descricao ? ` - ${item.descricao}` : ''}`);
-            });
-          }
         });
         
         yPosition = addListItem(pdf, demandasList, yPosition, {
-          fontSize: 10,
+          fontSize: 9,
           indent: 5
         });
         
@@ -605,10 +697,8 @@ const Cronograma = () => {
     }
   };
 
-  // Função para lidar com o clique no botão de overview PDF
-  const handleOverviewPDFClick = () => {
-    // Ativar IA por padrão ao abrir o modal
-    setUsarIA(true);
+  // Função para lidar com o clique no botão de gerar overview
+  const handleGerarOverviewClick = () => {
     if (currentUser?.organizacao === 'portes') {
       // Usuário Portes: abrir modal de seleção de organização e status
       setIsOrganizationModalOpen(true);
@@ -616,6 +706,247 @@ const Cronograma = () => {
       // Usuários não-Portes: abrir modal apenas para seleção de status
       setIsStatusModalOpen(true);
     }
+  };
+
+  // Função para gerar overview com streaming
+  const gerarOverviewStream = async (organizacaoSelecionada?: string, statusSelecionado?: string) => {
+    try {
+      setIsOverviewModalOpen(true);
+      setOverviewText('');
+      setOverviewStatus('Preparando...');
+      setIsGeneratingOverview(true);
+      setOverviewMetadata(null);
+
+      const orgParaFiltrar = organizacaoSelecionada || filtroOrganizacao;
+      const statusParaFiltrar = statusSelecionado || 'todos';
+
+      const baseUrl = API_BASE.endsWith('/api') ? API_BASE : `${API_BASE}/api`;
+      const url = `${baseUrl}/pdf/gerar-overview-stream`;
+
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-user-organization': currentUser?.organizacao || 'cassems',
+          'x-user-id': currentUser?.id || '',
+        },
+        body: JSON.stringify({
+          organizacao: orgParaFiltrar,
+          status: statusParaFiltrar
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error('Erro ao iniciar geração do overview');
+      }
+
+      const reader = response.body?.getReader();
+      const decoder = new TextDecoder();
+
+      if (!reader) {
+        throw new Error('Não foi possível ler a resposta do servidor');
+      }
+
+      let buffer = '';
+      let currentEvent = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        
+        if (done) {
+          // Processar buffer restante antes de sair
+          if (buffer.trim()) {
+            const remainingLines = buffer.split('\n');
+            for (const line of remainingLines) {
+              if (line.startsWith('event: ')) {
+                currentEvent = line.substring(7).trim();
+              } else if (line.startsWith('data: ')) {
+                try {
+                  const data = JSON.parse(line.substring(6));
+                  if (currentEvent === 'chunk' && data.text) {
+                    setOverviewText(prev => prev + data.text);
+                  }
+                } catch (e) {
+                  // Ignorar
+                }
+              }
+            }
+          }
+          break;
+        }
+
+        buffer += decoder.decode(value, { stream: true });
+        
+        // Processar linhas completas (terminadas com \n)
+        let newlineIndex;
+        while ((newlineIndex = buffer.indexOf('\n')) !== -1) {
+          const line = buffer.substring(0, newlineIndex);
+          buffer = buffer.substring(newlineIndex + 1);
+          
+          // Linha vazia indica fim de evento SSE
+          if (line.trim() === '') {
+            currentEvent = '';
+            continue;
+          }
+          
+          if (line.startsWith('event: ')) {
+            currentEvent = line.substring(7).trim();
+            continue;
+          }
+          
+          if (line.startsWith('data: ')) {
+            try {
+              const dataStr = line.substring(6);
+              const data = JSON.parse(dataStr);
+              
+              // Processar baseado no tipo de evento
+              if (currentEvent === 'status' || (!currentEvent && data.message && !data.text && !data.fullText)) {
+                setOverviewStatus(data.message || 'Processando...');
+              } else if (currentEvent === 'chunk' || (!currentEvent && data.text)) {
+                // Text chunk - atualizar imediatamente para ver streaming
+                setOverviewText(prev => {
+                  const newText = prev + (data.text || '');
+                  // Forçar re-render
+                  return newText;
+                });
+              } else if (currentEvent === 'complete' || (!currentEvent && data.fullText)) {
+                if (data.fullText) {
+                  setOverviewText(data.fullText);
+                }
+                if (data.periodo || data.metadata) {
+                  setOverviewMetadata(data);
+                }
+                setOverviewStatus('Concluído!');
+                setIsGeneratingOverview(false);
+              } else if (currentEvent === 'error' || (!currentEvent && data.message && data.message.toLowerCase().includes('erro'))) {
+                throw new Error(data.message || 'Erro ao gerar overview');
+              }
+            } catch (e) {
+              if (e instanceof SyntaxError) {
+                // Ignorar erros de parsing JSON
+                continue;
+              }
+              console.error('Erro ao processar evento:', e, 'Linha:', line);
+              throw e;
+            }
+          }
+        }
+      }
+
+    } catch (error) {
+      console.error('Erro ao gerar overview:', error);
+      setOverviewStatus('Erro ao gerar overview');
+      setIsGeneratingOverview(false);
+      toast({
+        title: "Erro",
+        description: error instanceof Error ? error.message : 'Erro ao gerar overview',
+        variant: "destructive"
+      });
+    }
+  };
+
+  // Função para baixar o overview gerado como PDF
+  const baixarOverviewGerado = () => {
+    if (!overviewText) return;
+
+    const pdf = new jsPDF({
+      orientation: 'p',
+      unit: 'mm',
+      format: 'a4',
+      compress: true
+    });
+
+    pdf.setFont('helvetica');
+
+    // Adicionar background
+    try {
+      pdf.addImage('/layout-background.png', 'PNG', 0, 0, pdf.internal.pageSize.getWidth(), pdf.internal.pageSize.getHeight(), undefined, 'FAST');
+    } catch (error) {
+      console.warn('Erro ao carregar background:', error);
+    }
+
+    let yPosition = addHeader(pdf);
+    yPosition = addSectionTitle(pdf, 'OVERVIEW DO CRONOGRAMA - RESUMO GERADO POR IA', yPosition, 1);
+
+    if (overviewMetadata?.periodo) {
+      yPosition = addBodyText(pdf, 
+        `Período: ${overviewMetadata.periodo.inicioFormatado} até ${overviewMetadata.periodo.fimFormatado}`, 
+        yPosition, {
+        fontSize: 11,
+        color: LAYOUT_COLORS.lightGray
+      });
+    }
+
+    yPosition = addDivider(pdf, yPosition);
+
+    // Converter markdown para texto simples e adicionar ao PDF
+    const lines = overviewText.split('\n');
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      if (line.trim() === '') {
+        // Linha vazia - adicionar pequeno espaçamento
+        yPosition += 2;
+        continue;
+      }
+      
+      if (line.startsWith('## ')) {
+        // Título de seção
+        yPosition = addSectionTitle(pdf, line.substring(3), yPosition, 2);
+      } else if (line.startsWith('### ')) {
+        // Título com ### (caso ainda apareça)
+        yPosition = addSectionTitle(pdf, line.substring(4), yPosition, 3);
+      } else if (line.includes(' - ') && 
+                 !line.startsWith('#') && 
+                 !line.startsWith('*') && 
+                 !line.includes('Status:') && 
+                 !line.includes('Prioridade:') &&
+                 !line.match(/^[✅🔄⚠️⏳]/)) {
+        // Título de demanda: linha que contém " - " (nome - responsável)
+        // e não começa com #, *, não contém Status/Prioridade, não começa com emoji
+        const isNextLineStatus = i + 1 < lines.length && lines[i + 1].includes('Status:');
+        if (isNextLineStatus || line.trim().length > 10) {
+          // Destacar título da demanda
+          yPosition = addSectionTitle(pdf, line.trim(), yPosition, 3);
+        } else {
+          yPosition = addBodyText(pdf, line.trim(), yPosition, {
+            fontSize: 11,
+            isBold: true
+          });
+        }
+      } else if (line.startsWith('**') && line.endsWith('**')) {
+        // Texto em negrito
+        yPosition = addBodyText(pdf, line.replace(/\*\*/g, ''), yPosition, {
+          fontSize: 11,
+          isBold: true
+        });
+      } else {
+        // Texto normal
+        const cleanLine = line.replace(/[✅🔄⚠️⏳]/g, '').trim();
+        if (cleanLine) {
+          yPosition = addBodyText(pdf, cleanLine, yPosition, {
+            fontSize: 10
+          });
+        }
+      }
+    }
+
+    // Rodapé
+    const totalPages = pdf.internal.pages.length - 1;
+    for (let i = 1; i <= totalPages; i++) {
+      pdf.setPage(i);
+      addFooter(pdf, i, totalPages);
+    }
+
+    const escopoNome = overviewMetadata?.metadata?.organizacaoFiltro === 'todos' 
+      ? 'todas-organizacoes' 
+      : (overviewMetadata?.metadata?.organizacaoFiltro || 'organizacao').toLowerCase().replace(/\s+/g, '-');
+    const fileName = `overview-cronograma-ia-${escopoNome}-${new Date().toISOString().split('T')[0]}.pdf`;
+    pdf.save(fileName);
+
+    toast({
+      title: "Download concluído",
+      description: "O overview foi baixado com sucesso.",
+    });
   };
 
   // Função para gerar PDF com análise de IA
@@ -659,7 +990,7 @@ const Cronograma = () => {
         throw new Error(data.error || 'Erro ao processar análise');
       }
 
-      const { analise, periodo, resumoMensal, resumoMensalDetalhado, topResponsaveis, statsPorOrganizacao, isComparativo, metadata } = data.data;
+      const { analise, periodo, resumoMensal, resumoMensalDetalhado, statsPorOrganizacao, isComparativo, metadata } = data.data;
 
       const pdf = new jsPDF({
         orientation: 'p',
@@ -939,11 +1270,8 @@ const Cronograma = () => {
   // Função para confirmar e baixar PDF para usuários não-Portes (apenas status)
   const confirmarDownloadPDFNonPortes = () => {
     setIsStatusModalOpen(false);
-    if (usarIA) {
-      gerarOverviewPDFComIA(undefined, selectedStatusForNonPortesPDF);
-    } else {
-      gerarOverviewPDF(undefined, selectedStatusForNonPortesPDF);
-    }
+    // Sempre usar streaming para gerar overview
+    gerarOverviewStream(undefined, selectedStatusForNonPortesPDF);
     setUsarIA(false);
   };
 
@@ -1183,11 +1511,8 @@ const Cronograma = () => {
       }
       gerarOverviewPorMesPDF(orgParaUsar, selectedAno, selectedMes);
     } else {
-      if (usarIA) {
-        gerarOverviewPDFComIA(orgParaUsar, selectedStatusForPDF);
-      } else {
-        gerarOverviewPDF(orgParaUsar, selectedStatusForPDF);
-      }
+      // Sempre usar streaming para overview geral
+      gerarOverviewStream(orgParaUsar, selectedStatusForPDF);
     }
     setUsarIA(false);
     setTipoOverview('geral');
@@ -3262,12 +3587,12 @@ const Cronograma = () => {
           <div className="flex flex-col sm:flex-row gap-2">
             <Button 
               variant="outline" 
-              onClick={handleOverviewPDFClick} 
+              onClick={handleGerarOverviewClick} 
               disabled={loading || loadingMesIA} 
               className="text-xs lg:text-sm font-medium border-gray-300 hover:bg-gray-50 hover:border-gray-400 transition-all duration-200"
             >
-              <Download className="h-4 w-4 lg:h-5 lg:w-5 mr-1.5 lg:mr-2" />
-              Baixar Overview
+              <BarChart3 className="h-4 w-4 lg:h-5 lg:w-5 mr-1.5 lg:mr-2" />
+              Gerar Overview
             </Button>
             <Button 
               onClick={() => {
@@ -4378,27 +4703,20 @@ const Cronograma = () => {
                   </div>
                 )}
 
-                {/* Opção de IA apenas para overview geral */}
+                {/* Informação sobre geração com IA */}
                 <div className="bg-purple-50 border border-purple-200 rounded-lg p-3 sm:p-4">
-                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
-                    <div className="flex items-start gap-2 sm:gap-3 flex-1 min-w-0">
-                      <div className="flex-shrink-0">
-                        <TrendingUp className="h-4 w-4 sm:h-5 sm:w-5 text-purple-600 mt-0.5" />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm sm:text-base font-medium text-purple-800">
-                          Análise Inteligente com Inteligência Artificial
-                        </p>
-                        <p className="text-xs sm:text-sm text-purple-600 mt-1">
-                          Ative para gerar um relatório com análise mensal inteligente do que foi feito e o que falta fazer, incluindo análise de checklists.
-                        </p>
-                      </div>
+                  <div className="flex items-start gap-2 sm:gap-3">
+                    <div className="flex-shrink-0">
+                      <TrendingUp className="h-4 w-4 sm:h-5 sm:w-5 text-purple-600 mt-0.5" />
                     </div>
-                    <Switch
-                      checked={usarIA}
-                      onCheckedChange={setUsarIA}
-                      className="flex-shrink-0 sm:ml-4 self-start sm:self-center"
-                    />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm sm:text-base font-medium text-purple-800">
+                        Geração com Inteligência Artificial
+                      </p>
+                      <p className="text-xs sm:text-sm text-purple-600 mt-1">
+                        O overview será gerado automaticamente pela IA com análise inteligente do que está sendo feito. Você poderá ver o resumo sendo gerado em tempo real.
+                      </p>
+                    </div>
                   </div>
                 </div>
               </>
@@ -4576,6 +4894,105 @@ const Cronograma = () => {
                 </>
               )}
             </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal de Overview sendo gerado */}
+      <Dialog open={isOverviewModalOpen} onOpenChange={setIsOverviewModalOpen}>
+        <DialogContent className="w-[95vw] max-w-4xl max-h-[90vh] flex flex-col">
+          <DialogHeader className="flex-shrink-0 pb-3 sm:pb-4">
+            <DialogTitle className="flex items-center gap-2 lg:gap-3 text-base lg:text-lg break-words">
+              <BarChart3 className="h-4 w-4 sm:h-5 sm:w-5 lg:h-6 lg:w-6 flex-shrink-0" />
+              Overview do Cronograma
+            </DialogTitle>
+            <DialogDescription className="text-xs sm:text-sm lg:text-base break-words mt-1">
+              {isGeneratingOverview ? 'A IA está gerando o resumo das demandas...' : 'Resumo gerado com sucesso!'}
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="flex-1 overflow-y-auto min-h-0 pr-1 sm:pr-2 -mr-1 sm:mr-0">
+            {isGeneratingOverview && overviewStatus && (
+              <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                <div className="flex items-center gap-2">
+                  <RefreshCw className="h-4 w-4 animate-spin text-blue-600" />
+                  <span className="text-sm text-blue-800">{overviewStatus}</span>
+                </div>
+              </div>
+            )}
+            
+            {overviewText ? (
+              <div 
+                ref={overviewTextRef}
+                className="prose prose-sm max-w-none overflow-y-auto max-h-[60vh]"
+                style={{ scrollBehavior: 'smooth' }}
+              >
+                <div 
+                  key={`overview-${overviewText.length}`}
+                  className="text-sm leading-relaxed whitespace-pre-wrap"
+                  style={{ minHeight: '200px' }}
+                  dangerouslySetInnerHTML={{ 
+                    __html: overviewText
+                      // Processar títulos de seção (##)
+                      .replace(/## (.*?)(\n|$)/g, '<h2 class="text-lg font-bold mt-4 mb-2">$1</h2>')
+                      // Remover ### mas manter como título com espaçamento (caso ainda apareça de versões antigas)
+                      .replace(/### (.*?)(\n|$)/g, '<div class="text-base font-semibold mt-4 mb-2 pt-2">$1</div>')
+                      // Detectar títulos de demandas: linha que contém " - " (nome - responsável)
+                      // e não começa com #, *, não contém "Status:" ou "Prioridade:"
+                      .replace(/^([^#\n*✅🔄⚠️⏳][^\n]* - [^\n]+)(\n|$)/gm, (match, title) => {
+                        const trimmed = title.trim();
+                        // Verificar se não é linha de status/prioridade ou emoji
+                        if (!trimmed.includes('Status:') && 
+                            !trimmed.includes('Prioridade:') && 
+                            !trimmed.includes('**') &&
+                            trimmed.length > 5) {
+                          return `<div class="text-base font-semibold mt-4 mb-2 pt-2">${trimmed}</div>`;
+                        }
+                        return match;
+                      })
+                      .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+                      .replace(/✅/g, '<span class="text-green-600">✅</span>')
+                      .replace(/🔄/g, '<span class="text-blue-600">🔄</span>')
+                      .replace(/⚠️/g, '<span class="text-yellow-600">⚠️</span>')
+                      .replace(/⏳/g, '<span class="text-gray-600">⏳</span>')
+                      // Manter múltiplas linhas vazias para espaçamento entre demandas
+                      .replace(/\n\n+/g, '<br><br>')
+                      .replace(/\n/g, '<br>')
+                  }}
+                />
+              </div>
+            ) : (
+              <div className="flex items-center justify-center py-8">
+                <div className="text-center">
+                  <RefreshCw className="h-8 w-8 animate-spin text-blue-600 mx-auto mb-2" />
+                  <p className="text-sm text-gray-600">Aguardando início da geração...</p>
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div className="flex flex-col sm:flex-row justify-end gap-2 sm:gap-4 pt-3 sm:pt-4 border-t flex-shrink-0 mt-auto">
+            <Button 
+              variant="outline" 
+              onClick={() => {
+                setIsOverviewModalOpen(false);
+                setOverviewText('');
+                setOverviewStatus('');
+                setOverviewMetadata(null);
+              }}
+              className="w-full sm:w-auto px-4 sm:px-6 text-sm sm:text-base"
+            >
+              Fechar
+            </Button>
+            {!isGeneratingOverview && overviewText && (
+              <Button 
+                onClick={baixarOverviewGerado}
+                className="w-full sm:w-auto px-4 sm:px-6 text-sm sm:text-base bg-blue-600 hover:bg-blue-700"
+              >
+                <Download className="h-4 w-4 mr-2" />
+                Baixar PDF
+              </Button>
+            )}
           </div>
         </DialogContent>
       </Dialog>
