@@ -725,7 +725,7 @@ FORMATO OBRIGATÓRIO (Markdown):
 
 Para CADA demanda, use este formato (seja CONCISO - máximo 2 linhas por demanda):
 
-### [Nome da Demanda] - [Responsável]${isComparativo ? ' - [Organização]' : ''}
+[Nome da Demanda] - [Responsável]${isComparativo ? ' - [Organização]' : ''}
 
 **Status:** [concluída/em andamento/atrasada/pendente] | **Prioridade:** [Crítica/Alta/Média/Baixa]
 
@@ -747,7 +747,9 @@ REGRAS IMPORTANTES:
 - Use linguagem clara e objetiva
 - Se a demanda tem data_inicio, ela JÁ INICIOU
 - NÃO invente dados. Use apenas o que está no JSON.
-- Para checklists, mencione apenas se for relevante (ex: "X/Y checklists concluídos")`;
+- Para checklists, mencione apenas se for relevante (ex: "X/Y checklists concluídos")
+- NÃO use símbolos # nos títulos das demandas. Apenas escreva o nome da demanda diretamente.
+- Deixe uma linha em branco entre cada demanda para melhor legibilidade.`;
 
     // Chamar OpenAI
     const completion = await openai.chat.completions.create({
@@ -1262,7 +1264,7 @@ FORMATO OBRIGATÓRIO (Markdown):
 
 Para CADA demanda, use este formato (seja CONCISO - máximo 2 linhas por demanda):
 
-### [Nome da Demanda] - [Responsável]${isComparativo ? ' - [Organização]' : ''}
+[Nome da Demanda] - [Responsável]${isComparativo ? ' - [Organização]' : ''}
 
 **Status:** [concluída/em andamento/atrasada/pendente] | **Prioridade:** [Crítica/Alta/Média/Baixa]
 
@@ -1284,7 +1286,9 @@ REGRAS IMPORTANTES:
 - Use linguagem clara e objetiva
 - Se a demanda tem data_inicio, ela JÁ INICIOU
 - NÃO invente dados. Use apenas o que está no JSON.
-- Para checklists, mencione apenas se for relevante (ex: "X/Y checklists concluídos")`;
+- Para checklists, mencione apenas se for relevante (ex: "X/Y checklists concluídos")
+- NÃO use símbolos # nos títulos das demandas. Apenas escreva o nome da demanda diretamente.
+- Deixe uma linha em branco entre cada demanda para melhor legibilidade.`;
 
       sendEvent('status', { message: 'IA está gerando o resumo...' });
       
@@ -1560,7 +1564,7 @@ FORMATO OBRIGATÓRIO (Markdown):
 
 Para CADA demanda que iniciou no mês ${nomeMes}, use EXATAMENTE este formato:
 
-### [Nome da Demanda] - ([Responsável])
+[Nome da Demanda] - ([Responsável])
 
 **Status:** [concluída/em andamento/atrasada/pendente]
 
