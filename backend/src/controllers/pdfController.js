@@ -985,11 +985,19 @@ exports.gerarOverviewStream = async (req, res) => {
     res.setHeader('Connection', 'keep-alive');
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type, x-user-organization, x-user-id');
+    res.setHeader('X-Accel-Buffering', 'no'); // Desabilitar buffering do nginx
     
-    // Função auxiliar para enviar eventos SSE
+    // Flush headers imediatamente
+    res.flushHeaders();
+    
+    // Função auxiliar para enviar eventos SSE com flush
     const sendEvent = (event, data) => {
-      res.write(`event: ${event}\n`);
-      res.write(`data: ${JSON.stringify(data)}\n\n`);
+      const eventData = `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
+      res.write(eventData);
+      // Forçar flush se disponível
+      if (typeof res.flush === 'function') {
+        res.flush();
+      }
     };
     
     try {
@@ -1298,13 +1306,20 @@ REGRAS IMPORTANTES:
       let fullText = '';
       
       // Enviar chunks de texto conforme vão sendo gerados
+      let chunkCount = 0;
       for await (const chunk of stream) {
         const content = chunk.choices[0]?.delta?.content || '';
         if (content) {
           fullText += content;
+          chunkCount++;
           sendEvent('chunk', { text: content });
+          // Log a cada 20 chunks para debug
+          if (chunkCount % 20 === 0) {
+            console.log(`📤 Enviados ${chunkCount} chunks (último: "${content.substring(0, 30)}...")`);
+          }
         }
       }
+      console.log(`✅ Total de ${chunkCount} chunks enviados, texto completo: ${fullText.length} caracteres`);
       
       // Enviar dados finais
       sendEvent('complete', {
