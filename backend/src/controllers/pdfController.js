@@ -1307,18 +1307,37 @@ REGRAS IMPORTANTES:
       
       // Enviar chunks de texto conforme vão sendo gerados
       let chunkCount = 0;
+      let accumulatedChunk = ''; // Acumular pequenos chunks
+      
       for await (const chunk of stream) {
         const content = chunk.choices[0]?.delta?.content || '';
         if (content) {
           fullText += content;
+          accumulatedChunk += content;
           chunkCount++;
-          sendEvent('chunk', { text: content });
+          
+          // Enviar chunks acumulados a cada 3 caracteres ou quando encontrar espaço/pontuação
+          // Isso torna o streaming mais visível e natural
+          if (accumulatedChunk.length >= 3 || /[\s.,;:!?]/.test(content)) {
+            sendEvent('chunk', { text: accumulatedChunk });
+            accumulatedChunk = '';
+            
+            // Pequeno delay para tornar o streaming mais visível (30-50ms)
+            await new Promise(resolve => setTimeout(resolve, 40));
+          }
+          
           // Log a cada 20 chunks para debug
           if (chunkCount % 20 === 0) {
-            console.log(`📤 Enviados ${chunkCount} chunks (último: "${content.substring(0, 30)}...")`);
+            console.log(`📤 Enviados ${chunkCount} chunks`);
           }
         }
       }
+      
+      // Enviar qualquer chunk restante
+      if (accumulatedChunk) {
+        sendEvent('chunk', { text: accumulatedChunk });
+      }
+      
       console.log(`✅ Total de ${chunkCount} chunks enviados, texto completo: ${fullText.length} caracteres`);
       
       // Enviar dados finais
