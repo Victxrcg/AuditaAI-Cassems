@@ -34,6 +34,7 @@ import {
   Pencil,
   Brain,
   ChevronDown,
+  ChevronRight,
   Lock,
   Mail,
   FileBarChart,
@@ -46,6 +47,13 @@ import {
   Search
 } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import {
   uploadAnexo,
   listAnexos,
@@ -1432,6 +1440,109 @@ const getTipoComplianceName = (tipo?: 'rat-fat' | 'subvencao-fiscal' | 'terceiro
   return names[tipo] || 'Compliance';
 };
 
+// Interface para representar uma lei
+interface LeiVigente {
+  titulo: string;
+  descricao: string;
+  link?: string;
+}
+
+// Função auxiliar para obter as leis vigentes por tipo de compliance
+const getLeisVigentes = (tipo?: 'rat-fat' | 'subvencao-fiscal' | 'terceiros' | 'creditos-nao-alocados'): LeiVigente[] => {
+  if (!tipo) return [];
+  
+  const leis: Record<string, LeiVigente[]> = {
+    'rat-fat': [
+      {
+        titulo: 'Decreto 3.048/1999',
+        descricao: 'Regulamenta a Previdência Social e estabelece normas para o regime geral de previdência social.',
+        link: 'https://www.planalto.gov.br/ccivil_03/decreto/d3048.htm'
+      },
+      {
+        titulo: 'Solução de Consulta COSIT 79/2023',
+        descricao: 'Orientações sobre consulta de CNPJ e procedimentos fiscais vigentes.',
+        link: 'http://normas.receita.fazenda.gov.br/sijut2consulta/consulta.action?facetsExistentes=&orgaosSelecionados=&tiposAtosSelecionados=&lblTiposAtosSelecionados=&ordemColuna=&ordemDirecao=&tipoConsulta=formulario&tipoAtoFacet=&siglaOrgaoFacet=&anoAtoFacet=&termoBusca=consulta+cnpj&numero_ato=79&tipoData=1&dt_inicio=&dt_fim=&ano_ato=&p=1&optOrdem=relevancia&p=1'
+      }
+    ],
+    'subvencao-fiscal': [
+      {
+        titulo: 'Lei nº 12.973/2014 (art. 30)',
+        descricao: 'Prevê, para empresas tributadas com base no lucro real, que subvenções para investimento — sob certas condições — poderiam deixar de integrar a base de cálculo do IRPJ/CSLL.',
+        link: 'https://www.planalto.gov.br/ccivil_03/_ato2011-2014/2014/lei/l12973.htm'
+      },
+      {
+        titulo: 'Lei Complementar nº 160/2017',
+        descricao: 'Inclui no art. 30 da Lei 12.973/2014 (§§ 4º e 5º) que os benefícios fiscais ou financeiro-fiscais relativos ao ICMS concedidos por Estados ou DF são considerados subvenção para investimento.',
+        link: 'https://www.planalto.gov.br/ccivil_03/leis/lcp/lcp160.htm'
+      },
+      {
+        titulo: 'Lei nº 14.789/2023',
+        descricao: 'Conhecida como "Lei das Subvenções". Altera o regime tributário das subvenções para investimento, revoga o art. 30 da Lei 12.973/2014, cria regime de crédito fiscal para subvenções para investimento, restringe tratamento de subvenções para custeio. Vigente a partir de 1º de janeiro de 2024.',
+        link: 'https://www.planalto.gov.br/ccivil_03/_ato2023-2026/2023/lei/l14789.htm'
+      },
+      {
+        titulo: 'Solução de Consulta COSIT nº 216/2025',
+        descricao: 'A RFB define que os créditos presumidos de ICMS, mesmo que historicamente tratados como subvenção para investimento, integram as bases de cálculo do IRPJ e CSLL a partir de 1º/1/2024, por ausência de previsão legal que permita sua exclusão.',
+        link: 'http://normas.receita.fazenda.gov.br/sijut2consulta/consulta.action?numero_ato=216&ano_ato=2025'
+      },
+      {
+        titulo: 'Solução de Consulta COSIT nº 223/2025',
+        descricao: 'Confirma a impossibilidade de exclusão das receitas de subvenções para investimento (inclusive crédito presumido de ICMS) da base do IRPJ, CSLL, PIS/Pasep e Cofins a partir de 1º/1/2024, nos termos da Lei 14.789/2023.',
+        link: 'http://normas.receita.fazenda.gov.br/sijut2consulta/consulta.action?numero_ato=223&ano_ato=2025'
+      },
+      {
+        titulo: 'Solução de Consulta COSIT nº 11/2025',
+        descricao: 'Tratou do tema das subvenções governamentais, especialmente à luz da nova legislação (Lei 14.789/2023) e evolução do tratamento jurídico-tributário.',
+        link: 'http://normas.receita.fazenda.gov.br/sijut2consulta/consulta.action?numero_ato=11&ano_ato=2025'
+      },
+      {
+        titulo: 'Solução de Consulta COSIT nº 202/2025',
+        descricao: 'Sobre subvenção para investimento / benefício fiscal de ICMS.',
+        link: 'http://normas.receita.fazenda.gov.br/sijut2consulta/consulta.action?numero_ato=202&ano_ato=2025'
+      }
+    ],
+    'terceiros': [
+      {
+        titulo: 'Lei a definir',
+        descricao: 'Leis específicas para compliance e gestão de terceiros serão definidas em breve.'
+      }
+    ],
+    'creditos-nao-alocados': [
+      {
+        titulo: 'Código Tributário Nacional – CTN (Lei nº 5.172/1966)',
+        descricao: 'Artigos 165 a 169 – dão o direito à restituição do tributo pago indevidamente ou a maior, inclusive nos casos de: erro na identificação do sujeito passivo; erro na alíquota, no cálculo do montante ou na elaboração de documentos de arrecadação. Esses dispositivos são a base jurídica para tratar o crédito que aparece como "não alocado": na prática, ele costuma ser justamente pagamento indevido ou a maior.',
+        link: 'https://www.planalto.gov.br/ccivil_03/leis/l5172.htm'
+      },
+      {
+        titulo: 'Lei nº 9.430/1996 – arts. 73 e 74',
+        descricao: 'Art. 73 – disciplina a restituição e o ressarcimento de tributos administrados pela Receita Federal e de pagamentos efetuados indevidamente. Art. 74 – trata da compensação desses créditos com outros tributos federais, mediante pedido do contribuinte (base legal do PER/DCOMP). Em resumo: a lei diz que qualquer pagamento indevido ou a maior (inclusive aqueles que resultam em "crédito não alocado") pode ser restituído ou compensado, desde que respeitados os requisitos e prazos.',
+        link: 'https://www.planalto.gov.br/ccivil_03/leis/l9430.htm'
+      },
+      {
+        titulo: 'Lei nº 12.527/2011 (Lei de Acesso à Informação – LAI) + Tema 582/STF',
+        descricao: 'A LAI garante acesso a informações de interesse do próprio contribuinte em bancos de dados públicos. O STF, no RE 673.707/MG (Tema 582), firmou tese de que o habeas data é meio adequado para obter os dados sobre pagamentos de tributos constantes de sistemas como o SINCOR (Sistema de Conta‑Corrente de Pessoa Jurídica da RFB). Na prática: isso fundamenta o direito de acesso ao extrato SINCOR para identificar créditos/pagamentos não alocados.',
+        link: 'https://www.planalto.gov.br/ccivil_03/_ato2011-2014/2011/lei/l12527.htm'
+      }
+    ]
+  };
+  
+  return leis[tipo] || [];
+};
+
+// Função auxiliar para obter o status das leis vigentes
+const getStatusLeisVigentes = (tipo?: 'rat-fat' | 'subvencao-fiscal' | 'terceiros' | 'creditos-nao-alocados'): string => {
+  if (!tipo) return '';
+  
+  const status: Record<string, string> = {
+    'rat-fat': 'Ambas as legislações estão vigentes e devem ser observadas nos procedimentos de compliance fiscal.',
+    'subvencao-fiscal': 'Todas as legislações estão vigentes e devem ser observadas nos procedimentos de compliance fiscal. A Lei 14.789/2023 passou a vigorar para fatos geradores a partir de 01/01/2024.',
+    'terceiros': 'Aguardando definição das legislações específicas.',
+    'creditos-nao-alocados': 'Todas as legislações estão vigentes e devem ser observadas nos procedimentos de compliance fiscal. O CTN estabelece a base jurídica para restituição de tributos pagos indevidamente, a Lei 9.430/1996 disciplina a restituição e compensação de créditos, e a LAI garante o acesso às informações necessárias para identificar créditos não alocados.'
+  };
+  
+  return status[tipo] || '';
+};
+
 // Componente de seleção de tipo de Compliance
 const ComplianceSelection = () => {
   const navigate = useNavigate();
@@ -1562,8 +1673,8 @@ export default function Compliance({ tipoCompliance }: ComplianceProps) {
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [competenciaToDelete, setCompetenciaToDelete] = useState<string | null>(null);
 
-  // Estado para colapso da seção de Leis Vigentes
-  const [leisVigentesExpanded, setLeisVigentesExpanded] = useState(true);
+  // Estado para controlar o modal de Leis Vigentes
+  const [leisVigentesModalOpen, setLeisVigentesModalOpen] = useState(false);
 
   // Estado para organização selecionada (para Portes criar compliance para outra organização)
   const [selectedOrganizacao, setSelectedOrganizacao] = useState<string>('');
@@ -2882,61 +2993,25 @@ export default function Compliance({ tipoCompliance }: ComplianceProps) {
         </div>
       </div>
 
-      {/* Seção de Leis Vigentes - Colapsável */}
-      <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 lg:p-4">
-        <div 
-          className="flex items-center justify-between cursor-pointer hover:bg-blue-100 rounded-lg p-2 -m-2 transition-colors"
-          onClick={() => setLeisVigentesExpanded(!leisVigentesExpanded)}
-        >
-          <h2 className="text-base lg:text-lg font-semibold text-blue-900 flex items-center gap-2">
-            <AlertCircle className="h-4 w-4 lg:h-5 lg:w-5" />
-            Leis Vigentes
-          </h2>
-          <ChevronDown 
-            className={`h-4 w-4 lg:h-5 lg:w-5 text-blue-600 transition-transform duration-200 ${
-              leisVigentesExpanded ? 'rotate-180' : ''
-            }`} 
-          />
-        </div>
+      {/* Legenda de Leis Vigentes */}
+      {tipoCompliance && (() => {
+        const leis = getLeisVigentes(tipoCompliance);
         
-        {leisVigentesExpanded && (
-          <div className="mt-3 lg:mt-4 space-y-3 lg:space-y-4">
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 lg:gap-4">
-              <div className="bg-white p-3 lg:p-4 rounded-lg border border-blue-100">
-                <h3 className="font-medium text-blue-800 mb-2 text-sm lg:text-base">Decreto 3.048/1999</h3>
-                <p className="text-xs lg:text-sm text-blue-700 mb-3">
-                  Regulamenta a Previdência Social e estabelece normas para o regime geral de previdência social.
-                </p>
-                <a 
-                  href="https://www.planalto.gov.br/ccivil_03/decreto/d3048.htm" 
-                  target="_blank" 
-                  rel="noopener noreferrer"
-                  className="text-blue-600 hover:text-blue-800 text-xs lg:text-sm font-medium underline"
-                >
-                  Ver Decreto Completo →
-                </a>
-              </div>
-              <div className="bg-white p-3 lg:p-4 rounded-lg border border-blue-100">
-                <h3 className="font-medium text-blue-800 mb-2 text-sm lg:text-base">Solução de Consulta COSIT 79/2023</h3>
-                <p className="text-xs lg:text-sm text-blue-700 mb-3">
-                  Orientações sobre consulta de CNPJ e procedimentos fiscais vigentes.
-                </p>
-                <a 
-                  href="http://normas.receita.fazenda.gov.br/sijut2consulta/consulta.action?facetsExistentes=&orgaosSelecionados=&tiposAtosSelecionados=&lblTiposAtosSelecionados=&ordemColuna=&ordemDirecao=&tipoConsulta=formulario&tipoAtoFacet=&siglaOrgaoFacet=&anoAtoFacet=&termoBusca=consulta+cnpj&numero_ato=79&tipoData=1&dt_inicio=&dt_fim=&ano_ato=&p=1&optOrdem=relevancia&p=1" 
-                  target="_blank" 
-                  rel="noopener noreferrer"
-                  className="text-blue-600 hover:text-blue-800 text-xs lg:text-sm font-medium underline"
-                >
-                  Ver Consulta Completa →
-                </a>
-              </div>
-            </div>
-            <div className="text-xs text-blue-600">
-              <strong>Status:</strong> Ambas as legislações estão vigentes e devem ser observadas nos procedimentos de compliance fiscal.
-            </div>
+        if (leis.length === 0) return null;
+        
+        return (
+          <div className="flex items-center justify-center">
+            <button
+              onClick={() => setLeisVigentesModalOpen(true)}
+              className="flex items-center gap-2 px-3 py-2 text-sm lg:text-base text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded-lg border border-blue-200 transition-colors"
+            >
+              <AlertCircle className="h-4 w-4 lg:h-5 lg:w-5" />
+              <span className="font-medium">Leis Vigentes ({leis.length})</span>
+              <span className="text-xs text-blue-500">Clique para ver todas</span>
+            </button>
           </div>
-        )}
-      </div>
+        );
+      })()}
 
       {error && (
         <div className="bg-red-50 border border-red-200 rounded-lg p-4">
@@ -3334,6 +3409,65 @@ export default function Compliance({ tipoCompliance }: ComplianceProps) {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Modal de Leis Vigentes */}
+      {tipoCompliance && (() => {
+        const leis = getLeisVigentes(tipoCompliance);
+        const status = getStatusLeisVigentes(tipoCompliance);
+        
+        if (leis.length === 0) return null;
+        
+        return (
+          <Dialog open={leisVigentesModalOpen} onOpenChange={setLeisVigentesModalOpen}>
+            <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2 text-lg lg:text-xl">
+                  <AlertCircle className="h-5 w-5 lg:h-6 lg:w-6 text-blue-600" />
+                  Leis Vigentes - {getTipoComplianceName(tipoCompliance)}
+                </DialogTitle>
+                <DialogDescription className="text-sm lg:text-base">
+                  Todas as legislações vigentes relacionadas a este tipo de compliance
+                </DialogDescription>
+              </DialogHeader>
+              
+              <div className="mt-4 space-y-4">
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                  {leis.map((lei, index) => (
+                    <div key={index} className="bg-blue-50 border border-blue-200 rounded-lg p-4 hover:shadow-md transition-shadow">
+                      <h3 className="font-semibold text-blue-900 mb-2 text-sm lg:text-base">
+                        {lei.titulo}
+                      </h3>
+                      <p className="text-xs lg:text-sm text-blue-700 mb-3">
+                        {lei.descricao}
+                      </p>
+                      {lei.link && (
+                        <a 
+                          href={lei.link} 
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center text-blue-600 hover:text-blue-800 text-xs lg:text-sm font-medium underline"
+                        >
+                          Ver {lei.titulo.includes('Lei') ? 'Lei' : lei.titulo.includes('Decreto') ? 'Decreto' : 'Consulta'} Completa →
+                        </a>
+                      )}
+                    </div>
+                  ))}
+                </div>
+                
+                {status && (
+                  <div className="mt-4 pt-4 border-t border-blue-200">
+                    <div className="bg-blue-100 rounded-lg p-3 lg:p-4">
+                      <p className="text-xs lg:text-sm text-blue-800">
+                        <strong className="font-semibold">Status:</strong> {status}
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </DialogContent>
+          </Dialog>
+        );
+      })()}
     </>
   );
 }

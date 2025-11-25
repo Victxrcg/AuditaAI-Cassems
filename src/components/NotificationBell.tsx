@@ -31,7 +31,6 @@ const NotificationBell = () => {
   const [loading, setLoading] = useState(false);
   const [ackLoadingId, setAckLoadingId] = useState<number | null>(null);
   const [isOpen, setIsOpen] = useState(false);
-  const intervalRef = useRef<NodeJS.Timeout | null>(null);
   const ultimaOrganizacaoRef = useRef<string | null>(null);
 
   const getCurrentUser = () => {
@@ -138,37 +137,29 @@ const NotificationBell = () => {
     }
   }, [notificacoes, acknowledgeNotificacao]);
 
-  // Carregar notificações ao montar o componente
+  // Verificar se houve um novo login e carregar notificações apenas nesse caso
   useEffect(() => {
-    fetchNotificacoes();
-  }, [fetchNotificacoes]);
+    const currentUser = getCurrentUser();
+    if (!currentUser?.id) return;
 
-  // Atualizar notificações a cada 60 segundos (apenas quando o popover estiver fechado)
-  useEffect(() => {
-    // Limpar intervalo anterior se existir
-    if (intervalRef.current) {
-      clearInterval(intervalRef.current);
-      intervalRef.current = null;
-    }
-
-    if (isOpen) return; // Não atualizar quando o popover estiver aberto
+    // Verificar se há um timestamp de login recente
+    const ultimoLoginTimestamp = localStorage.getItem('ultimo_login_timestamp');
+    const ultimaBuscaNotificacoes = localStorage.getItem('ultima_busca_notificacoes');
     
-    intervalRef.current = setInterval(() => {
-      // Verificar novamente antes de atualizar (pode ter fechado entre intervalos)
-      const currentUser = getCurrentUser();
-      if (currentUser?.id && !isOpen) {
-        fetchNotificacoes();
-      }
-    }, 60000); // 60 segundos (1 minuto) - menos frequente
-
-    return () => {
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
-        intervalRef.current = null;
-      }
-    };
+    // Se não há timestamp de última busca OU se o login é mais recente que a última busca
+    // significa que é um novo login, então buscar notificações
+    if (!ultimaBuscaNotificacoes || (ultimoLoginTimestamp && parseInt(ultimoLoginTimestamp) > parseInt(ultimaBuscaNotificacoes))) {
+      fetchNotificacoes().then(() => {
+        // Salvar timestamp da busca atual
+        if (ultimoLoginTimestamp) {
+          localStorage.setItem('ultima_busca_notificacoes', ultimoLoginTimestamp);
+        }
+      }).catch(() => {
+        // Ignorar erros silenciosamente
+      });
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOpen]); // Depender apenas de isOpen
+  }, []); // Executar apenas uma vez ao montar
 
   // Recarregar quando o popover abrir (apenas uma vez ao abrir)
   useEffect(() => {
@@ -191,54 +182,6 @@ const NotificationBell = () => {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen]); // Remover fetchNotificacoes das dependências para evitar loop
-
-  // Verificar mudanças na organização selecionada (para usuários Portes)
-  useEffect(() => {
-    // Inicializar a referência
-    const currentUser = getCurrentUser();
-    if (currentUser) {
-      if (currentUser.organizacao === 'portes') {
-        ultimaOrganizacaoRef.current = localStorage.getItem('cronograma-empresa-selecionada');
-      } else {
-        ultimaOrganizacaoRef.current = currentUser.organizacao || 'cassems';
-      }
-    }
-
-    const verificarOrganizacao = () => {
-      // Só verificar se o popover não estiver aberto para evitar fechá-lo
-      if (isOpen) return;
-      
-      const currentUser = getCurrentUser();
-      if (!currentUser) return;
-      
-      // Obter organização atual (selecionada ou do usuário)
-      let organizacaoAtual: string | null = null;
-      if (currentUser.organizacao === 'portes') {
-        organizacaoAtual = localStorage.getItem('cronograma-empresa-selecionada');
-      } else {
-        organizacaoAtual = currentUser.organizacao || 'cassems';
-      }
-      
-      // Só recarregar se a organização realmente mudou
-      if (organizacaoAtual !== ultimaOrganizacaoRef.current) {
-        ultimaOrganizacaoRef.current = organizacaoAtual;
-        // Recarregar notificações quando a organização mudar
-        fetchNotificacoes();
-      }
-    };
-
-    // Verificar periodicamente mudanças no localStorage (a cada 5 segundos para evitar muitos checks)
-    const interval = setInterval(verificarOrganizacao, 5000);
-
-    // Também escutar eventos de storage (para mudanças em outras abas)
-    window.addEventListener('storage', verificarOrganizacao);
-
-    return () => {
-      clearInterval(interval);
-      window.removeEventListener('storage', verificarOrganizacao);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOpen]); // Remover fetchNotificacoes para evitar loops
 
   const contadorNotificacoes = notificacoes.length;
 

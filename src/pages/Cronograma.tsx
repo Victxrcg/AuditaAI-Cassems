@@ -158,6 +158,7 @@ const Cronograma = () => {
   const [isGeneratingOverview, setIsGeneratingOverview] = useState(false);
   const [overviewMetadata, setOverviewMetadata] = useState<any>(null);
   const overviewTextRef = useRef<HTMLDivElement>(null);
+  const alertasBuscadosRef = useRef<boolean>(false);
   const [organizacoes, setOrganizacoes] = useState<any[]>([]);
   
   // Scroll automático quando novo texto chega
@@ -331,19 +332,12 @@ const Cronograma = () => {
     setLoading(false);
   };
 
-  // Atualizar cronogramas automaticamente a cada 60 segundos
+  // Carregar cronogramas apenas uma vez ao montar ou quando a organização selecionada mudar
   useEffect(() => {
     if (!currentUser) return;
 
-    // Chamar fetchCronogramas imediatamente ao montar
+    // Chamar fetchCronogramas apenas uma vez ao montar ou quando organização mudar
     fetchCronogramas();
-
-    // Configurar intervalo de atualização automática
-    const interval = setInterval(() => {
-      fetchCronogramas();
-    }, 60000); // 60 segundos (1 minuto)
-
-    return () => clearInterval(interval);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentUser?.id, organizacaoSelecionada]); // Depender apenas de valores estáveis
   
@@ -1762,11 +1756,9 @@ const Cronograma = () => {
     reloadOrgs();
   }, [isEditDialogOpen, currentUser?.organizacao, API_BASE]);
   
-  // Recarregar alertas quando o modal abrir para garantir dados atualizados
+  // Resetar página de alertas quando abrir um novo cronograma
   useEffect(() => {
-    if (isViewDialogOpen && viewingCronograma && currentUser?.id && typeof fetchAlertas === 'function') {
-      fetchAlertas();
-      // Resetar página de alertas quando abrir um novo cronograma
+    if (isViewDialogOpen && viewingCronograma) {
       setPaginaAlertas(1);
     }
   }, [isViewDialogOpen, viewingCronograma?.id]);
@@ -2103,12 +2095,16 @@ const Cronograma = () => {
     }
   }, [API_BASE, currentUser, filtroOrganizacao, organizacaoSelecionada]);
 
-  // Carregar alertas quando o usuário estiver disponível ou quando a organização selecionada mudar
+  // Carregar alertas apenas uma vez quando a página carregar
   useEffect(() => {
     if (!currentUser?.id) return;
-    // Carregar alertas na página principal
-    fetchAlertas();
-  }, [currentUser?.id, fetchAlertas, organizacaoSelecionada, filtroOrganizacao]);
+    // Carregar alertas apenas uma vez ao entrar na página
+    if (!alertasBuscadosRef.current) {
+      fetchAlertas();
+      alertasBuscadosRef.current = true;
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentUser?.id]); // Buscar apenas quando o usuário estiver disponível
 
   const acknowledgeAlerta = useCallback(async (alertaId: number) => {
     if (!currentUser?.id) return;
