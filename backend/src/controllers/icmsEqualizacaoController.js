@@ -67,6 +67,29 @@ const upload = multer({
   }
 });
 
+// Função helper para converter BigInt para Number (necessário para JSON.stringify)
+const convertBigIntToNumber = (obj) => {
+  if (obj === null || obj === undefined) return obj;
+  
+  if (typeof obj === 'bigint') {
+    return Number(obj);
+  }
+  
+  if (Array.isArray(obj)) {
+    return obj.map(convertBigIntToNumber);
+  }
+  
+  if (typeof obj === 'object') {
+    const converted = {};
+    for (const [key, value] of Object.entries(obj)) {
+      converted[key] = convertBigIntToNumber(value);
+    }
+    return converted;
+  }
+  
+  return obj;
+};
+
 // Garantir que a tabela existe
 const ensureTable = async (pool) => {
   try {
@@ -274,12 +297,18 @@ exports.listarExtratos = async (req, res) => {
     console.log('🔍 Executando query:', query);
     console.log('🔍 Parâmetros:', params);
     
-    const [rows] = await pool.query(query, params);
-    console.log('✅ Extratos encontrados:', rows?.length || 0);
+    const queryResult = await pool.query(query, params);
+    // pool.query retorna [rows, fields], então pegamos o primeiro elemento
+    const rows = Array.isArray(queryResult) ? queryResult[0] : queryResult;
+    const rowsArray = Array.isArray(rows) ? rows : [];
+    console.log('✅ Extratos encontrados:', rowsArray.length);
+
+    // Converter BigInt para Number (necessário porque JSON.stringify não suporta BigInt)
+    const processedData = convertBigIntToNumber(rowsArray);
 
     res.json({
       success: true,
-      data: rows || []
+      data: processedData
     });
   } catch (error) {
     console.error('❌ Erro ao listar extratos:', error);
@@ -397,14 +426,20 @@ exports.uploadExtrato = async (req, res) => {
     }
 
     // Buscar registro criado
-    const [extrato] = await pool.query(`
+    const queryResult = await pool.query(`
       SELECT * FROM icms_equalizacao WHERE id = ?
     `, [extratoId]);
+    // pool.query retorna [rows, fields], então pegamos o primeiro elemento
+    const extrato = Array.isArray(queryResult) ? queryResult[0] : queryResult;
+    const extratoArray = Array.isArray(extrato) ? extrato : [];
+
+    // Converter BigInt para Number
+    const processedData = convertBigIntToNumber(extratoArray[0] || {});
 
     res.json({
       success: true,
       message: 'Extrato enviado com sucesso',
-      data: extrato[0]
+      data: processedData
     });
   } catch (error) {
     console.error('❌ Erro ao fazer upload do extrato:', error);
@@ -444,18 +479,24 @@ exports.buscarExtrato = async (req, res) => {
       params.push(userOrg);
     }
 
-    const [extrato] = await pool.query(query, params);
+    const queryResult = await pool.query(query, params);
+    // pool.query retorna [rows, fields], então pegamos o primeiro elemento
+    const extrato = Array.isArray(queryResult) ? queryResult[0] : queryResult;
+    const extratoArray = Array.isArray(extrato) ? extrato : [];
 
-    if (!extrato || extrato.length === 0) {
+    if (!extratoArray || extratoArray.length === 0) {
       return res.status(404).json({
         success: false,
         error: 'Extrato não encontrado'
       });
     }
 
+    // Converter BigInt para Number
+    const processedData = convertBigIntToNumber(extratoArray[0]);
+
     res.json({
       success: true,
-      data: extrato[0]
+      data: processedData
     });
   } catch (error) {
     console.error('❌ Erro ao buscar extrato:', error);
@@ -487,16 +528,19 @@ exports.downloadExtrato = async (req, res) => {
       params.push(userOrg);
     }
 
-    const [extrato] = await pool.query(query, params);
+    const queryResult = await pool.query(query, params);
+    // pool.query retorna [rows, fields], então pegamos o primeiro elemento
+    const extrato = Array.isArray(queryResult) ? queryResult[0] : queryResult;
+    const extratoArray = Array.isArray(extrato) ? extrato : [];
 
-    if (!extrato || extrato.length === 0) {
+    if (!extratoArray || extratoArray.length === 0) {
       return res.status(404).json({
         success: false,
         error: 'Extrato não encontrado'
       });
     }
 
-    const caminhoArquivo = extrato[0].caminho_arquivo;
+    const caminhoArquivo = extratoArray[0].caminho_arquivo;
 
     if (!fs.existsSync(caminhoArquivo)) {
       return res.status(404).json({
@@ -505,7 +549,7 @@ exports.downloadExtrato = async (req, res) => {
       });
     }
 
-    res.download(caminhoArquivo, extrato[0].nome_arquivo);
+    res.download(caminhoArquivo, extratoArray[0].nome_arquivo);
   } catch (error) {
     console.error('❌ Erro ao fazer download do extrato:', error);
     res.status(500).json({
