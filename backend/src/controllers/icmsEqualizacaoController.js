@@ -25,7 +25,10 @@ let pdfParseModule = null;
 const loadPdfParse = async () => {
   if (!pdfParseModule) {
     try {
-      pdfParseModule = require('pdf-parse');
+      const imported = require('pdf-parse');
+      // pdf-parse retorna a função diretamente (não é uma classe)
+      pdfParseModule = imported.default || imported;
+      console.log('🔍 pdf-parse carregado, tipo:', typeof pdfParseModule);
     } catch (error) {
       console.error('❌ Erro ao carregar pdf-parse:', error);
       throw new Error('pdf-parse não está disponível');
@@ -203,12 +206,25 @@ const processarPDFComIA = async (caminhoArquivo, nomeArquivo) => {
     throw new Error('OpenAI não configurado');
   }
 
-  try {
-    // Carregar e extrair texto do PDF
-    const pdfParse = await loadPdfParse();
-    const dataBuffer = fs.readFileSync(caminhoArquivo);
-    const pdfData = await pdfParse(dataBuffer);
-    const textoPDF = pdfData.text;
+    try {
+      // Carregar e extrair texto do PDF
+      const pdfParse = await loadPdfParse();
+      const dataBuffer = fs.readFileSync(caminhoArquivo);
+      
+      // Tentar chamar como função primeiro, se falhar, tentar como classe
+      let pdfData;
+      try {
+        pdfData = await pdfParse(dataBuffer);
+      } catch (funcError) {
+        // Se falhar como função, tentar como classe
+        if (funcError.message.includes('cannot be invoked without')) {
+          pdfData = await new pdfParse(dataBuffer);
+        } else {
+          throw funcError;
+        }
+      }
+      
+      const textoPDF = pdfData.text || pdfData.doc?.text || '';
 
     if (!textoPDF || textoPDF.trim().length === 0) {
       throw new Error('Não foi possível extrair texto do PDF. O arquivo pode estar protegido ou ser uma imagem.');
@@ -731,8 +747,21 @@ exports.processarPDFStream = async (req, res) => {
       // Carregar e extrair texto do PDF
       const pdfParse = await loadPdfParse();
       const dataBuffer = fs.readFileSync(extratoData.caminho_arquivo);
-      const pdfData = await pdfParse(dataBuffer);
-      const textoPDF = pdfData.text;
+      
+      // Tentar chamar como função primeiro, se falhar, tentar como classe
+      let pdfData;
+      try {
+        pdfData = await pdfParse(dataBuffer);
+      } catch (funcError) {
+        // Se falhar como função, tentar como classe
+        if (funcError.message.includes('cannot be invoked without')) {
+          pdfData = await new pdfParse(dataBuffer);
+        } else {
+          throw funcError;
+        }
+      }
+      
+      const textoPDF = pdfData.text || pdfData.doc?.text || '';
 
       if (!textoPDF || textoPDF.trim().length === 0) {
         throw new Error('Não foi possível extrair texto do PDF');
@@ -933,9 +962,12 @@ exports.removerExtrato = async (req, res) => {
       params.push(userOrg);
     }
 
-    const [extrato] = await pool.query(query, params);
+    const queryResult = await pool.query(query, params);
+    // pool.query retorna [rows, fields], então pegamos o primeiro elemento
+    const extrato = Array.isArray(queryResult) ? queryResult[0] : queryResult;
+    const extratoArray = Array.isArray(extrato) ? extrato : (extrato ? [extrato] : []);
 
-    if (!extrato || extrato.length === 0) {
+    if (!extratoArray || extratoArray.length === 0) {
       return res.status(404).json({
         success: false,
         error: 'Extrato não encontrado'
@@ -943,7 +975,7 @@ exports.removerExtrato = async (req, res) => {
     }
 
     // Remover arquivo físico
-    const caminhoArquivo = extrato[0].caminho_arquivo;
+    const caminhoArquivo = extratoArray[0].caminho_arquivo;
     if (fs.existsSync(caminhoArquivo)) {
       try {
         fs.unlinkSync(caminhoArquivo);
