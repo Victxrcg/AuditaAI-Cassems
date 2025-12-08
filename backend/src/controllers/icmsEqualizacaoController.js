@@ -34,14 +34,28 @@ const loadPdfParse = async () => {
       console.log('🔍 pdf-parse keys:', Object.keys(imported || {}));
       
       // pdf-parse versão 2.x pode exportar como objeto com PDFParse (P maiúsculo)
-      // Tentar diferentes formas de acesso - PRIORIDADE: PDFParse primeiro
-      if (imported.PDFParse && typeof imported.PDFParse === 'function') {
-        // Versão que exporta como PDFParse (classe)
-        pdfParseModule = imported.PDFParse;
-        console.log('✅ pdf-parse carregado via .PDFParse (classe)');
-      } else if (typeof imported === 'function') {
+      // Mas mesmo sendo uma classe, pode ser chamada como função
+      // Tentar diferentes formas de acesso - PRIORIDADE: função direta primeiro
+      if (typeof imported === 'function') {
+        // Se o próprio imported é uma função, usar diretamente
         pdfParseModule = imported;
         console.log('✅ pdf-parse carregado como função direta');
+      } else if (imported.PDFParse && typeof imported.PDFParse === 'function') {
+        // Versão que exporta como PDFParse (classe), mas pode ser chamada como função
+        // Vamos criar um wrapper que tenta ambos os métodos
+        pdfParseModule = async (buffer) => {
+          try {
+            // Tentar como função primeiro
+            return await imported.PDFParse(buffer);
+          } catch (e) {
+            // Se falhar, tentar como classe
+            if (e.message && e.message.includes('cannot be invoked without')) {
+              return await new imported.PDFParse(buffer);
+            }
+            throw e;
+          }
+        };
+        console.log('✅ pdf-parse carregado via .PDFParse (wrapper)');
       } else if (imported.default && typeof imported.default === 'function') {
         pdfParseModule = imported.default;
         console.log('✅ pdf-parse carregado via .default');
@@ -295,7 +309,40 @@ const processarPDFComIA = async (caminhoArquivo, nomeArquivo) => {
         }
       }
       
-      const textoPDF = pdfData.text || pdfData.doc?.text || '';
+      console.log('🔍 [processarPDFComIA] pdfData recebido, tipo:', typeof pdfData);
+      console.log('🔍 [processarPDFComIA] pdfData keys:', Object.keys(pdfData || {}));
+      console.log('🔍 [processarPDFComIA] pdfData.text existe?', !!pdfData.text);
+      console.log('🔍 [processarPDFComIA] pdfData.doc existe?', !!pdfData.doc);
+      
+      // Tentar diferentes formas de extrair o texto
+      let textoPDF = '';
+      if (pdfData.text) {
+        textoPDF = pdfData.text;
+      } else if (pdfData.doc && pdfData.doc.text) {
+        textoPDF = pdfData.doc.text;
+      } else if (typeof pdfData === 'string') {
+        textoPDF = pdfData;
+      } else if (pdfData.toString && typeof pdfData.toString === 'function') {
+        textoPDF = pdfData.toString();
+      } else if (pdfData.data && pdfData.data.text) {
+        textoPDF = pdfData.data.text;
+      } else if (pdfData.result && pdfData.result.text) {
+        textoPDF = pdfData.result.text;
+      }
+      
+      // Se ainda não tiver texto, verificar se precisa chamar um método
+      if (!textoPDF || textoPDF.trim().length === 0) {
+        // Tentar chamar métodos comuns
+        if (typeof pdfData.getText === 'function') {
+          textoPDF = await pdfData.getText();
+        } else if (typeof pdfData.extractText === 'function') {
+          textoPDF = await pdfData.extractText();
+        } else if (typeof pdfData.parse === 'function') {
+          textoPDF = await pdfData.parse();
+        }
+      }
+
+      console.log('🔍 [processarPDFComIA] Texto extraído, length:', textoPDF?.length || 0);
 
     if (!textoPDF || textoPDF.trim().length === 0) {
       throw new Error('Não foi possível extrair texto do PDF. O arquivo pode estar protegido ou ser uma imagem.');
@@ -827,45 +874,34 @@ exports.processarPDFStream = async (req, res) => {
       
       const dataBuffer = fs.readFileSync(extratoData.caminho_arquivo);
       
-      // Detectar se é classe ou função e usar o método apropriado
+      // pdf-parse pode ser chamado como função mesmo quando é uma classe
+      // Vamos sempre tentar como função primeiro (padrão do pdf-parse)
       let pdfData;
-      
-      // Como sabemos que PDFParse é uma classe, vamos sempre usar new
-      // Mas vamos tentar ambos os métodos para garantir compatibilidade
       try {
         if (typeof pdfParse === 'function') {
-          // Verificar se é uma classe (nome é PDFParse ou tem prototype.constructor)
-          const isClass = pdfParse.name === 'PDFParse' || 
-                         (pdfParse.prototype && pdfParse.prototype.constructor);
-          
-          if (isClass) {
-            // É uma classe, usar new diretamente
-            console.log('🔍 Usando pdfParse como classe (new) - nome:', pdfParse.name);
-            pdfData = await new pdfParse(dataBuffer);
-          } else {
-            // É uma função, chamar diretamente
-            console.log('🔍 Usando pdfParse como função');
-            pdfData = await pdfParse(dataBuffer);
-          }
+          // Sempre tentar como função primeiro (mesmo que seja uma classe)
+          // O pdf-parse geralmente funciona como função mesmo quando exportado como classe
+          console.log('🔍 Tentando pdfParse como função - nome:', pdfParse.name);
+          pdfData = await pdfParse(dataBuffer);
         } else {
-          throw new Error('pdfParse não é uma função ou classe válida');
+          throw new Error('pdfParse não é uma função válida');
         }
       } catch (funcError) {
         console.error('❌ Erro ao processar PDF (primeira tentativa):', funcError.message);
-        // Se falhar, tentar o método alternativo
+        // Se falhar como função, tentar como classe
         try {
           if (funcError.message && funcError.message.includes('cannot be invoked without')) {
             // Tentar como classe
             console.log('🔍 Tentando pdfParse como classe (new) após erro "cannot be invoked without"');
-            pdfData = await new pdfParse(dataBuffer);
-          } else if (funcError.message && funcError.message.includes('is not a constructor')) {
-            // Tentar como função
-            console.log('🔍 Tentando pdfParse como função após erro "is not a constructor"');
-            pdfData = await pdfParse(dataBuffer);
+            const instance = new pdfParse(dataBuffer);
+            // Verificar se retorna uma Promise
+            if (instance && typeof instance.then === 'function') {
+              pdfData = await instance;
+            } else {
+              pdfData = instance;
+            }
           } else {
-            // Se não for um erro conhecido, tentar new de qualquer forma
-            console.log('🔍 Tentando pdfParse como classe (new) como último recurso');
-            pdfData = await new pdfParse(dataBuffer);
+            throw funcError;
           }
         } catch (classError) {
           console.error('❌ Erro ao processar PDF (segunda tentativa):', classError.message);
@@ -873,7 +909,42 @@ exports.processarPDFStream = async (req, res) => {
         }
       }
       
-      const textoPDF = pdfData.text || pdfData.doc?.text || '';
+      console.log('🔍 pdfData recebido, tipo:', typeof pdfData);
+      console.log('🔍 pdfData keys:', Object.keys(pdfData || {}));
+      console.log('🔍 pdfData.text existe?', !!pdfData.text);
+      console.log('🔍 pdfData.doc existe?', !!pdfData.doc);
+      console.log('🔍 pdfData.text length:', pdfData.text?.length || 0);
+      
+      // Tentar diferentes formas de extrair o texto
+      let textoPDF = '';
+      if (pdfData.text) {
+        textoPDF = pdfData.text;
+      } else if (pdfData.doc && pdfData.doc.text) {
+        textoPDF = pdfData.doc.text;
+      } else if (typeof pdfData === 'string') {
+        textoPDF = pdfData;
+      } else if (pdfData.toString && typeof pdfData.toString === 'function') {
+        textoPDF = pdfData.toString();
+      } else if (pdfData.data && pdfData.data.text) {
+        textoPDF = pdfData.data.text;
+      } else if (pdfData.result && pdfData.result.text) {
+        textoPDF = pdfData.result.text;
+      }
+      
+      // Se ainda não tiver texto, verificar se precisa chamar um método
+      if (!textoPDF || textoPDF.trim().length === 0) {
+        // Tentar chamar métodos comuns
+        if (typeof pdfData.getText === 'function') {
+          textoPDF = await pdfData.getText();
+        } else if (typeof pdfData.extractText === 'function') {
+          textoPDF = await pdfData.extractText();
+        } else if (typeof pdfData.parse === 'function') {
+          textoPDF = await pdfData.parse();
+        }
+      }
+
+      console.log('🔍 Texto extraído, length:', textoPDF?.length || 0);
+      console.log('🔍 Primeiros 200 caracteres:', textoPDF?.substring(0, 200) || 'vazio');
 
       if (!textoPDF || textoPDF.trim().length === 0) {
         throw new Error('Não foi possível extrair texto do PDF');
