@@ -356,23 +356,25 @@ const processarPDFComIA = async (caminhoArquivo, nomeArquivo) => {
 
     // Criar prompt para IA extrair APENAS as rubricas "ICMS EQUALIZAÇÃO SIMPLES NACIONAL"
     const prompt = `
-Analise o seguinte extrato de pagamentos do ICMS e extraia APENAS as linhas que contêm a rubrica "ICMS EQUALIZAÇÃO SIMPLES NACIONAL".
+Analise o seguinte extrato de pagamentos do ICMS e extraia TODAS as linhas que contêm a rubrica "ICMS EQUALIZAÇÃO SIMPLES NACIONAL".
 
 ARQUIVO: ${nomeArquivo}
 
 CONTEÚDO DO EXTRATO:
 ${textoTruncado}
 
-INSTRUÇÕES IMPORTANTES:
-1. Identifique TODAS as linhas que contêm "ICMS EQUALIZAÇÃO SIMPLES NACIONAL" (pode estar em uma ou duas linhas no PDF)
-2. Para cada linha encontrada, extraia EXATAMENTE:
+INSTRUÇÕES CRÍTICAS - LEIA COM ATENÇÃO:
+1. Você DEVE identificar TODAS as ocorrências de "ICMS EQUALIZAÇÃO SIMPLES NACIONAL" no documento
+2. NÃO pare na primeira ocorrência - continue procurando em TODO o documento
+3. A rubrica pode aparecer como "ICMS EQUALIZAÇÃO SIMPLES NACIONAL" ou "ICMS EQUALIZAÇÃO SIMPLES\nNACIONAL" (quebrada em duas linhas)
+4. Para CADA ocorrência encontrada, extraia EXATAMENTE:
    - Referência (mês/ano, formato MM/AAAA, ex: 06/2022)
    - Data de Pagamento (formato DD/MM/AAAA, ex: 03/08/2022)
    - Número DAEMS (número completo do documento)
    - Tipo de Tributo (deve ser exatamente "ICMS EQUALIZAÇÃO SIMPLES NACIONAL")
    - Valor Principal (apenas o valor principal, converta vírgula para ponto decimal, ex: 208,87 vira 208.87)
 
-3. Retorne os dados em formato JSON estruturado:
+5. Retorne os dados em formato JSON estruturado com TODOS os itens encontrados:
 {
   "empresa": {
     "razao_social": "nome da empresa se disponível",
@@ -385,14 +387,25 @@ INSTRUÇÕES IMPORTANTES:
       "numero_daems": "102833710642",
       "tipo_tributo": "ICMS EQUALIZAÇÃO SIMPLES NACIONAL",
       "valor_principal": 208.87
+    },
+    {
+      "referencia": "08/2022",
+      "pagamento": "04/10/2022",
+      "numero_daems": "103959660875",
+      "tipo_tributo": "ICMS EQUALIZAÇÃO SIMPLES NACIONAL",
+      "valor_principal": 42.91
     }
+    // ... continue adicionando TODOS os itens encontrados
   ],
   "total": 0.00
 }
 
-4. Calcule o TOTAL somando todos os valores principais dos itens encontrados
-5. Se não encontrar nenhuma linha com "ICMS EQUALIZAÇÃO SIMPLES NACIONAL", retorne itens como array vazio e total 0.00
-6. Converta todos os valores numéricos para formato numérico (não string), usando ponto como separador decimal
+6. O array "itens" DEVE conter TODAS as ocorrências encontradas, não apenas uma
+7. Calcule o TOTAL somando todos os valores principais dos itens encontrados
+8. Se não encontrar nenhuma linha com "ICMS EQUALIZAÇÃO SIMPLES NACIONAL", retorne itens como array vazio e total 0.00
+9. Converta todos os valores numéricos para formato numérico (não string), usando ponto como separador decimal
+
+IMPORTANTE: Varre TODO o documento do início ao fim procurando por "ICMS EQUALIZAÇÃO SIMPLES NACIONAL". Não pare na primeira ocorrência!
 
 Retorne APENAS o JSON válido, sem texto adicional antes ou depois.
 `;
@@ -960,23 +973,25 @@ exports.processarPDFStream = async (req, res) => {
 
       // Criar prompt
       const prompt = `
-Analise o seguinte extrato de pagamentos do ICMS e extraia APENAS as linhas que contêm a rubrica "ICMS EQUALIZAÇÃO SIMPLES NACIONAL".
+Analise o seguinte extrato de pagamentos do ICMS e extraia TODAS as linhas que contêm a rubrica "ICMS EQUALIZAÇÃO SIMPLES NACIONAL".
 
 ARQUIVO: ${extratoData.nome_arquivo}
 
 CONTEÚDO DO EXTRATO:
 ${textoTruncado}
 
-INSTRUÇÕES IMPORTANTES:
-1. Identifique TODAS as linhas que contêm "ICMS EQUALIZAÇÃO SIMPLES NACIONAL" (pode estar em uma ou duas linhas no PDF)
-2. Para cada linha encontrada, extraia EXATAMENTE:
+INSTRUÇÕES CRÍTICAS - LEIA COM ATENÇÃO:
+1. Você DEVE identificar TODAS as ocorrências de "ICMS EQUALIZAÇÃO SIMPLES NACIONAL" no documento
+2. NÃO pare na primeira ocorrência - continue procurando em TODO o documento
+3. A rubrica pode aparecer como "ICMS EQUALIZAÇÃO SIMPLES NACIONAL" ou "ICMS EQUALIZAÇÃO SIMPLES\nNACIONAL" (quebrada em duas linhas)
+4. Para CADA ocorrência encontrada, extraia EXATAMENTE:
    - Referência (mês/ano, formato MM/AAAA, ex: 06/2022)
    - Data de Pagamento (formato DD/MM/AAAA, ex: 03/08/2022)
    - Número DAEMS (número completo do documento)
    - Tipo de Tributo (deve ser exatamente "ICMS EQUALIZAÇÃO SIMPLES NACIONAL")
    - Valor Principal (apenas o valor principal, converta vírgula para ponto decimal, ex: 208,87 vira 208.87)
 
-3. Retorne os dados em formato JSON estruturado:
+5. Retorne os dados em formato JSON estruturado com TODOS os itens encontrados:
 {
   "empresa": {
     "razao_social": "nome da empresa se disponível",
@@ -989,14 +1004,25 @@ INSTRUÇÕES IMPORTANTES:
       "numero_daems": "102833710642",
       "tipo_tributo": "ICMS EQUALIZAÇÃO SIMPLES NACIONAL",
       "valor_principal": 208.87
+    },
+    {
+      "referencia": "08/2022",
+      "pagamento": "04/10/2022",
+      "numero_daems": "103959660875",
+      "tipo_tributo": "ICMS EQUALIZAÇÃO SIMPLES NACIONAL",
+      "valor_principal": 42.91
     }
+    // ... continue adicionando TODOS os itens encontrados
   ],
   "total": 0.00
 }
 
-4. Calcule o TOTAL somando todos os valores principais dos itens encontrados
-5. Se não encontrar nenhuma linha com "ICMS EQUALIZAÇÃO SIMPLES NACIONAL", retorne itens como array vazio e total 0.00
-6. Converta todos os valores numéricos para formato numérico (não string), usando ponto como separador decimal
+6. O array "itens" DEVE conter TODAS as ocorrências encontradas, não apenas uma
+7. Calcule o TOTAL somando todos os valores principais dos itens encontrados
+8. Se não encontrar nenhuma linha com "ICMS EQUALIZAÇÃO SIMPLES NACIONAL", retorne itens como array vazio e total 0.00
+9. Converta todos os valores numéricos para formato numérico (não string), usando ponto como separador decimal
+
+IMPORTANTE: Varre TODO o documento do início ao fim procurando por "ICMS EQUALIZAÇÃO SIMPLES NACIONAL". Não pare na primeira ocorrência!
 
 Retorne APENAS o JSON válido, sem texto adicional antes ou depois.
 `;
@@ -1017,7 +1043,7 @@ Retorne APENAS o JSON válido, sem texto adicional antes ou depois.
           }
         ],
         stream: true,
-        max_tokens: 4000,
+        max_tokens: 8000,
         temperature: 0.1,
         response_format: { type: "json_object" }
       });
