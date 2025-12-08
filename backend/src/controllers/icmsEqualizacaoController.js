@@ -388,11 +388,19 @@ INSTRUÇÕES OBRIGATÓRIAS - SEGUIR À RISCA:
    - Tipo de Tributo: sempre "ICMS EQUALIZAÇÃO SIMPLES NACIONAL"
    - Valor Principal: apenas o valor principal, converta vírgula para ponto (ex: 208,87 → 208.87)
 
-3. FORMATO DE RESPOSTA (JSON OBRIGATÓRIO):
+3. EXTRAÇÃO DE DADOS DA EMPRESA:
+   - Procure no CABEÇALHO do extrato (primeiras linhas do documento)
+   - Procure por "Insc. Estadual:", "Inscrição Estadual:", "IE:", ou variações similares
+   - Extraia o NÚMERO REAL da Inscrição Estadual que aparece após esses rótulos
+   - Se encontrar, use o número EXATO do documento (não invente números)
+   - Se NÃO encontrar, deixe como string vazia "" ou null
+   - NUNCA use números fictícios como "123456789" - apenas números reais do documento
+
+4. FORMATO DE RESPOSTA (JSON OBRIGATÓRIO):
 {
   "empresa": {
-    "razao_social": "nome da empresa",
-    "inscricao_estadual": "inscrição se disponível"
+    "razao_social": "nome da empresa extraído do documento",
+    "inscricao_estadual": "número real da inscrição estadual do documento OU string vazia se não encontrar"
   },
   "itens": [
     {
@@ -421,18 +429,19 @@ INSTRUÇÕES OBRIGATÓRIAS - SEGUIR À RISCA:
   "total": 565.17
 }
 
-4. REGRAS CRÍTICAS:
+5. REGRAS CRÍTICAS:
    - O array "itens" DEVE conter TODAS as ocorrências encontradas
    - Se encontrar 3 ocorrências, retorne 3 itens. Se encontrar 5, retorne 5. Se encontrar 10, retorne 10.
    - Calcule o TOTAL somando TODOS os valores principais
    - Use formato numérico (não string) para valores, com ponto como separador decimal
    - Se não encontrar nenhuma, retorne itens: [] e total: 0.00
 
-5. VERIFICAÇÃO FINAL:
+6. VERIFICAÇÃO FINAL:
    Antes de retornar, confirme mentalmente:
    - Quantas vezes a palavra "ICMS EQUALIZAÇÃO SIMPLES NACIONAL" aparece no texto?
    - Quantos itens você está retornando no array?
    - Esses números DEVEM SER IGUAIS!
+   - A Inscrição Estadual é um número REAL do documento, não um número inventado?
 
 ═══════════════════════════════════════════════════════════════
 RETORNE APENAS O JSON VÁLIDO, SEM TEXTO ADICIONAL.
@@ -1035,11 +1044,19 @@ INSTRUÇÕES OBRIGATÓRIAS - SEGUIR À RISCA:
    - Tipo de Tributo: sempre "ICMS EQUALIZAÇÃO SIMPLES NACIONAL"
    - Valor Principal: apenas o valor principal, converta vírgula para ponto (ex: 208,87 → 208.87)
 
-3. FORMATO DE RESPOSTA (JSON OBRIGATÓRIO):
+3. EXTRAÇÃO DE DADOS DA EMPRESA:
+   - Procure no CABEÇALHO do extrato (primeiras linhas do documento)
+   - Procure por "Insc. Estadual:", "Inscrição Estadual:", "IE:", ou variações similares
+   - Extraia o NÚMERO REAL da Inscrição Estadual que aparece após esses rótulos
+   - Se encontrar, use o número EXATO do documento (não invente números)
+   - Se NÃO encontrar, deixe como string vazia "" ou null
+   - NUNCA use números fictícios como "123456789" - apenas números reais do documento
+
+4. FORMATO DE RESPOSTA (JSON OBRIGATÓRIO):
 {
   "empresa": {
-    "razao_social": "nome da empresa",
-    "inscricao_estadual": "inscrição se disponível"
+    "razao_social": "nome da empresa extraído do documento",
+    "inscricao_estadual": "número real da inscrição estadual do documento OU string vazia se não encontrar"
   },
   "itens": [
     {
@@ -1068,18 +1085,19 @@ INSTRUÇÕES OBRIGATÓRIAS - SEGUIR À RISCA:
   "total": 565.17
 }
 
-4. REGRAS CRÍTICAS:
+5. REGRAS CRÍTICAS:
    - O array "itens" DEVE conter TODAS as ocorrências encontradas
    - Se encontrar 3 ocorrências, retorne 3 itens. Se encontrar 5, retorne 5. Se encontrar 10, retorne 10.
    - Calcule o TOTAL somando TODOS os valores principais
    - Use formato numérico (não string) para valores, com ponto como separador decimal
    - Se não encontrar nenhuma, retorne itens: [] e total: 0.00
 
-5. VERIFICAÇÃO FINAL:
+6. VERIFICAÇÃO FINAL:
    Antes de retornar, confirme mentalmente:
    - Quantas vezes a palavra "ICMS EQUALIZAÇÃO SIMPLES NACIONAL" aparece no texto?
    - Quantos itens você está retornando no array?
    - Esses números DEVEM SER IGUAIS!
+   - A Inscrição Estadual é um número REAL do documento, não um número inventado?
 
 ═══════════════════════════════════════════════════════════════
 RETORNE APENAS O JSON VÁLIDO, SEM TEXTO ADICIONAL.
