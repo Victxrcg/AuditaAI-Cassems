@@ -11,6 +11,7 @@ const healthRoutes = require('./routes/healthRoutes');
 const emailRoutes = require('./routes/emailRoutes');
 const pdfRoutes = require('./routes/pdfRoutes');
 const organizacoesRoutes = require('./routes/organizacoesRoutes');
+const icmsEqualizacaoRoutes = require('./routes/icmsEqualizacaoRoutes');
 const { getPoolStatus, getDbPool } = require('./lib/db');
 const app = express();
 
@@ -88,6 +89,7 @@ app.use((req, res, next) => {
 
 // Rotas - ORDEM IMPORTANTE: rotas específicas antes das genéricas
 app.use('/api/compliance', complianceRoutes);
+app.use('/api/compliance/icms-equalizacao', icmsEqualizacaoRoutes);
 app.use('/api/documentos', documentosRoutes);
 app.use('/api/usuarios', usuariosRoutes);
 app.use('/api/organizacoes', organizacoesRoutes);

@@ -72,6 +72,43 @@ exports.listarCronogramas = async (req, res) => {
     
     const rows = await executeQueryWithRetry(query, params);
     
+    // Atualizar automaticamente status para "atrasado" se a data final passou e não está concluído
+    const hoje = new Date();
+    hoje.setHours(0, 0, 0, 0); // Zerar horas para comparar apenas datas
+    
+    const cronogramasParaAtualizar = [];
+    
+    for (const row of rows) {
+      if (row.data_fim && row.status !== 'concluido' && row.status !== 'atrasado') {
+        const dataFim = new Date(row.data_fim);
+        dataFim.setHours(0, 0, 0, 0);
+        
+        // Se a data final passou, marcar como atrasado
+        if (dataFim < hoje) {
+          cronogramasParaAtualizar.push(row.id);
+        }
+      }
+    }
+    
+    // Atualizar em lote os cronogramas que estão atrasados
+    if (cronogramasParaAtualizar.length > 0) {
+      console.log(`⏰ Atualizando ${cronogramasParaAtualizar.length} cronograma(s) para status "atrasado"`);
+      const placeholders = cronogramasParaAtualizar.map(() => '?').join(',');
+      await executeQueryWithRetry(
+        `UPDATE cronograma 
+         SET status = 'atrasado', 
+             data_ultima_atualizacao = CURDATE(),
+             updated_at = NOW()
+         WHERE id IN (${placeholders}) AND status != 'concluido'`,
+        cronogramasParaAtualizar
+      );
+      
+      // Recarregar os dados atualizados
+      const updatedRows = await executeQueryWithRetry(query, params);
+      rows.length = 0;
+      rows.push(...updatedRows);
+    }
+    
     console.log('📋 Cronogramas encontrados:', rows.length);
     if (rows.length > 0) {
       console.log('🔍 Primeiro cronograma (exemplo):', {
@@ -80,6 +117,7 @@ exports.listarCronogramas = async (req, res) => {
         organizacao: rows[0].organizacao,
         data_inicio: rows[0].data_inicio,
         data_fim: rows[0].data_fim,
+        status: rows[0].status,
         tipo_data_inicio: typeof rows[0].data_inicio
       });
       
