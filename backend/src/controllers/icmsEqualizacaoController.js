@@ -1109,6 +1109,7 @@ RETORNE APENAS O JSON VÁLIDO, SEM TEXTO ADICIONAL.
 
       let fullText = '';
       let accumulatedChunk = '';
+      let lastValidExtrato = null;
 
       sendEvent('status', { message: 'Recebendo resposta da IA...' });
 
@@ -1118,11 +1119,42 @@ RETORNE APENAS O JSON VÁLIDO, SEM TEXTO ADICIONAL.
           fullText += content;
           accumulatedChunk += content;
           
-          // Enviar chunks acumulados
-          if (accumulatedChunk.length >= 3 || /[\s.,;:!?{}[\]]/.test(content)) {
-            sendEvent('chunk', { text: accumulatedChunk });
+          // Tentar parsear JSON parcial para enviar extrato sendo construído
+          try {
+            // Tentar encontrar um JSON válido no texto acumulado
+            // Procurar por um objeto JSON completo ou parcial
+            const jsonMatch = fullText.match(/\{[\s\S]*\}/);
+            if (jsonMatch) {
+              try {
+                const partialExtrato = JSON.parse(jsonMatch[0]);
+                // Validar se tem estrutura básica
+                if (partialExtrato.itens && Array.isArray(partialExtrato.itens)) {
+                  // Calcular total parcial
+                  const totalParcial = partialExtrato.itens.reduce((sum, item) => {
+                    const valor = parseFloat(item.valor_principal) || 0;
+                    return sum + valor;
+                  }, 0);
+                  partialExtrato.total = parseFloat(totalParcial.toFixed(2));
+                  
+                  // Só enviar se mudou
+                  if (JSON.stringify(partialExtrato) !== JSON.stringify(lastValidExtrato)) {
+                    lastValidExtrato = partialExtrato;
+                    sendEvent('extrato_parcial', { extrato: partialExtrato });
+                  }
+                }
+              } catch (e) {
+                // JSON ainda incompleto, continuar
+              }
+            }
+          } catch (e) {
+            // Ignorar erros de parsing parcial
+          }
+          
+          // Enviar chunks de texto para debug (opcional)
+          if (accumulatedChunk.length >= 10 || /[\s.,;:!?{}[\]]/.test(content)) {
+            // Não enviar mais o texto bruto, apenas o extrato parcial
             accumulatedChunk = '';
-            await new Promise(resolve => setTimeout(resolve, 30));
+            await new Promise(resolve => setTimeout(resolve, 50));
           }
         }
       }
