@@ -78,7 +78,7 @@ const ensureTable = async (pool) => {
       AND TABLE_NAME = 'icms_equalizacao'
     `);
 
-    if (tables.length === 0) {
+    if (!tables || tables.length === 0) {
       console.log('📋 Criando tabela icms_equalizacao...');
       
       // Criar tabela
@@ -115,7 +115,7 @@ const ensureTable = async (pool) => {
       AND TABLE_NAME = 'icms_equalizacao'
     `);
 
-    const columnNames = columns.map(col => col.COLUMN_NAME);
+    const columnNames = (columns || []).map(col => col.COLUMN_NAME);
     
     // Adicionar colunas que possam estar faltando
     if (!columnNames.includes('extrato_simplificado')) {
@@ -144,7 +144,12 @@ const ensureTable = async (pool) => {
 
   } catch (error) {
     console.error('❌ Erro ao garantir tabela icms_equalizacao:', error);
-    throw error;
+    console.error('❌ Stack trace:', error.stack);
+    // Não lançar erro aqui, apenas logar - a tabela pode já existir
+    // Se houver erro crítico, será capturado no endpoint
+    if (error.code !== 'ER_TABLE_EXISTS_ERROR' && !error.message.includes('already exists')) {
+      throw error;
+    }
   }
 };
 
@@ -222,11 +227,16 @@ Gere um extrato simplificado em formato de texto estruturado, com seções clara
 exports.listarExtratos = async (req, res) => {
   let pool, server;
   try {
+    console.log('🔍 Iniciando listagem de extratos ICMS e Equalização...');
     ({ pool, server } = await getDbPoolWithTunnel());
+    console.log('✅ Pool de conexão obtido');
+    
     await ensureTable(pool);
+    console.log('✅ Tabela verificada/criada');
 
     const userOrg = req.headers['x-user-organization'] || 'cassems';
     const userId = req.headers['x-user-id'] || null;
+    console.log('🔍 Organização:', userOrg, 'User ID:', userId);
 
     // Filtrar por organização se não for Portes
     let query = `
@@ -246,14 +256,19 @@ exports.listarExtratos = async (req, res) => {
 
     query += ` ORDER BY ie.created_at DESC`;
 
-    const rows = await pool.query(query, params);
+    console.log('🔍 Executando query:', query);
+    console.log('🔍 Parâmetros:', params);
+    
+    const [rows] = await pool.query(query, params);
+    console.log('✅ Extratos encontrados:', rows?.length || 0);
 
     res.json({
       success: true,
-      data: rows
+      data: rows || []
     });
   } catch (error) {
     console.error('❌ Erro ao listar extratos:', error);
+    console.error('❌ Stack trace:', error.stack);
     res.status(500).json({
       success: false,
       error: 'Erro ao listar extratos',
