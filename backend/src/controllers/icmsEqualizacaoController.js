@@ -348,36 +348,50 @@ const processarPDFComIA = async (caminhoArquivo, nomeArquivo) => {
       throw new Error('Não foi possível extrair texto do PDF. O arquivo pode estar protegido ou ser uma imagem.');
     }
 
-    // Truncar texto se muito longo (limite de tokens)
-    const maxTokens = 100000; // Aproximadamente 400k caracteres
+    // Truncar texto se muito longo (aumentar limite para garantir que não corte)
+    const maxTokens = 150000; // Aumentado para garantir documentos grandes
     const textoTruncado = textoPDF.length > maxTokens * 4 
       ? textoPDF.substring(0, maxTokens * 4) + '\n\n[... documento truncado ...]'
       : textoPDF;
+    
+    // Contar quantas ocorrências de "ICMS EQUALIZAÇÃO SIMPLES NACIONAL" existem no texto
+    const ocorrenciasEncontradas = (textoPDF.match(/ICMS\s+EQUALIZAÇÃO\s+SIMPLES\s+NACIONAL/gi) || []).length;
+    console.log('🔍 [processarPDFComIA] Ocorrências de "ICMS EQUALIZAÇÃO SIMPLES NACIONAL" no texto:', ocorrenciasEncontradas);
+    console.log('🔍 [processarPDFComIA] Texto após truncamento, length:', textoTruncado.length);
+    if (textoPDF.length > maxTokens * 4) {
+      console.log('⚠️ [processarPDFComIA] ATENÇÃO: Texto foi truncado! Pode haver ocorrências perdidas.');
+    }
 
-    // Criar prompt para IA extrair APENAS as rubricas "ICMS EQUALIZAÇÃO SIMPLES NACIONAL"
+    // Criar prompt com instruções muito mais enfáticas
     const prompt = `
-Analise o seguinte extrato de pagamentos do ICMS e extraia TODAS as linhas que contêm a rubrica "ICMS EQUALIZAÇÃO SIMPLES NACIONAL".
+Você é um especialista em análise de extratos fiscais. Sua tarefa é EXTRAIR TODAS as ocorrências de "ICMS EQUALIZAÇÃO SIMPLES NACIONAL" do documento abaixo.
 
 ARQUIVO: ${nomeArquivo}
 
-CONTEÚDO DO EXTRATO:
+CONTEÚDO COMPLETO DO EXTRATO:
 ${textoTruncado}
 
-INSTRUÇÕES CRÍTICAS - LEIA COM ATENÇÃO:
-1. Você DEVE identificar TODAS as ocorrências de "ICMS EQUALIZAÇÃO SIMPLES NACIONAL" no documento
-2. NÃO pare na primeira ocorrência - continue procurando em TODO o documento
-3. A rubrica pode aparecer como "ICMS EQUALIZAÇÃO SIMPLES NACIONAL" ou "ICMS EQUALIZAÇÃO SIMPLES\nNACIONAL" (quebrada em duas linhas)
-4. Para CADA ocorrência encontrada, extraia EXATAMENTE:
-   - Referência (mês/ano, formato MM/AAAA, ex: 06/2022)
-   - Data de Pagamento (formato DD/MM/AAAA, ex: 03/08/2022)
-   - Número DAEMS (número completo do documento)
-   - Tipo de Tributo (deve ser exatamente "ICMS EQUALIZAÇÃO SIMPLES NACIONAL")
-   - Valor Principal (apenas o valor principal, converta vírgula para ponto decimal, ex: 208,87 vira 208.87)
+═══════════════════════════════════════════════════════════════
+INSTRUÇÕES OBRIGATÓRIAS - SEGUIR À RISCA:
+═══════════════════════════════════════════════════════════════
 
-5. Retorne os dados em formato JSON estruturado com TODOS os itens encontrados:
+1. PROCURE POR TODAS AS OCORRÊNCIAS:
+   - Varre o documento COMPLETO do início ao fim
+   - Procure por "ICMS EQUALIZAÇÃO SIMPLES NACIONAL" (pode estar em uma ou duas linhas)
+   - Procure também por variações como "ICMS EQUALIZAÇÃO SIMPLES\nNACIONAL" ou "ICMS EQUALIZAÇÃO SIMPLES NACIONAL" com espaços diferentes
+   - NÃO PARE na primeira, segunda ou terceira ocorrência - continue até o FIM do documento
+
+2. PARA CADA OCORRÊNCIA ENCONTRADA, extraia:
+   - Referência: mês/ano no formato MM/AAAA (ex: 06/2022, 08/2022, 10/2022)
+   - Pagamento: data no formato DD/MM/AAAA (ex: 03/08/2022)
+   - Número DAEMS: número completo do documento
+   - Tipo de Tributo: sempre "ICMS EQUALIZAÇÃO SIMPLES NACIONAL"
+   - Valor Principal: apenas o valor principal, converta vírgula para ponto (ex: 208,87 → 208.87)
+
+3. FORMATO DE RESPOSTA (JSON OBRIGATÓRIO):
 {
   "empresa": {
-    "razao_social": "nome da empresa se disponível",
+    "razao_social": "nome da empresa",
     "inscricao_estadual": "inscrição se disponível"
   },
   "itens": [
@@ -394,20 +408,35 @@ INSTRUÇÕES CRÍTICAS - LEIA COM ATENÇÃO:
       "numero_daems": "103959660875",
       "tipo_tributo": "ICMS EQUALIZAÇÃO SIMPLES NACIONAL",
       "valor_principal": 42.91
+    },
+    {
+      "referencia": "10/2022",
+      "pagamento": "12/12/2022",
+      "numero_daems": "104551101100",
+      "tipo_tributo": "ICMS EQUALIZAÇÃO SIMPLES NACIONAL",
+      "valor_principal": 314.39
     }
-    // ... continue adicionando TODOS os itens encontrados
+    // ADICIONE TODAS AS OCORRÊNCIAS ENCONTRADAS - NÃO PARE ATÉ TER VARIDO TODO O DOCUMENTO
   ],
-  "total": 0.00
+  "total": 565.17
 }
 
-6. O array "itens" DEVE conter TODAS as ocorrências encontradas, não apenas uma
-7. Calcule o TOTAL somando todos os valores principais dos itens encontrados
-8. Se não encontrar nenhuma linha com "ICMS EQUALIZAÇÃO SIMPLES NACIONAL", retorne itens como array vazio e total 0.00
-9. Converta todos os valores numéricos para formato numérico (não string), usando ponto como separador decimal
+4. REGRAS CRÍTICAS:
+   - O array "itens" DEVE conter TODAS as ocorrências encontradas
+   - Se encontrar 3 ocorrências, retorne 3 itens. Se encontrar 5, retorne 5. Se encontrar 10, retorne 10.
+   - Calcule o TOTAL somando TODOS os valores principais
+   - Use formato numérico (não string) para valores, com ponto como separador decimal
+   - Se não encontrar nenhuma, retorne itens: [] e total: 0.00
 
-IMPORTANTE: Varre TODO o documento do início ao fim procurando por "ICMS EQUALIZAÇÃO SIMPLES NACIONAL". Não pare na primeira ocorrência!
+5. VERIFICAÇÃO FINAL:
+   Antes de retornar, confirme mentalmente:
+   - Quantas vezes a palavra "ICMS EQUALIZAÇÃO SIMPLES NACIONAL" aparece no texto?
+   - Quantos itens você está retornando no array?
+   - Esses números DEVEM SER IGUAIS!
 
-Retorne APENAS o JSON válido, sem texto adicional antes ou depois.
+═══════════════════════════════════════════════════════════════
+RETORNE APENAS O JSON VÁLIDO, SEM TEXTO ADICIONAL.
+═══════════════════════════════════════════════════════════════
 `;
 
     // Chamar OpenAI com formato JSON
@@ -958,6 +987,10 @@ exports.processarPDFStream = async (req, res) => {
 
       console.log('🔍 Texto extraído, length:', textoPDF?.length || 0);
       console.log('🔍 Primeiros 200 caracteres:', textoPDF?.substring(0, 200) || 'vazio');
+      
+      // Contar quantas ocorrências de "ICMS EQUALIZAÇÃO SIMPLES NACIONAL" existem no texto
+      const ocorrenciasEncontradas = (textoPDF.match(/ICMS\s+EQUALIZAÇÃO\s+SIMPLES\s+NACIONAL/gi) || []).length;
+      console.log('🔍 Ocorrências de "ICMS EQUALIZAÇÃO SIMPLES NACIONAL" no texto:', ocorrenciasEncontradas);
 
       if (!textoPDF || textoPDF.trim().length === 0) {
         throw new Error('Não foi possível extrair texto do PDF');
@@ -965,36 +998,47 @@ exports.processarPDFStream = async (req, res) => {
 
       sendEvent('status', { message: 'Texto extraído. Analisando com IA...' });
 
-      // Truncar texto se muito longo
-      const maxTokens = 100000;
+      // Truncar texto se muito longo (aumentar limite para garantir que não corte)
+      const maxTokens = 150000; // Aumentado para garantir documentos grandes
       const textoTruncado = textoPDF.length > maxTokens * 4 
         ? textoPDF.substring(0, maxTokens * 4) + '\n\n[... documento truncado ...]'
         : textoPDF;
+      
+      console.log('🔍 Texto após truncamento, length:', textoTruncado.length);
+      if (textoPDF.length > maxTokens * 4) {
+        console.log('⚠️ ATENÇÃO: Texto foi truncado! Pode haver ocorrências perdidas.');
+      }
 
-      // Criar prompt
+      // Criar prompt com instruções muito mais enfáticas
       const prompt = `
-Analise o seguinte extrato de pagamentos do ICMS e extraia TODAS as linhas que contêm a rubrica "ICMS EQUALIZAÇÃO SIMPLES NACIONAL".
+Você é um especialista em análise de extratos fiscais. Sua tarefa é EXTRAIR TODAS as ocorrências de "ICMS EQUALIZAÇÃO SIMPLES NACIONAL" do documento abaixo.
 
 ARQUIVO: ${extratoData.nome_arquivo}
 
-CONTEÚDO DO EXTRATO:
+CONTEÚDO COMPLETO DO EXTRATO:
 ${textoTruncado}
 
-INSTRUÇÕES CRÍTICAS - LEIA COM ATENÇÃO:
-1. Você DEVE identificar TODAS as ocorrências de "ICMS EQUALIZAÇÃO SIMPLES NACIONAL" no documento
-2. NÃO pare na primeira ocorrência - continue procurando em TODO o documento
-3. A rubrica pode aparecer como "ICMS EQUALIZAÇÃO SIMPLES NACIONAL" ou "ICMS EQUALIZAÇÃO SIMPLES\nNACIONAL" (quebrada em duas linhas)
-4. Para CADA ocorrência encontrada, extraia EXATAMENTE:
-   - Referência (mês/ano, formato MM/AAAA, ex: 06/2022)
-   - Data de Pagamento (formato DD/MM/AAAA, ex: 03/08/2022)
-   - Número DAEMS (número completo do documento)
-   - Tipo de Tributo (deve ser exatamente "ICMS EQUALIZAÇÃO SIMPLES NACIONAL")
-   - Valor Principal (apenas o valor principal, converta vírgula para ponto decimal, ex: 208,87 vira 208.87)
+═══════════════════════════════════════════════════════════════
+INSTRUÇÕES OBRIGATÓRIAS - SEGUIR À RISCA:
+═══════════════════════════════════════════════════════════════
 
-5. Retorne os dados em formato JSON estruturado com TODOS os itens encontrados:
+1. PROCURE POR TODAS AS OCORRÊNCIAS:
+   - Varre o documento COMPLETO do início ao fim
+   - Procure por "ICMS EQUALIZAÇÃO SIMPLES NACIONAL" (pode estar em uma ou duas linhas)
+   - Procure também por variações como "ICMS EQUALIZAÇÃO SIMPLES\nNACIONAL" ou "ICMS EQUALIZAÇÃO SIMPLES NACIONAL" com espaços diferentes
+   - NÃO PARE na primeira, segunda ou terceira ocorrência - continue até o FIM do documento
+
+2. PARA CADA OCORRÊNCIA ENCONTRADA, extraia:
+   - Referência: mês/ano no formato MM/AAAA (ex: 06/2022, 08/2022, 10/2022)
+   - Pagamento: data no formato DD/MM/AAAA (ex: 03/08/2022)
+   - Número DAEMS: número completo do documento
+   - Tipo de Tributo: sempre "ICMS EQUALIZAÇÃO SIMPLES NACIONAL"
+   - Valor Principal: apenas o valor principal, converta vírgula para ponto (ex: 208,87 → 208.87)
+
+3. FORMATO DE RESPOSTA (JSON OBRIGATÓRIO):
 {
   "empresa": {
-    "razao_social": "nome da empresa se disponível",
+    "razao_social": "nome da empresa",
     "inscricao_estadual": "inscrição se disponível"
   },
   "itens": [
@@ -1011,20 +1055,35 @@ INSTRUÇÕES CRÍTICAS - LEIA COM ATENÇÃO:
       "numero_daems": "103959660875",
       "tipo_tributo": "ICMS EQUALIZAÇÃO SIMPLES NACIONAL",
       "valor_principal": 42.91
+    },
+    {
+      "referencia": "10/2022",
+      "pagamento": "12/12/2022",
+      "numero_daems": "104551101100",
+      "tipo_tributo": "ICMS EQUALIZAÇÃO SIMPLES NACIONAL",
+      "valor_principal": 314.39
     }
-    // ... continue adicionando TODOS os itens encontrados
+    // ADICIONE TODAS AS OCORRÊNCIAS ENCONTRADAS - NÃO PARE ATÉ TER VARIDO TODO O DOCUMENTO
   ],
-  "total": 0.00
+  "total": 565.17
 }
 
-6. O array "itens" DEVE conter TODAS as ocorrências encontradas, não apenas uma
-7. Calcule o TOTAL somando todos os valores principais dos itens encontrados
-8. Se não encontrar nenhuma linha com "ICMS EQUALIZAÇÃO SIMPLES NACIONAL", retorne itens como array vazio e total 0.00
-9. Converta todos os valores numéricos para formato numérico (não string), usando ponto como separador decimal
+4. REGRAS CRÍTICAS:
+   - O array "itens" DEVE conter TODAS as ocorrências encontradas
+   - Se encontrar 3 ocorrências, retorne 3 itens. Se encontrar 5, retorne 5. Se encontrar 10, retorne 10.
+   - Calcule o TOTAL somando TODOS os valores principais
+   - Use formato numérico (não string) para valores, com ponto como separador decimal
+   - Se não encontrar nenhuma, retorne itens: [] e total: 0.00
 
-IMPORTANTE: Varre TODO o documento do início ao fim procurando por "ICMS EQUALIZAÇÃO SIMPLES NACIONAL". Não pare na primeira ocorrência!
+5. VERIFICAÇÃO FINAL:
+   Antes de retornar, confirme mentalmente:
+   - Quantas vezes a palavra "ICMS EQUALIZAÇÃO SIMPLES NACIONAL" aparece no texto?
+   - Quantos itens você está retornando no array?
+   - Esses números DEVEM SER IGUAIS!
 
-Retorne APENAS o JSON válido, sem texto adicional antes ou depois.
+═══════════════════════════════════════════════════════════════
+RETORNE APENAS O JSON VÁLIDO, SEM TEXTO ADICIONAL.
+═══════════════════════════════════════════════════════════════
 `;
 
       sendEvent('status', { message: 'IA está processando o extrato...' });
@@ -1043,7 +1102,7 @@ Retorne APENAS o JSON válido, sem texto adicional antes ou depois.
           }
         ],
         stream: true,
-        max_tokens: 8000,
+        max_tokens: 16000, // Aumentado para garantir espaço para muitos itens
         temperature: 0.1,
         response_format: { type: "json_object" }
       });
