@@ -71,14 +71,17 @@ const upload = multer({
 const ensureTable = async (pool) => {
   try {
     // Verificar se a tabela já existe
-    const [tables] = await pool.query(`
+    const tablesResult = await pool.query(`
       SELECT TABLE_NAME 
       FROM INFORMATION_SCHEMA.TABLES 
       WHERE TABLE_SCHEMA = DATABASE() 
       AND TABLE_NAME = 'icms_equalizacao'
     `);
 
-    if (!tables || tables.length === 0) {
+    // pool.query retorna [rows, fields], então pegamos o primeiro elemento
+    const tables = Array.isArray(tablesResult) ? tablesResult[0] : tablesResult;
+
+    if (!tables || !Array.isArray(tables) || tables.length === 0) {
       console.log('📋 Criando tabela icms_equalizacao...');
       
       // Criar tabela
@@ -108,14 +111,16 @@ const ensureTable = async (pool) => {
     }
 
     // Verificar e adicionar colunas que possam estar faltando (migrações futuras)
-    const [columns] = await pool.query(`
+    const columnsResult = await pool.query(`
       SELECT COLUMN_NAME 
       FROM INFORMATION_SCHEMA.COLUMNS 
       WHERE TABLE_SCHEMA = DATABASE() 
       AND TABLE_NAME = 'icms_equalizacao'
     `);
 
-    const columnNames = (columns || []).map(col => col.COLUMN_NAME);
+    // pool.query retorna [rows, fields], então pegamos o primeiro elemento
+    const columns = Array.isArray(columnsResult) ? columnsResult[0] : columnsResult;
+    const columnNames = Array.isArray(columns) ? columns.map(col => col.COLUMN_NAME) : [];
     
     // Adicionar colunas que possam estar faltando
     if (!columnNames.includes('extrato_simplificado')) {
