@@ -76,13 +76,20 @@ const convertBigIntToNumber = (obj) => {
   }
   
   if (Array.isArray(obj)) {
-    return obj.map(convertBigIntToNumber);
+    return obj.map(item => convertBigIntToNumber(item));
   }
   
   if (typeof obj === 'object') {
     const converted = {};
-    for (const [key, value] of Object.entries(obj)) {
-      converted[key] = convertBigIntToNumber(value);
+    // Usar Object.keys para garantir que pegamos todas as propriedades, mesmo as não enumeráveis
+    const keys = Object.keys(obj);
+    for (const key of keys) {
+      const value = obj[key];
+      if (typeof value === 'bigint') {
+        converted[key] = Number(value);
+      } else {
+        converted[key] = convertBigIntToNumber(value);
+      }
     }
     return converted;
   }
@@ -311,12 +318,56 @@ exports.listarExtratos = async (req, res) => {
     } : 'Nenhum');
 
     // Converter BigInt para Number (necessário porque JSON.stringify não suporta BigInt)
-    const processedData = convertBigIntToNumber(rowsArray);
+    // Fazer conversão manual linha por linha para garantir que todos os BigInt sejam convertidos
+    const processedData = rowsArray.map(row => {
+      const converted = {};
+      // Usar Object.keys para garantir que pegamos todas as propriedades
+      const keys = Object.keys(row);
+      for (const key of keys) {
+        const value = row[key];
+        if (typeof value === 'bigint') {
+          converted[key] = Number(value);
+        } else if (value === null || value === undefined) {
+          converted[key] = value;
+        } else if (Array.isArray(value)) {
+          converted[key] = value.map(item => typeof item === 'bigint' ? Number(item) : item);
+        } else if (typeof value === 'object') {
+          // Se for um objeto aninhado, converter recursivamente
+          converted[key] = convertBigIntToNumber(value);
+        } else {
+          converted[key] = value;
+        }
+      }
+      return converted;
+    });
+    
     console.log('✅ Dados processados e enviados:', processedData.length);
+    
+    // Verificação final: tentar serializar para garantir que não há BigInt
+    let finalData = processedData;
+    try {
+      JSON.stringify(finalData);
+      console.log('✅ JSON válido, sem BigInt');
+    } catch (stringifyError) {
+      console.error('❌ Erro ao serializar JSON:', stringifyError);
+      // Se ainda houver erro, fazer uma última passada de limpeza
+      finalData = processedData.map(row => {
+        const clean = {};
+        for (const key in row) {
+          const val = row[key];
+          if (typeof val === 'bigint') {
+            clean[key] = Number(val);
+          } else {
+            clean[key] = val;
+          }
+        }
+        return clean;
+      });
+    }
 
     res.json({
       success: true,
-      data: processedData
+      data: finalData
     });
   } catch (error) {
     console.error('❌ Erro ao listar extratos:', error);
