@@ -305,17 +305,25 @@ exports.listarExtratos = async (req, res) => {
 
     console.log('🔍 Executando query:', query);
     console.log('🔍 Parâmetros:', params);
+    console.log('🔍 Organização do usuário:', userOrg);
     
     const queryResult = await pool.query(query, params);
     // pool.query retorna [rows, fields], então pegamos o primeiro elemento
     const rows = Array.isArray(queryResult) ? queryResult[0] : queryResult;
     const rowsArray = Array.isArray(rows) ? rows : [];
-    console.log('✅ Extratos encontrados:', rowsArray.length);
-    console.log('🔍 Primeiro extrato (se houver):', rowsArray[0] ? {
-      id: rowsArray[0].id,
-      nome_arquivo: rowsArray[0].nome_arquivo,
-      organizacao: rowsArray[0].organizacao
-    } : 'Nenhum');
+    console.log('✅ Extratos encontrados no banco:', rowsArray.length);
+    
+    if (rowsArray.length > 0) {
+      console.log('🔍 Primeiros extratos:');
+      rowsArray.slice(0, 3).forEach((row, idx) => {
+        console.log(`  [${idx}] ID: ${row.id}, Nome: ${row.nome_arquivo}, Org: ${row.organizacao}, Tamanho: ${row.tamanho_arquivo} (tipo: ${typeof row.tamanho_arquivo})`);
+      });
+    } else {
+      console.log('⚠️ Nenhum extrato encontrado! Verificando se há registros na tabela...');
+      // Query de debug para ver todos os registros
+      const [allRows] = await pool.query('SELECT id, nome_arquivo, organizacao FROM icms_equalizacao LIMIT 5');
+      console.log('🔍 Todos os registros na tabela (primeiros 5):', allRows);
+    }
 
     // Converter BigInt para Number (necessário porque JSON.stringify não suporta BigInt)
     // Fazer conversão manual linha por linha para garantir que todos os BigInt sejam convertidos
