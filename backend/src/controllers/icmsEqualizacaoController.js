@@ -33,9 +33,13 @@ const loadPdfParse = async () => {
       console.log('🔍 pdf-parse tem default?', !!imported.default);
       console.log('🔍 pdf-parse keys:', Object.keys(imported || {}));
       
-      // pdf-parse versão 2.x exporta a função diretamente
-      // Tentar diferentes formas de acesso
-      if (typeof imported === 'function') {
+      // pdf-parse versão 2.x pode exportar como objeto com PDFParse (P maiúsculo)
+      // Tentar diferentes formas de acesso - PRIORIDADE: PDFParse primeiro
+      if (imported.PDFParse && typeof imported.PDFParse === 'function') {
+        // Versão que exporta como PDFParse (classe)
+        pdfParseModule = imported.PDFParse;
+        console.log('✅ pdf-parse carregado via .PDFParse (classe)');
+      } else if (typeof imported === 'function') {
         pdfParseModule = imported;
         console.log('✅ pdf-parse carregado como função direta');
       } else if (imported.default && typeof imported.default === 'function') {
@@ -55,6 +59,8 @@ const loadPdfParse = async () => {
       }
       
       console.log('✅ pdf-parse carregado com sucesso, tipo final:', typeof pdfParseModule);
+      console.log('✅ pdf-parse é função?', typeof pdfParseModule === 'function');
+      console.log('✅ pdf-parse é classe?', typeof pdfParseModule === 'function' && pdfParseModule.prototype);
     } catch (error) {
       console.error('❌ Erro ao carregar pdf-parse:', error);
       console.error('❌ Stack:', error.stack);
@@ -250,23 +256,37 @@ const processarPDFComIA = async (caminhoArquivo, nomeArquivo) => {
       let pdfData;
       try {
         if (typeof pdfParse === 'function') {
-          pdfData = await pdfParse(dataBuffer);
+          // Verificar se é uma classe (tem prototype) ou função
+          if (pdfParse.prototype && pdfParse.prototype.constructor) {
+            // É uma classe, usar new
+            console.log('🔍 [processarPDFComIA] Usando pdfParse como classe (new)');
+            pdfData = await new pdfParse(dataBuffer);
+          } else {
+            // É uma função, chamar diretamente
+            console.log('🔍 [processarPDFComIA] Usando pdfParse como função');
+            pdfData = await pdfParse(dataBuffer);
+          }
         } else {
-          // Se não for função, tentar como classe
-          pdfData = await new pdfParse(dataBuffer);
+          throw new Error('pdfParse não é uma função ou classe válida');
         }
       } catch (funcError) {
         console.error('❌ [processarPDFComIA] Erro ao processar PDF (primeira tentativa):', funcError.message);
-        // Se falhar como função, tentar como classe
-        if (funcError.message && funcError.message.includes('cannot be invoked without')) {
-          try {
+        // Se falhar, tentar o método alternativo
+        try {
+          if (funcError.message && funcError.message.includes('cannot be invoked without')) {
+            // Tentar como classe
+            console.log('🔍 [processarPDFComIA] Tentando pdfParse como classe (new) após erro');
             pdfData = await new pdfParse(dataBuffer);
-          } catch (classError) {
-            console.error('❌ [processarPDFComIA] Erro ao processar PDF (segunda tentativa):', classError.message);
-            throw new Error(`Erro ao processar PDF: ${classError.message}`);
+          } else if (funcError.message && funcError.message.includes('is not a constructor')) {
+            // Tentar como função
+            console.log('🔍 [processarPDFComIA] Tentando pdfParse como função após erro de construtor');
+            pdfData = await pdfParse(dataBuffer);
+          } else {
+            throw funcError;
           }
-        } else {
-          throw funcError;
+        } catch (classError) {
+          console.error('❌ [processarPDFComIA] Erro ao processar PDF (segunda tentativa):', classError.message);
+          throw new Error(`Erro ao processar PDF: ${classError.message}`);
         }
       }
       
