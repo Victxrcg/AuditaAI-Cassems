@@ -105,33 +105,56 @@ const ensureTable = async (pool) => {
       const columns = Array.isArray(columnsResult) ? columnsResult : [];
       const columnNames = columns.map(col => col.COLUMN_NAME);
       
-      // Adicionar colunas que possam estar faltando
+      // Adicionar colunas que possam estar faltando (verificando se já existem antes)
       if (!columnNames.includes('extrato_simplificado')) {
-        await pool.query(`
-          ALTER TABLE icms_equalizacao 
-          ADD COLUMN extrato_simplificado TEXT NULL
-        `);
-        console.log('✅ Coluna extrato_simplificado adicionada');
+        try {
+          await pool.query(`
+            ALTER TABLE icms_equalizacao 
+            ADD COLUMN extrato_simplificado TEXT NULL
+          `);
+          console.log('✅ Coluna extrato_simplificado adicionada');
+        } catch (colError) {
+          // Ignorar se a coluna já existir
+          if (colError.code !== 'ER_DUP_FIELDNAME' && !colError.message.includes('Duplicate column')) {
+            throw colError;
+          }
+        }
       }
 
       if (!columnNames.includes('status_processamento')) {
-        await pool.query(`
-          ALTER TABLE icms_equalizacao 
-          ADD COLUMN status_processamento ENUM('pendente', 'processando', 'concluido', 'erro') DEFAULT 'pendente'
-        `);
-        console.log('✅ Coluna status_processamento adicionada');
+        try {
+          await pool.query(`
+            ALTER TABLE icms_equalizacao 
+            ADD COLUMN status_processamento ENUM('pendente', 'processando', 'concluido', 'erro') DEFAULT 'pendente'
+          `);
+          console.log('✅ Coluna status_processamento adicionada');
+        } catch (colError) {
+          // Ignorar se a coluna já existir
+          if (colError.code !== 'ER_DUP_FIELDNAME' && !colError.message.includes('Duplicate column')) {
+            throw colError;
+          }
+        }
       }
 
       if (!columnNames.includes('erro_processamento')) {
-        await pool.query(`
-          ALTER TABLE icms_equalizacao 
-          ADD COLUMN erro_processamento TEXT NULL
-        `);
-        console.log('✅ Coluna erro_processamento adicionada');
+        try {
+          await pool.query(`
+            ALTER TABLE icms_equalizacao 
+            ADD COLUMN erro_processamento TEXT NULL
+          `);
+          console.log('✅ Coluna erro_processamento adicionada');
+        } catch (colError) {
+          // Ignorar se a coluna já existir
+          if (colError.code !== 'ER_DUP_FIELDNAME' && !colError.message.includes('Duplicate column')) {
+            throw colError;
+          }
+        }
       }
     } catch (migrationError) {
       // Ignorar erros de migração (colunas podem já existir)
-      console.log('⚠️ Erro ao verificar migrações (pode ser ignorado):', migrationError.message);
+      if (migrationError.code !== 'ER_DUP_FIELDNAME' && !migrationError.message.includes('Duplicate column')) {
+        console.log('⚠️ Erro ao verificar migrações (pode ser ignorado):', migrationError.message);
+      }
     }
 
   } catch (error) {
@@ -295,7 +318,7 @@ exports.uploadExtrato = async (req, res) => {
     const mimetype = arquivo.mimetype;
 
     // Inserir registro no banco com status pendente
-    const [result] = await pool.query(`
+    const result = await pool.query(`
       INSERT INTO icms_equalizacao (
         nome_arquivo,
         caminho_arquivo,
@@ -307,7 +330,9 @@ exports.uploadExtrato = async (req, res) => {
       ) VALUES (?, ?, ?, ?, 'pendente', ?, ?)
     `, [nomeArquivo, caminhoArquivo, tamanhoArquivo, mimetype, userOrg, userId]);
 
-    const extratoId = result.insertId;
+    // Para INSERT, o resultado pode ser um objeto OkPacket diretamente ou um array
+    const insertResult = Array.isArray(result) ? result[0] : result;
+    const extratoId = insertResult?.insertId;
 
     // Processar PDF em background se for PDF
     if (mimetype === 'application/pdf' && openai) {
