@@ -307,10 +307,12 @@ exports.listarExtratos = async (req, res) => {
     console.log('🔍 Parâmetros:', params);
     console.log('🔍 Organização do usuário:', userOrg);
     
-    const queryResult = await pool.query(query, params);
-    // pool.query retorna [rows, fields], então pegamos o primeiro elemento
-    const rows = Array.isArray(queryResult) ? queryResult[0] : queryResult;
-    const rowsArray = Array.isArray(rows) ? rows : [];
+    // pool.query do mariadb retorna [rows, fields] para SELECT
+    const [rows] = await pool.query(query, params);
+    
+    // Garantir que rows seja sempre um array
+    const rowsArray = Array.isArray(rows) ? rows : (rows ? [rows] : []);
+    
     console.log('✅ Extratos encontrados no banco:', rowsArray.length);
     
     if (rowsArray.length > 0) {
@@ -321,8 +323,11 @@ exports.listarExtratos = async (req, res) => {
     } else {
       console.log('⚠️ Nenhum extrato encontrado! Verificando se há registros na tabela...');
       // Query de debug para ver todos os registros
-      const [allRows] = await pool.query('SELECT id, nome_arquivo, organizacao FROM icms_equalizacao LIMIT 5');
-      console.log('🔍 Todos os registros na tabela (primeiros 5):', allRows);
+      const [debugRows] = await pool.query('SELECT id, nome_arquivo, organizacao FROM icms_equalizacao LIMIT 5');
+      const debugArray = Array.isArray(debugRows) ? debugRows : (debugRows ? [debugRows] : []);
+      console.log('🔍 Todos os registros na tabela (primeiros 5):', debugArray);
+      console.log('🔍 Query executada:', query);
+      console.log('🔍 Parâmetros usados:', params);
     }
 
     // Converter BigInt para Number (necessário porque JSON.stringify não suporta BigInt)
