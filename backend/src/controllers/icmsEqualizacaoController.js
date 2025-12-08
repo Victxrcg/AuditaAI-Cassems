@@ -21,18 +21,17 @@ try {
 }
 
 // Função para carregar pdf-parse dinamicamente
-let pdfParse = null;
+let pdfParseModule = null;
 const loadPdfParse = async () => {
-  if (!pdfParse) {
+  if (!pdfParseModule) {
     try {
-      const imported = require('pdf-parse');
-      pdfParse = imported.PDFParse;
+      pdfParseModule = require('pdf-parse');
     } catch (error) {
       console.error('❌ Erro ao carregar pdf-parse:', error);
       throw new Error('pdf-parse não está disponível');
     }
   }
-  return pdfParse;
+  return pdfParseModule;
 };
 
 // Configurar multer para upload de arquivos
@@ -198,7 +197,7 @@ const ensureTable = async (pool) => {
   }
 };
 
-// Processar PDF com IA para gerar extrato simplificado
+// Processar PDF com IA para gerar extrato simplificado (versão sem streaming)
 const processarPDFComIA = async (caminhoArquivo, nomeArquivo) => {
   if (!openai) {
     throw new Error('OpenAI não configurado');
@@ -206,9 +205,9 @@ const processarPDFComIA = async (caminhoArquivo, nomeArquivo) => {
 
   try {
     // Carregar e extrair texto do PDF
-    const PDFParse = await loadPdfParse();
+    const pdfParse = await loadPdfParse();
     const dataBuffer = fs.readFileSync(caminhoArquivo);
-    const pdfData = await PDFParse(dataBuffer);
+    const pdfData = await pdfParse(dataBuffer);
     const textoPDF = pdfData.text;
 
     if (!textoPDF || textoPDF.trim().length === 0) {
@@ -221,34 +220,57 @@ const processarPDFComIA = async (caminhoArquivo, nomeArquivo) => {
       ? textoPDF.substring(0, maxTokens * 4) + '\n\n[... documento truncado ...]'
       : textoPDF;
 
-    // Criar prompt para IA gerar extrato simplificado
+    // Criar prompt para IA extrair APENAS as rubricas "ICMS EQUALIZAÇÃO SIMPLES NACIONAL"
     const prompt = `
-Analise o seguinte extrato do ICMS e gere um extrato simplificado com as informações mais importantes.
+Analise o seguinte extrato de pagamentos do ICMS e extraia APENAS as linhas que contêm a rubrica "ICMS EQUALIZAÇÃO SIMPLES NACIONAL".
 
 ARQUIVO: ${nomeArquivo}
 
 CONTEÚDO DO EXTRATO:
 ${textoTruncado}
 
-INSTRUÇÕES:
-1. Extraia as informações principais do extrato do ICMS
-2. Organize em seções claras e objetivas
-3. Destaque valores importantes, períodos, CNPJs, estabelecimentos
-4. Mantenha apenas informações relevantes para análise fiscal
-5. Use formatação clara e estruturada
-6. Se houver tabelas ou dados numéricos importantes, inclua-os de forma organizada
+INSTRUÇÕES IMPORTANTES:
+1. Identifique TODAS as linhas que contêm "ICMS EQUALIZAÇÃO SIMPLES NACIONAL" (pode estar em uma ou duas linhas no PDF)
+2. Para cada linha encontrada, extraia EXATAMENTE:
+   - Referência (mês/ano, formato MM/AAAA, ex: 06/2022)
+   - Data de Pagamento (formato DD/MM/AAAA, ex: 03/08/2022)
+   - Número DAEMS (número completo do documento)
+   - Tipo de Tributo (deve ser exatamente "ICMS EQUALIZAÇÃO SIMPLES NACIONAL")
+   - Valor Principal (apenas o valor principal, converta vírgula para ponto decimal, ex: 208,87 vira 208.87)
 
-FORMATO DE SAÍDA:
-Gere um extrato simplificado em formato de texto estruturado, com seções claras e informações relevantes extraídas do documento original.
+3. Retorne os dados em formato JSON estruturado:
+{
+  "empresa": {
+    "razao_social": "nome da empresa se disponível",
+    "inscricao_estadual": "inscrição se disponível"
+  },
+  "itens": [
+    {
+      "referencia": "06/2022",
+      "pagamento": "03/08/2022",
+      "numero_daems": "102833710642",
+      "tipo_tributo": "ICMS EQUALIZAÇÃO SIMPLES NACIONAL",
+      "valor_principal": 208.87
+    }
+  ],
+  "total": 0.00
+}
+
+4. Calcule o TOTAL somando todos os valores principais dos itens encontrados
+5. Se não encontrar nenhuma linha com "ICMS EQUALIZAÇÃO SIMPLES NACIONAL", retorne itens como array vazio e total 0.00
+6. Converta todos os valores numéricos para formato numérico (não string), usando ponto como separador decimal
+
+Retorne APENAS o JSON válido, sem texto adicional antes ou depois.
 `;
 
-    // Chamar OpenAI
+    // Chamar OpenAI com formato JSON
     const completion = await openai.chat.completions.create({
       model: "gpt-4o-mini",
+      response_format: { type: "json_object" },
       messages: [
         {
           role: "system",
-          content: "Você é um especialista em análise de extratos fiscais do ICMS. Extraia e organize informações importantes de forma clara e estruturada."
+          content: "Você é um especialista em análise de extratos fiscais do ICMS. Extraia APENAS as informações relacionadas a 'ICMS EQUALIZAÇÃO SIMPLES NACIONAL' e retorne em formato JSON estruturado válido."
         },
         {
           role: "user",
@@ -256,11 +278,47 @@ Gere um extrato simplificado em formato de texto estruturado, com seções clara
         }
       ],
       max_tokens: 4000,
-      temperature: 0.2
+      temperature: 0.1
     });
 
-    const extratoSimplificado = completion.choices[0].message.content;
-    return extratoSimplificado;
+    const respostaIA = completion.choices[0].message.content;
+    console.log('📋 Resposta da IA:', respostaIA);
+    
+    // Tentar parsear o JSON
+    let extratoSimplificado;
+    try {
+      extratoSimplificado = JSON.parse(respostaIA);
+      
+      // Validar e calcular total se necessário
+      if (extratoSimplificado.itens && Array.isArray(extratoSimplificado.itens)) {
+        const totalCalculado = extratoSimplificado.itens.reduce((sum, item) => {
+          const valor = parseFloat(item.valor_principal) || 0;
+          return sum + valor;
+        }, 0);
+        extratoSimplificado.total = parseFloat(totalCalculado.toFixed(2));
+      } else {
+        extratoSimplificado.itens = [];
+        extratoSimplificado.total = 0.00;
+      }
+      
+      // Garantir que empresa existe
+      if (!extratoSimplificado.empresa) {
+        extratoSimplificado.empresa = {};
+      }
+      
+      // Retornar como JSON string para armazenar no banco
+      return JSON.stringify(extratoSimplificado);
+    } catch (parseError) {
+      console.error('❌ Erro ao parsear JSON da IA:', parseError);
+      console.error('❌ Resposta recebida:', respostaIA);
+      // Se não conseguir parsear, retornar estrutura vazia
+      return JSON.stringify({
+        empresa: {},
+        itens: [],
+        total: 0.00,
+        erro: "Erro ao processar extrato"
+      });
+    }
 
   } catch (error) {
     console.error('❌ Erro ao processar PDF com IA:', error);
@@ -440,61 +498,16 @@ exports.uploadExtrato = async (req, res) => {
     const insertResult = Array.isArray(result) ? result[0] : result;
     const extratoId = insertResult?.insertId;
 
-    // Processar PDF em background se for PDF
+    // Se for PDF, marcar como pendente para processamento via streaming
+    // O processamento será iniciado pelo frontend via endpoint de streaming
     if (mimetype === 'application/pdf' && openai) {
-      // Atualizar status para processando
       await pool.query(`
         UPDATE icms_equalizacao 
-        SET status_processamento = 'processando'
+        SET status_processamento = 'pendente'
         WHERE id = ?
       `, [extratoId]);
-
-      // Processar em background (não bloquear resposta)
-      // Criar novo pool para o processamento assíncrono
-      processarPDFComIA(caminhoArquivo, nomeArquivo)
-        .then(async (extratoSimplificado) => {
-          // Criar novo pool para atualização
-          let updatePool, updateServer;
-          try {
-            const poolResult = await getDbPoolWithTunnel();
-            updatePool = poolResult.pool;
-            updateServer = poolResult.server;
-            // Atualizar com extrato simplificado
-            await updatePool.query(`
-              UPDATE icms_equalizacao 
-              SET extrato_simplificado = ?,
-                  status_processamento = 'concluido'
-              WHERE id = ?
-            `, [extratoSimplificado, extratoId]);
-            console.log(`✅ Extrato ${extratoId} processado com sucesso`);
-          } catch (updateError) {
-            console.error(`❌ Erro ao atualizar extrato ${extratoId}:`, updateError);
-          } finally {
-            if (updateServer) updateServer.close();
-          }
-        })
-        .catch(async (error) => {
-          console.error(`❌ Erro ao processar extrato ${extratoId}:`, error);
-          // Criar novo pool para atualização de erro
-          let errorPool, errorServer;
-          try {
-            const poolResult = await getDbPoolWithTunnel();
-            errorPool = poolResult.pool;
-            errorServer = poolResult.server;
-            await errorPool.query(`
-              UPDATE icms_equalizacao 
-              SET status_processamento = 'erro',
-                  erro_processamento = ?
-              WHERE id = ?
-            `, [error.message, extratoId]);
-          } catch (updateError) {
-            console.error(`❌ Erro ao atualizar status de erro do extrato ${extratoId}:`, updateError);
-          } finally {
-            if (errorServer) errorServer.close();
-          }
-        });
     } else {
-      // Se não for PDF ou não tiver IA, marcar como concluído sem processamento
+      // Se não for PDF ou não tiver OpenAI, marcar como concluído sem processamento
       await pool.query(`
         UPDATE icms_equalizacao 
         SET status_processamento = 'concluido'
@@ -634,6 +647,268 @@ exports.downloadExtrato = async (req, res) => {
       error: 'Erro ao fazer download do extrato',
       details: error.message
     });
+  } finally {
+    if (server) server.close();
+  }
+};
+
+// Processar PDF com streaming (Server-Sent Events)
+exports.processarPDFStream = async (req, res) => {
+  let pool, server;
+  try {
+    if (!openai) {
+      return res.status(503).json({
+        success: false,
+        error: 'Serviço de IA temporariamente indisponível',
+        details: 'OpenAI não configurado'
+      });
+    }
+
+    const { id } = req.params;
+    const userOrg = req.headers['x-user-organization'] || 'cassems';
+    const userId = parseInt(req.headers['x-user-id'] || '0');
+
+    // Configurar headers para Server-Sent Events
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, x-user-organization, x-user-id');
+    res.setHeader('X-Accel-Buffering', 'no');
+    res.flushHeaders();
+
+    // Função auxiliar para enviar eventos SSE
+    const sendEvent = (event, data) => {
+      const eventData = `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
+      res.write(eventData);
+      if (typeof res.flush === 'function') {
+        res.flush();
+      }
+    };
+
+    ({ pool, server } = await getDbPoolWithTunnel());
+    await ensureTable(pool);
+
+    sendEvent('status', { message: 'Buscando extrato...' });
+
+    // Buscar extrato
+    let query = `SELECT * FROM icms_equalizacao WHERE id = ?`;
+    const params = [id];
+
+    if (userOrg !== 'portes') {
+      query += ` AND organizacao = ?`;
+      params.push(userOrg);
+    }
+
+    const [extrato] = await pool.query(query, params);
+    const extratoArray = Array.isArray(extrato) ? extrato : (extrato ? [extrato] : []);
+
+    if (!extratoArray || extratoArray.length === 0) {
+      sendEvent('error', { message: 'Extrato não encontrado' });
+      res.end();
+      return;
+    }
+
+    const extratoData = extratoArray[0];
+
+    // Verificar se é PDF
+    if (extratoData.mimetype !== 'application/pdf') {
+      sendEvent('error', { message: 'Arquivo não é um PDF' });
+      res.end();
+      return;
+    }
+
+    // Atualizar status para processando
+    await pool.query(`
+      UPDATE icms_equalizacao 
+      SET status_processamento = 'processando'
+      WHERE id = ?
+    `, [id]);
+
+    sendEvent('status', { message: 'Extraindo texto do PDF...' });
+
+    try {
+      // Carregar e extrair texto do PDF
+      const pdfParse = await loadPdfParse();
+      const dataBuffer = fs.readFileSync(extratoData.caminho_arquivo);
+      const pdfData = await pdfParse(dataBuffer);
+      const textoPDF = pdfData.text;
+
+      if (!textoPDF || textoPDF.trim().length === 0) {
+        throw new Error('Não foi possível extrair texto do PDF');
+      }
+
+      sendEvent('status', { message: 'Texto extraído. Analisando com IA...' });
+
+      // Truncar texto se muito longo
+      const maxTokens = 100000;
+      const textoTruncado = textoPDF.length > maxTokens * 4 
+        ? textoPDF.substring(0, maxTokens * 4) + '\n\n[... documento truncado ...]'
+        : textoPDF;
+
+      // Criar prompt
+      const prompt = `
+Analise o seguinte extrato de pagamentos do ICMS e extraia APENAS as linhas que contêm a rubrica "ICMS EQUALIZAÇÃO SIMPLES NACIONAL".
+
+ARQUIVO: ${extratoData.nome_arquivo}
+
+CONTEÚDO DO EXTRATO:
+${textoTruncado}
+
+INSTRUÇÕES IMPORTANTES:
+1. Identifique TODAS as linhas que contêm "ICMS EQUALIZAÇÃO SIMPLES NACIONAL" (pode estar em uma ou duas linhas no PDF)
+2. Para cada linha encontrada, extraia EXATAMENTE:
+   - Referência (mês/ano, formato MM/AAAA, ex: 06/2022)
+   - Data de Pagamento (formato DD/MM/AAAA, ex: 03/08/2022)
+   - Número DAEMS (número completo do documento)
+   - Tipo de Tributo (deve ser exatamente "ICMS EQUALIZAÇÃO SIMPLES NACIONAL")
+   - Valor Principal (apenas o valor principal, converta vírgula para ponto decimal, ex: 208,87 vira 208.87)
+
+3. Retorne os dados em formato JSON estruturado:
+{
+  "empresa": {
+    "razao_social": "nome da empresa se disponível",
+    "inscricao_estadual": "inscrição se disponível"
+  },
+  "itens": [
+    {
+      "referencia": "06/2022",
+      "pagamento": "03/08/2022",
+      "numero_daems": "102833710642",
+      "tipo_tributo": "ICMS EQUALIZAÇÃO SIMPLES NACIONAL",
+      "valor_principal": 208.87
+    }
+  ],
+  "total": 0.00
+}
+
+4. Calcule o TOTAL somando todos os valores principais dos itens encontrados
+5. Se não encontrar nenhuma linha com "ICMS EQUALIZAÇÃO SIMPLES NACIONAL", retorne itens como array vazio e total 0.00
+6. Converta todos os valores numéricos para formato numérico (não string), usando ponto como separador decimal
+
+Retorne APENAS o JSON válido, sem texto adicional antes ou depois.
+`;
+
+      sendEvent('status', { message: 'IA está processando o extrato...' });
+
+      // Chamar OpenAI com streaming
+      const stream = await openai.chat.completions.create({
+        model: "gpt-4o-mini",
+        messages: [
+          {
+            role: "system",
+            content: "Você é um especialista em análise de extratos fiscais do ICMS. Extraia APENAS as informações relacionadas a 'ICMS EQUALIZAÇÃO SIMPLES NACIONAL' e retorne em formato JSON estruturado válido."
+          },
+          {
+            role: "user",
+            content: prompt
+          }
+        ],
+        stream: true,
+        max_tokens: 4000,
+        temperature: 0.1,
+        response_format: { type: "json_object" }
+      });
+
+      let fullText = '';
+      let accumulatedChunk = '';
+
+      sendEvent('status', { message: 'Recebendo resposta da IA...' });
+
+      for await (const chunk of stream) {
+        const content = chunk.choices[0]?.delta?.content || '';
+        if (content) {
+          fullText += content;
+          accumulatedChunk += content;
+          
+          // Enviar chunks acumulados
+          if (accumulatedChunk.length >= 3 || /[\s.,;:!?{}[\]]/.test(content)) {
+            sendEvent('chunk', { text: accumulatedChunk });
+            accumulatedChunk = '';
+            await new Promise(resolve => setTimeout(resolve, 30));
+          }
+        }
+      }
+
+      sendEvent('status', { message: 'Processando resultado...' });
+
+      // Parsear JSON
+      let extratoSimplificado;
+      try {
+        extratoSimplificado = JSON.parse(fullText);
+        
+        // Validar e calcular total
+        if (extratoSimplificado.itens && Array.isArray(extratoSimplificado.itens)) {
+          const totalCalculado = extratoSimplificado.itens.reduce((sum, item) => {
+            const valor = parseFloat(item.valor_principal) || 0;
+            return sum + valor;
+          }, 0);
+          extratoSimplificado.total = parseFloat(totalCalculado.toFixed(2));
+        } else {
+          extratoSimplificado.itens = [];
+          extratoSimplificado.total = 0.00;
+        }
+        
+        if (!extratoSimplificado.empresa) {
+          extratoSimplificado.empresa = {};
+        }
+        
+        const extratoJSON = JSON.stringify(extratoSimplificado);
+
+        // Atualizar no banco
+        await pool.query(`
+          UPDATE icms_equalizacao 
+          SET extrato_simplificado = ?,
+              status_processamento = 'concluido'
+          WHERE id = ?
+        `, [extratoJSON, id]);
+
+        sendEvent('complete', { 
+          success: true,
+          extrato: extratoSimplificado,
+          message: 'Extrato processado com sucesso!'
+        });
+
+      } catch (parseError) {
+        console.error('❌ Erro ao parsear JSON da IA:', parseError);
+        await pool.query(`
+          UPDATE icms_equalizacao 
+          SET status_processamento = 'erro',
+              erro_processamento = ?
+          WHERE id = ?
+        `, [parseError.message, id]);
+        
+        sendEvent('error', { message: 'Erro ao processar resposta da IA' });
+      }
+
+    } catch (error) {
+      console.error(`❌ Erro ao processar extrato ${id}:`, error);
+      await pool.query(`
+        UPDATE icms_equalizacao 
+        SET status_processamento = 'erro',
+            erro_processamento = ?
+        WHERE id = ?
+      `, [error.message, id]);
+      
+      sendEvent('error', { message: error.message || 'Erro ao processar PDF' });
+    }
+
+    res.end();
+  } catch (error) {
+    console.error('❌ Erro no processamento streaming:', error);
+    if (!res.headersSent) {
+      res.status(500).json({
+        success: false,
+        error: error.message
+      });
+    } else {
+      const sendEvent = (event, data) => {
+        const eventData = `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
+        res.write(eventData);
+      };
+      sendEvent('error', { message: error.message });
+      res.end();
+    }
   } finally {
     if (server) server.close();
   }

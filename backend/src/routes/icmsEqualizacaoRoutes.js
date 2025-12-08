@@ -7,6 +7,7 @@ const {
   buscarExtrato,
   downloadExtrato,
   removerExtrato,
+  processarPDFStream,
   upload
 } = require('../controllers/icmsEqualizacaoController');
 
@@ -24,6 +25,9 @@ router.get('/anexos/:id/download', downloadExtrato);
 
 // Remover extrato
 router.delete('/anexos/:id', removerExtrato);
+
+// Processar PDF com streaming
+router.post('/anexos/:id/processar-stream', processarPDFStream);
 
 module.exports = router;
 
