@@ -288,9 +288,11 @@ exports.listarExtratos = async (req, res) => {
     const params = [];
 
     if (userOrg !== 'portes') {
-      query += ` WHERE ie.organizacao = ?`;
+      // Filtrar por organização do usuário OU registros sem organização (compatibilidade)
+      query += ` WHERE (ie.organizacao = ? OR ie.organizacao IS NULL)`;
       params.push(userOrg);
     }
+    // Se for "portes", não filtra (mostra todos os registros, incluindo NULL)
 
     query += ` ORDER BY ie.created_at DESC`;
 
@@ -302,9 +304,15 @@ exports.listarExtratos = async (req, res) => {
     const rows = Array.isArray(queryResult) ? queryResult[0] : queryResult;
     const rowsArray = Array.isArray(rows) ? rows : [];
     console.log('✅ Extratos encontrados:', rowsArray.length);
+    console.log('🔍 Primeiro extrato (se houver):', rowsArray[0] ? {
+      id: rowsArray[0].id,
+      nome_arquivo: rowsArray[0].nome_arquivo,
+      organizacao: rowsArray[0].organizacao
+    } : 'Nenhum');
 
     // Converter BigInt para Number (necessário porque JSON.stringify não suporta BigInt)
     const processedData = convertBigIntToNumber(rowsArray);
+    console.log('✅ Dados processados e enviados:', processedData.length);
 
     res.json({
       success: true,
@@ -339,6 +347,9 @@ exports.uploadExtrato = async (req, res) => {
 
     const userOrg = req.headers['x-user-organization'] || 'cassems';
     const userId = parseInt(req.headers['x-user-id'] || '0');
+    
+    console.log('🔍 Upload - Organização recebida:', userOrg);
+    console.log('🔍 Upload - User ID recebido:', userId);
 
     const arquivo = req.file;
     const caminhoArquivo = arquivo.path;
@@ -357,7 +368,9 @@ exports.uploadExtrato = async (req, res) => {
         organizacao,
         created_by
       ) VALUES (?, ?, ?, ?, 'pendente', ?, ?)
-    `, [nomeArquivo, caminhoArquivo, tamanhoArquivo, mimetype, userOrg, userId]);
+    `, [nomeArquivo, caminhoArquivo, tamanhoArquivo, mimetype, userOrg || null, userId || null]);
+    
+    console.log('✅ Registro inserido com organizacao:', userOrg, 'e created_by:', userId);
 
     // Para INSERT, o resultado pode ser um objeto OkPacket diretamente ou um array
     const insertResult = Array.isArray(result) ? result[0] : result;
