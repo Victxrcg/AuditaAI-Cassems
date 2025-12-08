@@ -70,91 +70,78 @@ const upload = multer({
 // Garantir que a tabela existe
 const ensureTable = async (pool) => {
   try {
-    // Verificar se a tabela já existe
-    const tablesResult = await pool.query(`
-      SELECT TABLE_NAME 
-      FROM INFORMATION_SCHEMA.TABLES 
-      WHERE TABLE_SCHEMA = DATABASE() 
-      AND TABLE_NAME = 'icms_equalizacao'
+    // Usar CREATE TABLE IF NOT EXISTS para evitar erros de tabela já existente
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS icms_equalizacao (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        nome_arquivo VARCHAR(255) NOT NULL,
+        caminho_arquivo VARCHAR(500) NOT NULL,
+        tamanho_arquivo BIGINT NULL,
+        mimetype VARCHAR(100) NULL,
+        extrato_simplificado TEXT NULL,
+        status_processamento ENUM('pendente', 'processando', 'concluido', 'erro') DEFAULT 'pendente',
+        erro_processamento TEXT NULL,
+        organizacao VARCHAR(50) NULL,
+        created_by INT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        INDEX idx_organizacao (organizacao),
+        INDEX idx_created_by (created_by),
+        INDEX idx_status (status_processamento)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
     `);
-
-    // pool.query retorna [rows, fields], então pegamos o primeiro elemento
-    const tables = Array.isArray(tablesResult) ? tablesResult[0] : tablesResult;
-
-    if (!tables || !Array.isArray(tables) || tables.length === 0) {
-      console.log('📋 Criando tabela icms_equalizacao...');
-      
-      // Criar tabela
-      await pool.query(`
-        CREATE TABLE icms_equalizacao (
-          id INT AUTO_INCREMENT PRIMARY KEY,
-          nome_arquivo VARCHAR(255) NOT NULL,
-          caminho_arquivo VARCHAR(500) NOT NULL,
-          tamanho_arquivo BIGINT NULL,
-          mimetype VARCHAR(100) NULL,
-          extrato_simplificado TEXT NULL,
-          status_processamento ENUM('pendente', 'processando', 'concluido', 'erro') DEFAULT 'pendente',
-          erro_processamento TEXT NULL,
-          organizacao VARCHAR(50) NULL,
-          created_by INT NULL,
-          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-          INDEX idx_organizacao (organizacao),
-          INDEX idx_created_by (created_by),
-          INDEX idx_status (status_processamento)
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-      `);
-      
-      console.log('✅ Tabela icms_equalizacao criada com sucesso');
-    } else {
-      console.log('✅ Tabela icms_equalizacao já existe');
-    }
+    
+    console.log('✅ Tabela icms_equalizacao verificada/criada');
 
     // Verificar e adicionar colunas que possam estar faltando (migrações futuras)
-    const columnsResult = await pool.query(`
-      SELECT COLUMN_NAME 
-      FROM INFORMATION_SCHEMA.COLUMNS 
-      WHERE TABLE_SCHEMA = DATABASE() 
-      AND TABLE_NAME = 'icms_equalizacao'
-    `);
-
-    // pool.query retorna [rows, fields], então pegamos o primeiro elemento
-    const columns = Array.isArray(columnsResult) ? columnsResult[0] : columnsResult;
-    const columnNames = Array.isArray(columns) ? columns.map(col => col.COLUMN_NAME) : [];
-    
-    // Adicionar colunas que possam estar faltando
-    if (!columnNames.includes('extrato_simplificado')) {
-      await pool.query(`
-        ALTER TABLE icms_equalizacao 
-        ADD COLUMN extrato_simplificado TEXT NULL
+    try {
+      const [columnsResult] = await pool.query(`
+        SELECT COLUMN_NAME 
+        FROM INFORMATION_SCHEMA.COLUMNS 
+        WHERE TABLE_SCHEMA = DATABASE() 
+        AND TABLE_NAME = 'icms_equalizacao'
       `);
-      console.log('✅ Coluna extrato_simplificado adicionada');
-    }
 
-    if (!columnNames.includes('status_processamento')) {
-      await pool.query(`
-        ALTER TABLE icms_equalizacao 
-        ADD COLUMN status_processamento ENUM('pendente', 'processando', 'concluido', 'erro') DEFAULT 'pendente'
-      `);
-      console.log('✅ Coluna status_processamento adicionada');
-    }
+      const columns = Array.isArray(columnsResult) ? columnsResult : [];
+      const columnNames = columns.map(col => col.COLUMN_NAME);
+      
+      // Adicionar colunas que possam estar faltando
+      if (!columnNames.includes('extrato_simplificado')) {
+        await pool.query(`
+          ALTER TABLE icms_equalizacao 
+          ADD COLUMN extrato_simplificado TEXT NULL
+        `);
+        console.log('✅ Coluna extrato_simplificado adicionada');
+      }
 
-    if (!columnNames.includes('erro_processamento')) {
-      await pool.query(`
-        ALTER TABLE icms_equalizacao 
-        ADD COLUMN erro_processamento TEXT NULL
-      `);
-      console.log('✅ Coluna erro_processamento adicionada');
+      if (!columnNames.includes('status_processamento')) {
+        await pool.query(`
+          ALTER TABLE icms_equalizacao 
+          ADD COLUMN status_processamento ENUM('pendente', 'processando', 'concluido', 'erro') DEFAULT 'pendente'
+        `);
+        console.log('✅ Coluna status_processamento adicionada');
+      }
+
+      if (!columnNames.includes('erro_processamento')) {
+        await pool.query(`
+          ALTER TABLE icms_equalizacao 
+          ADD COLUMN erro_processamento TEXT NULL
+        `);
+        console.log('✅ Coluna erro_processamento adicionada');
+      }
+    } catch (migrationError) {
+      // Ignorar erros de migração (colunas podem já existir)
+      console.log('⚠️ Erro ao verificar migrações (pode ser ignorado):', migrationError.message);
     }
 
   } catch (error) {
-    console.error('❌ Erro ao garantir tabela icms_equalizacao:', error);
-    console.error('❌ Stack trace:', error.stack);
-    // Não lançar erro aqui, apenas logar - a tabela pode já existir
-    // Se houver erro crítico, será capturado no endpoint
-    if (error.code !== 'ER_TABLE_EXISTS_ERROR' && !error.message.includes('already exists')) {
-      throw error;
+    // Se for erro de tabela já existente, ignorar
+    if (error.code === 'ER_TABLE_EXISTS_ERROR' || error.message.includes('already exists')) {
+      console.log('✅ Tabela icms_equalizacao já existe');
+      return;
     }
+    console.error('❌ Erro ao garantir tabela icms_equalizacao:', error);
+    throw error;
   }
 };
 
