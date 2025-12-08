@@ -25,13 +25,40 @@ let pdfParseModule = null;
 const loadPdfParse = async () => {
   if (!pdfParseModule) {
     try {
+      // Limpar cache do require para garantir que estamos pegando a versão correta
+      delete require.cache[require.resolve('pdf-parse')];
       const imported = require('pdf-parse');
-      // pdf-parse retorna a função diretamente (não é uma classe)
-      pdfParseModule = imported.default || imported;
-      console.log('🔍 pdf-parse carregado, tipo:', typeof pdfParseModule);
+      
+      console.log('🔍 pdf-parse importado, tipo:', typeof imported);
+      console.log('🔍 pdf-parse tem default?', !!imported.default);
+      console.log('🔍 pdf-parse keys:', Object.keys(imported || {}));
+      
+      // pdf-parse versão 2.x exporta a função diretamente
+      // Tentar diferentes formas de acesso
+      if (typeof imported === 'function') {
+        pdfParseModule = imported;
+        console.log('✅ pdf-parse carregado como função direta');
+      } else if (imported.default && typeof imported.default === 'function') {
+        pdfParseModule = imported.default;
+        console.log('✅ pdf-parse carregado via .default');
+      } else if (imported.pdfParse && typeof imported.pdfParse === 'function') {
+        pdfParseModule = imported.pdfParse;
+        console.log('✅ pdf-parse carregado via .pdfParse');
+      } else {
+        // Última tentativa: usar o próprio imported
+        pdfParseModule = imported;
+        console.log('⚠️ pdf-parse usando imported diretamente, tipo:', typeof pdfParseModule);
+      }
+      
+      if (!pdfParseModule) {
+        throw new Error('Não foi possível extrair a função pdfParse do módulo');
+      }
+      
+      console.log('✅ pdf-parse carregado com sucesso, tipo final:', typeof pdfParseModule);
     } catch (error) {
       console.error('❌ Erro ao carregar pdf-parse:', error);
-      throw new Error('pdf-parse não está disponível');
+      console.error('❌ Stack:', error.stack);
+      throw new Error('pdf-parse não está disponível: ' + error.message);
     }
   }
   return pdfParseModule;
@@ -209,16 +236,35 @@ const processarPDFComIA = async (caminhoArquivo, nomeArquivo) => {
     try {
       // Carregar e extrair texto do PDF
       const pdfParse = await loadPdfParse();
+      
+      if (!pdfParse) {
+        throw new Error('pdfParse não foi carregado corretamente');
+      }
+      
+      console.log('🔍 [processarPDFComIA] Tipo de pdfParse:', typeof pdfParse);
+      console.log('🔍 [processarPDFComIA] pdfParse é função?', typeof pdfParse === 'function');
+      
       const dataBuffer = fs.readFileSync(caminhoArquivo);
       
       // Tentar chamar como função primeiro, se falhar, tentar como classe
       let pdfData;
       try {
-        pdfData = await pdfParse(dataBuffer);
-      } catch (funcError) {
-        // Se falhar como função, tentar como classe
-        if (funcError.message.includes('cannot be invoked without')) {
+        if (typeof pdfParse === 'function') {
+          pdfData = await pdfParse(dataBuffer);
+        } else {
+          // Se não for função, tentar como classe
           pdfData = await new pdfParse(dataBuffer);
+        }
+      } catch (funcError) {
+        console.error('❌ [processarPDFComIA] Erro ao processar PDF (primeira tentativa):', funcError.message);
+        // Se falhar como função, tentar como classe
+        if (funcError.message && funcError.message.includes('cannot be invoked without')) {
+          try {
+            pdfData = await new pdfParse(dataBuffer);
+          } catch (classError) {
+            console.error('❌ [processarPDFComIA] Erro ao processar PDF (segunda tentativa):', classError.message);
+            throw new Error(`Erro ao processar PDF: ${classError.message}`);
+          }
         } else {
           throw funcError;
         }
@@ -746,16 +792,35 @@ exports.processarPDFStream = async (req, res) => {
     try {
       // Carregar e extrair texto do PDF
       const pdfParse = await loadPdfParse();
+      
+      if (!pdfParse) {
+        throw new Error('pdfParse não foi carregado corretamente');
+      }
+      
+      console.log('🔍 Tipo de pdfParse:', typeof pdfParse);
+      console.log('🔍 pdfParse é função?', typeof pdfParse === 'function');
+      
       const dataBuffer = fs.readFileSync(extratoData.caminho_arquivo);
       
       // Tentar chamar como função primeiro, se falhar, tentar como classe
       let pdfData;
       try {
-        pdfData = await pdfParse(dataBuffer);
-      } catch (funcError) {
-        // Se falhar como função, tentar como classe
-        if (funcError.message.includes('cannot be invoked without')) {
+        if (typeof pdfParse === 'function') {
+          pdfData = await pdfParse(dataBuffer);
+        } else {
+          // Se não for função, tentar como classe
           pdfData = await new pdfParse(dataBuffer);
+        }
+      } catch (funcError) {
+        console.error('❌ Erro ao processar PDF (primeira tentativa):', funcError.message);
+        // Se falhar como função, tentar como classe
+        if (funcError.message && funcError.message.includes('cannot be invoked without')) {
+          try {
+            pdfData = await new pdfParse(dataBuffer);
+          } catch (classError) {
+            console.error('❌ Erro ao processar PDF (segunda tentativa):', classError.message);
+            throw new Error(`Erro ao processar PDF: ${classError.message}`);
+          }
         } else {
           throw funcError;
         }
