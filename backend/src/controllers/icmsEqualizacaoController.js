@@ -256,8 +256,13 @@ const processarPDFComIA = async (caminhoArquivo, nomeArquivo) => {
       let pdfData;
       try {
         if (typeof pdfParse === 'function') {
-          // Verificar se é uma classe (tem prototype) ou função
-          if (pdfParse.prototype && pdfParse.prototype.constructor) {
+          // Verificar se é uma classe (tem prototype e constructor)
+          const isClass = pdfParse.prototype && pdfParse.prototype.constructor && 
+                         (pdfParse.prototype.constructor === pdfParse || 
+                          pdfParse.name === 'PDFParse' ||
+                          pdfParse.toString().startsWith('class'));
+          
+          if (isClass) {
             // É uma classe, usar new
             console.log('🔍 [processarPDFComIA] Usando pdfParse como classe (new)');
             pdfData = await new pdfParse(dataBuffer);
@@ -275,11 +280,11 @@ const processarPDFComIA = async (caminhoArquivo, nomeArquivo) => {
         try {
           if (funcError.message && funcError.message.includes('cannot be invoked without')) {
             // Tentar como classe
-            console.log('🔍 [processarPDFComIA] Tentando pdfParse como classe (new) após erro');
+            console.log('🔍 [processarPDFComIA] Tentando pdfParse como classe (new) após erro "cannot be invoked without"');
             pdfData = await new pdfParse(dataBuffer);
           } else if (funcError.message && funcError.message.includes('is not a constructor')) {
             // Tentar como função
-            console.log('🔍 [processarPDFComIA] Tentando pdfParse como função após erro de construtor');
+            console.log('🔍 [processarPDFComIA] Tentando pdfParse como função após erro "is not a constructor"');
             pdfData = await pdfParse(dataBuffer);
           } else {
             throw funcError;
@@ -822,27 +827,49 @@ exports.processarPDFStream = async (req, res) => {
       
       const dataBuffer = fs.readFileSync(extratoData.caminho_arquivo);
       
-      // Tentar chamar como função primeiro, se falhar, tentar como classe
+      // Detectar se é classe ou função e usar o método apropriado
       let pdfData;
+      
+      // Como sabemos que PDFParse é uma classe, vamos sempre usar new
+      // Mas vamos tentar ambos os métodos para garantir compatibilidade
       try {
         if (typeof pdfParse === 'function') {
-          pdfData = await pdfParse(dataBuffer);
+          // Verificar se é uma classe (nome é PDFParse ou tem prototype.constructor)
+          const isClass = pdfParse.name === 'PDFParse' || 
+                         (pdfParse.prototype && pdfParse.prototype.constructor);
+          
+          if (isClass) {
+            // É uma classe, usar new diretamente
+            console.log('🔍 Usando pdfParse como classe (new) - nome:', pdfParse.name);
+            pdfData = await new pdfParse(dataBuffer);
+          } else {
+            // É uma função, chamar diretamente
+            console.log('🔍 Usando pdfParse como função');
+            pdfData = await pdfParse(dataBuffer);
+          }
         } else {
-          // Se não for função, tentar como classe
-          pdfData = await new pdfParse(dataBuffer);
+          throw new Error('pdfParse não é uma função ou classe válida');
         }
       } catch (funcError) {
         console.error('❌ Erro ao processar PDF (primeira tentativa):', funcError.message);
-        // Se falhar como função, tentar como classe
-        if (funcError.message && funcError.message.includes('cannot be invoked without')) {
-          try {
+        // Se falhar, tentar o método alternativo
+        try {
+          if (funcError.message && funcError.message.includes('cannot be invoked without')) {
+            // Tentar como classe
+            console.log('🔍 Tentando pdfParse como classe (new) após erro "cannot be invoked without"');
             pdfData = await new pdfParse(dataBuffer);
-          } catch (classError) {
-            console.error('❌ Erro ao processar PDF (segunda tentativa):', classError.message);
-            throw new Error(`Erro ao processar PDF: ${classError.message}`);
+          } else if (funcError.message && funcError.message.includes('is not a constructor')) {
+            // Tentar como função
+            console.log('🔍 Tentando pdfParse como função após erro "is not a constructor"');
+            pdfData = await pdfParse(dataBuffer);
+          } else {
+            // Se não for um erro conhecido, tentar new de qualquer forma
+            console.log('🔍 Tentando pdfParse como classe (new) como último recurso');
+            pdfData = await new pdfParse(dataBuffer);
           }
-        } else {
-          throw funcError;
+        } catch (classError) {
+          console.error('❌ Erro ao processar PDF (segunda tentativa):', classError.message);
+          throw new Error(`Erro ao processar PDF: ${classError.message}`);
         }
       }
       
