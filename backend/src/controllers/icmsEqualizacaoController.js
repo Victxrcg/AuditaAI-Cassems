@@ -801,16 +801,24 @@ exports.downloadExtrato = async (req, res) => {
     const params = [id];
 
     if (userOrg !== 'portes') {
-      query += ` AND organizacao = ?`;
+      // Filtrar por organização do usuário OU registros sem organização (compatibilidade)
+      query += ` AND (organizacao = ? OR organizacao IS NULL)`;
       params.push(userOrg);
     }
 
-    const queryResult = await pool.query(query, params);
+    const [rows] = await pool.query(query, params);
     // pool.query retorna [rows, fields], então pegamos o primeiro elemento
-    const extrato = Array.isArray(queryResult) ? queryResult[0] : queryResult;
-    const extratoArray = Array.isArray(extrato) ? extrato : [];
+    const extratoArray = Array.isArray(rows) ? rows : (rows ? [rows] : []);
 
     console.log('📥 Resultado da query:', extratoArray.length, 'registros encontrados');
+    if (extratoArray.length > 0) {
+      console.log('📥 Extrato encontrado:', {
+        id: extratoArray[0].id,
+        nome: extratoArray[0].nome_arquivo,
+        organizacao: extratoArray[0].organizacao,
+        caminho: extratoArray[0].caminho_arquivo
+      });
+    }
 
     if (!extratoArray || extratoArray.length === 0) {
       console.log('❌ Extrato não encontrado no banco');
