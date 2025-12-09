@@ -73,6 +73,14 @@ const AppContent = () => {
           } 
         />
         <Route 
+          path="/compliance/icms-equalizacao" 
+          element={
+            <ProtectedRoute requiredPermission="compliance">
+              <Layout><Compliance key="icms-equalizacao" tipoCompliance="icms-equalizacao" /></Layout>
+            </ProtectedRoute>
+          } 
+        />
+        <Route 
           path="/cronograma" 
           element={
             <ProtectedRoute requiredPermission="cronograma">

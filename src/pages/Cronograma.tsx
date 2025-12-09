@@ -340,6 +340,39 @@ const Cronograma = () => {
     fetchCronogramas();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentUser?.id, organizacaoSelecionada]); // Depender apenas de valores estáveis
+
+  // Verificar periodicamente se há cronogramas que precisam ser atualizados para "atrasado"
+  useEffect(() => {
+    if (!currentUser || cronogramas.length === 0) return;
+
+    const verificarAtrasos = () => {
+      const hoje = new Date();
+      hoje.setHours(0, 0, 0, 0);
+      
+      const temAtrasos = cronogramas.some(cronograma => {
+        if (!cronograma.data_fim || cronograma.status === 'concluido' || cronograma.status === 'atrasado') {
+          return false;
+        }
+        const dataFim = new Date(cronograma.data_fim);
+        dataFim.setHours(0, 0, 0, 0);
+        return dataFim < hoje;
+      });
+
+      // Se houver cronogramas que precisam ser atualizados, recarregar
+      if (temAtrasos) {
+        fetchCronogramas();
+      }
+    };
+
+    // Verificar imediatamente
+    verificarAtrasos();
+
+    // Verificar a cada hora (3600000 ms)
+    const interval = setInterval(verificarAtrasos, 3600000);
+
+    return () => clearInterval(interval);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cronogramas.length, currentUser?.id]);
   
 
   // Buscar usuários para atribuição

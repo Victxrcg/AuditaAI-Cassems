@@ -142,6 +142,13 @@ const NotificationBell = () => {
     const currentUser = getCurrentUser();
     if (!currentUser?.id) return;
 
+    // Inicializar a referência da organização
+    if (currentUser.organizacao === 'portes') {
+      ultimaOrganizacaoRef.current = localStorage.getItem('cronograma-empresa-selecionada');
+    } else {
+      ultimaOrganizacaoRef.current = currentUser.organizacao || 'cassems';
+    }
+
     // Verificar se há um timestamp de login recente
     const ultimoLoginTimestamp = localStorage.getItem('ultimo_login_timestamp');
     const ultimaBuscaNotificacoes = localStorage.getItem('ultima_busca_notificacoes');
@@ -158,6 +165,48 @@ const NotificationBell = () => {
         // Ignorar erros silenciosamente
       });
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Executar apenas uma vez ao montar
+
+  // Monitorar mudanças na organização selecionada (especialmente para usuários Portes)
+  useEffect(() => {
+    const currentUser = getCurrentUser();
+    if (!currentUser?.id) return;
+
+    const verificarMudancaOrganizacao = () => {
+      let organizacaoAtual: string | null = null;
+      
+      if (currentUser.organizacao === 'portes') {
+        organizacaoAtual = localStorage.getItem('cronograma-empresa-selecionada');
+      } else {
+        organizacaoAtual = currentUser.organizacao || 'cassems';
+      }
+
+      // Se a organização mudou, recarregar notificações
+      if (organizacaoAtual !== ultimaOrganizacaoRef.current) {
+        ultimaOrganizacaoRef.current = organizacaoAtual;
+        fetchNotificacoes();
+      }
+    };
+
+    // Verificar imediatamente
+    verificarMudancaOrganizacao();
+
+    // Verificar periodicamente para detectar mudanças no localStorage
+    const interval = setInterval(verificarMudancaOrganizacao, 500);
+
+    // Também ouvir eventos de storage (para mudanças em outras abas)
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === 'cronograma-empresa-selecionada') {
+        verificarMudancaOrganizacao();
+      }
+    };
+    window.addEventListener('storage', handleStorageChange);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('storage', handleStorageChange);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // Executar apenas uma vez ao montar
 
@@ -277,8 +326,7 @@ const NotificationBell = () => {
               );
             }
             
-            return (
-            <ScrollArea className="flex-1 min-h-0" style={{ maxHeight: '350px' }}>
+            const notificacoesContent = (
               <div className="p-2">
                 {notificacoes.map((notif) => (
                     <Card
@@ -315,7 +363,18 @@ const NotificationBell = () => {
                     </Card>
                   ))}
               </div>
-            </ScrollArea>
+            );
+
+            return (
+              contadorNotificacoes > 3 ? (
+                <ScrollArea className="flex-1 min-h-0" style={{ maxHeight: '350px' }}>
+                  {notificacoesContent}
+                </ScrollArea>
+              ) : (
+                <div className="flex-1 min-h-0 overflow-y-auto">
+                  {notificacoesContent}
+                </div>
+              )
             );
           })()}
 

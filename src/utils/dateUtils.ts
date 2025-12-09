@@ -1,10 +1,40 @@
 ﻿// Utilitários para formatação de datas no padrão brasileiro
-export const formatDateBR = (dateString: string): string => {
+export const formatDateBR = (dateString: string | Date | any): string => {
   if (!dateString) return '';
   
   try {
+    // Se for um objeto Date, converter para string ISO
+    if (dateString instanceof Date) {
+      dateString = dateString.toISOString();
+    }
+    
+    // Se não for string, tentar converter
+    if (typeof dateString !== 'string') {
+      // Se for um objeto, tentar extrair propriedades comuns de data
+      if (typeof dateString === 'object' && dateString !== null) {
+        // Tentar propriedades comuns de objetos de data
+        if (dateString.date) {
+          dateString = dateString.date;
+        } else if (dateString.created_at) {
+          dateString = dateString.created_at;
+        } else if (dateString.toString && typeof dateString.toString === 'function') {
+          dateString = dateString.toString();
+        } else {
+          console.warn('Não foi possível converter objeto para string de data:', dateString);
+          return '';
+        }
+      } else {
+        dateString = String(dateString);
+      }
+    }
+    
+    // Se ainda não for string válida, retornar vazio
+    if (typeof dateString !== 'string' || dateString.trim() === '') {
+      return '';
+    }
+    
     // Se já está no formato DD/MM/YYYY, retornar como está
-    if (dateString.includes('/')) {
+    if (dateString.includes('/') && dateString.match(/^\d{2}\/\d{2}\/\d{4}$/)) {
       return dateString;
     }
     
@@ -12,32 +42,107 @@ export const formatDateBR = (dateString: string): string => {
     if (dateString.includes('T')) {
       const datePart = dateString.split('T')[0]; // Pega apenas YYYY-MM-DD
       const [year, month, day] = datePart.split('-');
-      return `${day}/${month}/${year}`;
+      if (year && month && day) {
+        return `${day}/${month}/${year}`;
+      }
     }
     
     // Se está no formato YYYY-MM-DD, converter sem usar new Date() para evitar problemas de fuso horário
-    if (dateString.includes('-')) {
-      const [year, month, day] = dateString.split('-');
-      return `${day}/${month}/${year}`;
+    if (dateString.includes('-') && dateString.match(/^\d{4}-\d{2}-\d{2}/)) {
+      const datePart = dateString.split(' ')[0]; // Pega apenas a parte da data se houver hora
+      const [year, month, day] = datePart.split('-');
+      if (year && month && day) {
+        return `${day}/${month}/${year}`;
+      }
     }
     
     // Para outros formatos, usar new Date() como fallback
     const date = new Date(dateString);
+    if (isNaN(date.getTime())) {
+      console.warn('Data inválida em formatDateBR:', dateString);
+      return ''; // Retornar vazio se não conseguir parsear
+    }
     return date.toLocaleDateString('pt-BR');
   } catch (error) {
-    return dateString;
+    console.warn('Erro ao formatar data em formatDateBR:', dateString, error);
+    return '';
   }
 };
 
 // Função para formatar data e hora no padrão brasileiro
-export const formatDateTimeBR = (dateString: string): string => {
+export const formatDateTimeBR = (dateString: string | Date | any): string => {
   if (!dateString) return '';
   
   try {
-    const date = new Date(dateString);
-    return date.toLocaleString('pt-BR');
+    // Se for um objeto Date, converter para string ISO
+    if (dateString instanceof Date) {
+      dateString = dateString.toISOString();
+    }
+    
+    // Se não for string, tentar converter
+    if (typeof dateString !== 'string') {
+      // Se for um objeto, tentar extrair propriedades comuns de data
+      if (typeof dateString === 'object' && dateString !== null) {
+        // Tentar propriedades comuns de objetos de data
+        if (dateString.date) {
+          dateString = dateString.date;
+        } else if (dateString.created_at) {
+          dateString = dateString.created_at;
+        } else if (dateString.toString && typeof dateString.toString === 'function') {
+          dateString = dateString.toString();
+        } else {
+          console.warn('Não foi possível converter objeto para string de data:', dateString);
+          return '';
+        }
+      } else {
+        dateString = String(dateString);
+      }
+    }
+    
+    // Se ainda não for string válida, retornar vazio
+    if (typeof dateString !== 'string' || dateString.trim() === '') {
+      return '';
+    }
+    
+    // Se já está no formato brasileiro, retornar como está
+    if (dateString.includes('/') && dateString.includes(':')) {
+      return dateString;
+    }
+    
+    // Se está no formato ISO completo (YYYY-MM-DDTHH:MM:SS.000Z ou YYYY-MM-DD HH:MM:SS)
+    let date: Date;
+    
+    if (dateString.includes('T')) {
+      // Formato ISO com T (YYYY-MM-DDTHH:MM:SS.000Z)
+      date = new Date(dateString);
+    } else if (dateString.includes(' ') && dateString.includes(':')) {
+      // Formato MySQL (YYYY-MM-DD HH:MM:SS)
+      date = new Date(dateString.replace(' ', 'T'));
+    } else if (dateString.includes('-')) {
+      // Formato apenas data (YYYY-MM-DD)
+      date = new Date(dateString + 'T00:00:00');
+    } else {
+      // Tentar parsear como está
+      date = new Date(dateString);
+    }
+    
+    // Verificar se a data é válida
+    if (isNaN(date.getTime())) {
+      console.warn('Data inválida:', dateString);
+      return ''; // Retornar vazio se não conseguir parsear
+    }
+    
+    return date.toLocaleString('pt-BR', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit'
+    });
   } catch (error) {
-    return dateString;
+    console.warn('Erro ao formatar data:', dateString, error);
+    return '';
   }
 };
 
