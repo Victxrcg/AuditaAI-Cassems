@@ -968,30 +968,71 @@ exports.processarPDFStream = async (req, res) => {
       
       // Tentar diferentes formas de extrair o texto
       let textoPDF = '';
-      if (pdfData.text) {
+      
+      // pdf-parse retorna o texto diretamente na propriedade text
+      if (pdfData.text && typeof pdfData.text === 'string') {
         textoPDF = pdfData.text;
-      } else if (pdfData.doc && pdfData.doc.text) {
-        textoPDF = pdfData.doc.text;
-      } else if (typeof pdfData === 'string') {
+        console.log('✅ Texto encontrado em pdfData.text');
+      } 
+      // Ou pode estar em pdfData.doc.text
+      else if (pdfData.doc) {
+        if (typeof pdfData.doc === 'string') {
+          textoPDF = pdfData.doc;
+          console.log('✅ Texto encontrado em pdfData.doc (string)');
+        } else if (pdfData.doc.text && typeof pdfData.doc.text === 'string') {
+          textoPDF = pdfData.doc.text;
+          console.log('✅ Texto encontrado em pdfData.doc.text');
+        } else if (pdfData.doc.getText && typeof pdfData.doc.getText === 'function') {
+          textoPDF = await pdfData.doc.getText();
+          console.log('✅ Texto extraído via pdfData.doc.getText()');
+        } else if (pdfData.doc.pages && Array.isArray(pdfData.doc.pages)) {
+          // Tentar extrair texto das páginas
+          textoPDF = pdfData.doc.pages.map((page, idx) => {
+            if (page.text) return page.text;
+            if (page.getText && typeof page.getText === 'function') {
+              try {
+                return page.getText();
+              } catch (e) {
+                return '';
+              }
+            }
+            return '';
+          }).join('\n');
+          console.log('✅ Texto extraído das páginas do PDF');
+        }
+      }
+      // Outras tentativas
+      else if (typeof pdfData === 'string') {
         textoPDF = pdfData;
-      } else if (pdfData.toString && typeof pdfData.toString === 'function') {
-        textoPDF = pdfData.toString();
+        console.log('✅ pdfData é string direta');
       } else if (pdfData.data && pdfData.data.text) {
         textoPDF = pdfData.data.text;
+        console.log('✅ Texto encontrado em pdfData.data.text');
       } else if (pdfData.result && pdfData.result.text) {
         textoPDF = pdfData.result.text;
+        console.log('✅ Texto encontrado em pdfData.result.text');
       }
       
       // Se ainda não tiver texto, verificar se precisa chamar um método
-      if (!textoPDF || textoPDF.trim().length === 0) {
+      if (!textoPDF || textoPDF.trim().length === 0 || textoPDF === '[object Object]') {
+        console.log('⚠️ Texto não encontrado nas propriedades padrão, tentando métodos...');
         // Tentar chamar métodos comuns
         if (typeof pdfData.getText === 'function') {
           textoPDF = await pdfData.getText();
+          console.log('✅ Texto extraído via pdfData.getText()');
         } else if (typeof pdfData.extractText === 'function') {
           textoPDF = await pdfData.extractText();
+          console.log('✅ Texto extraído via pdfData.extractText()');
         } else if (typeof pdfData.parse === 'function') {
           textoPDF = await pdfData.parse();
+          console.log('✅ Texto extraído via pdfData.parse()');
         }
+      }
+      
+      // Verificar se o texto é válido (não é [object Object])
+      if (textoPDF && textoPDF.toString().includes('[object Object]')) {
+        console.error('❌ Texto inválido detectado: [object Object]');
+        textoPDF = '';
       }
 
       console.log('🔍 Texto extraído, length:', textoPDF?.length || 0);
