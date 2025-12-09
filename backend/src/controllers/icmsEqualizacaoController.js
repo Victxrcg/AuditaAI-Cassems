@@ -1000,6 +1000,35 @@ exports.processarPDFStream = async (req, res) => {
       // Contar quantas ocorrências de "ICMS EQUALIZAÇÃO SIMPLES NACIONAL" existem no texto
       const ocorrenciasEncontradas = (textoPDF.match(/ICMS\s+EQUALIZAÇÃO\s+SIMPLES\s+NACIONAL/gi) || []).length;
       console.log('🔍 Ocorrências de "ICMS EQUALIZAÇÃO SIMPLES NACIONAL" no texto:', ocorrenciasEncontradas);
+      
+      // Procurar por variações também
+      const variacoes = [
+        { nome: 'Padrão principal', pattern: /ICMS\s+EQUALIZAÇÃO\s+SIMPLES\s+NACIONAL/gi },
+        { nome: 'Com ponto', pattern: /ICMS.*EQUALIZAÇÃO.*SIMPLES.*NACIONAL/gi },
+        { nome: 'Sem ICMS', pattern: /EQUALIZAÇÃO\s+SIMPLES\s+NACIONAL/gi },
+        { nome: 'Case insensitive simples', pattern: /equalização\s+simples\s+nacional/gi }
+      ];
+      
+      variacoes.forEach(({ nome, pattern }) => {
+        const matches = textoPDF.match(pattern) || [];
+        if (matches.length > 0) {
+          console.log(`🔍 ${nome} encontrou ${matches.length} ocorrências`);
+          // Mostrar contexto das primeiras 3 ocorrências
+          const indices = [];
+          let searchIndex = 0;
+          for (let i = 0; i < Math.min(3, matches.length); i++) {
+            const index = textoPDF.indexOf(matches[i], searchIndex);
+            if (index !== -1) {
+              indices.push(index);
+              searchIndex = index + matches[i].length;
+              // Mostrar contexto de 100 caracteres antes e depois
+              const inicio = Math.max(0, index - 100);
+              const fim = Math.min(textoPDF.length, index + matches[i].length + 100);
+              console.log(`   Contexto ${i + 1}: ...${textoPDF.substring(inicio, fim)}...`);
+            }
+          }
+        }
+      });
 
       if (!textoPDF || textoPDF.trim().length === 0) {
         throw new Error('Não foi possível extrair texto do PDF');
@@ -1098,9 +1127,20 @@ INSTRUÇÕES OBRIGATÓRIAS - SEGUIR À RISCA:
    - Quantos itens você está retornando no array?
    - Esses números DEVEM SER IGUAIS!
    - A Inscrição Estadual é um número REAL do documento, não um número inventado?
+   - IMPORTANTE: Se você encontrou pelo menos 1 ocorrência de "ICMS EQUALIZAÇÃO SIMPLES NACIONAL" no texto, 
+     você DEVE retornar pelo menos 1 item no array "itens". NUNCA retorne um array vazio se encontrou ocorrências!
+
+7. ATENÇÃO ESPECIAL:
+   - Se o documento contém "ICMS EQUALIZAÇÃO SIMPLES NACIONAL" mas você não conseguiu extrair os dados completos,
+     ainda assim retorne os dados parciais que conseguiu extrair (mesmo que faltem alguns campos).
+   - É MELHOR retornar dados incompletos do que retornar um array vazio quando há ocorrências no documento.
+   - Se você encontrou a frase mas não conseguiu extrair referência, pagamento ou número DAEMS, 
+     use valores padrão como "-" ou null, mas NÃO deixe o array vazio.
 
 ═══════════════════════════════════════════════════════════════
 RETORNE APENAS O JSON VÁLIDO, SEM TEXTO ADICIONAL.
+Se encontrou ocorrências de "ICMS EQUALIZAÇÃO SIMPLES NACIONAL" no texto, 
+o array "itens" NÃO PODE estar vazio!
 ═══════════════════════════════════════════════════════════════
 `;
 
@@ -1179,19 +1219,50 @@ RETORNE APENAS O JSON VÁLIDO, SEM TEXTO ADICIONAL.
 
       sendEvent('status', { message: 'Processando resultado...' });
 
+      console.log('📝 Texto completo retornado pela IA (primeiros 500 chars):', fullText.substring(0, 500));
+      console.log('📝 Texto completo retornado pela IA (últimos 500 chars):', fullText.substring(Math.max(0, fullText.length - 500)));
+      console.log('📝 Tamanho total do texto:', fullText.length);
+
       // Parsear JSON
       let extratoSimplificado;
       try {
         extratoSimplificado = JSON.parse(fullText);
         
+        console.log('✅ JSON parseado com sucesso:', {
+          temItens: !!extratoSimplificado.itens,
+          quantidadeItens: extratoSimplificado.itens?.length || 0,
+          temEmpresa: !!extratoSimplificado.empresa,
+          empresa: extratoSimplificado.empresa,
+          total: extratoSimplificado.total
+        });
+        
+        // Verificar se encontramos ocorrências no texto mas a IA retornou array vazio
+        if (ocorrenciasEncontradas > 0 && (!extratoSimplificado.itens || extratoSimplificado.itens.length === 0)) {
+          console.error('❌ PROBLEMA DETECTADO:');
+          console.error(`   - Encontramos ${ocorrenciasEncontradas} ocorrências de "ICMS EQUALIZAÇÃO SIMPLES NACIONAL" no texto`);
+          console.error(`   - Mas a IA retornou ${extratoSimplificado.itens?.length || 0} itens`);
+          console.error('   - Isso indica que a IA não conseguiu extrair os dados corretamente');
+          console.error('   - Verifique o prompt e o texto enviado para a IA');
+        }
+        
         // Validar e calcular total
         if (extratoSimplificado.itens && Array.isArray(extratoSimplificado.itens)) {
+          console.log('📊 Itens encontrados:', extratoSimplificado.itens.length);
+          if (extratoSimplificado.itens.length > 0) {
+            console.log('📊 Primeiro item:', JSON.stringify(extratoSimplificado.itens[0], null, 2));
+          } else if (ocorrenciasEncontradas > 0) {
+            console.warn('⚠️ ATENÇÃO: Array vazio retornado pela IA, mas encontramos ocorrências no texto!');
+          }
           const totalCalculado = extratoSimplificado.itens.reduce((sum, item) => {
             const valor = parseFloat(item.valor_principal) || 0;
             return sum + valor;
           }, 0);
           extratoSimplificado.total = parseFloat(totalCalculado.toFixed(2));
         } else {
+          console.warn('⚠️ Array de itens não encontrado ou inválido. Criando array vazio.');
+          if (ocorrenciasEncontradas > 0) {
+            console.warn(`⚠️ Mas encontramos ${ocorrenciasEncontradas} ocorrências no texto!`);
+          }
           extratoSimplificado.itens = [];
           extratoSimplificado.total = 0.00;
         }
@@ -1201,6 +1272,7 @@ RETORNE APENAS O JSON VÁLIDO, SEM TEXTO ADICIONAL.
         }
         
         const extratoJSON = JSON.stringify(extratoSimplificado);
+        console.log('💾 Extrato final a ser salvo:', extratoJSON.substring(0, 500));
 
         // Atualizar no banco
         await pool.query(`
