@@ -795,6 +795,8 @@ exports.downloadExtrato = async (req, res) => {
     const { id } = req.params;
     const userOrg = req.headers['x-user-organization'] || 'cassems';
 
+    console.log('📥 Download solicitado - ID:', id, 'Org:', userOrg);
+
     let query = `SELECT * FROM icms_equalizacao WHERE id = ?`;
     const params = [id];
 
@@ -808,7 +810,10 @@ exports.downloadExtrato = async (req, res) => {
     const extrato = Array.isArray(queryResult) ? queryResult[0] : queryResult;
     const extratoArray = Array.isArray(extrato) ? extrato : [];
 
+    console.log('📥 Resultado da query:', extratoArray.length, 'registros encontrados');
+
     if (!extratoArray || extratoArray.length === 0) {
+      console.log('❌ Extrato não encontrado no banco');
       return res.status(404).json({
         success: false,
         error: 'Extrato não encontrado'
@@ -816,15 +821,41 @@ exports.downloadExtrato = async (req, res) => {
     }
 
     const caminhoArquivo = extratoArray[0].caminho_arquivo;
+    console.log('📥 Caminho do arquivo:', caminhoArquivo);
+    console.log('📥 Arquivo existe?', fs.existsSync(caminhoArquivo));
 
     if (!fs.existsSync(caminhoArquivo)) {
+      console.log('❌ Arquivo não encontrado no servidor');
       return res.status(404).json({
         success: false,
         error: 'Arquivo não encontrado no servidor'
       });
     }
 
-    res.download(caminhoArquivo, extratoArray[0].nome_arquivo);
+    // Usar sendFile ao invés de download para melhor compatibilidade com fetch/CORS
+    const nomeArquivo = extratoArray[0].nome_arquivo;
+    const mimetype = extratoArray[0].mimetype || 'application/octet-stream';
+    
+    console.log('📥 Enviando arquivo:', nomeArquivo, 'tipo:', mimetype);
+    
+    res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(nomeArquivo)}"`);
+    res.setHeader('Content-Type', mimetype);
+    res.setHeader('Access-Control-Expose-Headers', 'Content-Disposition, Content-Type');
+    
+    res.sendFile(path.resolve(caminhoArquivo), (err) => {
+      if (err) {
+        console.error('❌ Erro ao enviar arquivo:', err);
+        if (!res.headersSent) {
+          res.status(500).json({
+            success: false,
+            error: 'Erro ao enviar arquivo',
+            details: err.message
+          });
+        }
+      } else {
+        console.log('✅ Arquivo enviado com sucesso');
+      }
+    });
   } catch (error) {
     console.error('❌ Erro ao fazer download do extrato:', error);
     res.status(500).json({
