@@ -330,21 +330,15 @@ const processarPDFComIA = async (caminhoArquivo, nomeArquivo) => {
         textoPDF = pdfData.result.text;
       }
       
-      // NÃO tentar chamar métodos como getText() pois isso tenta reprocessar o PDF
-      // e causa erro: "Please provide binary data as `Uint8Array`, rather than `Buffer`"
-      // O pdf-parse já extrai o texto quando é chamado, então devemos ter o texto em pdfData.text
-      
+      // Se ainda não tiver texto, verificar se precisa chamar um método
       if (!textoPDF || textoPDF.trim().length === 0) {
-        console.error('❌ Não foi possível extrair texto do PDF');
-        console.error('   pdfData estrutura:', JSON.stringify(Object.keys(pdfData || {}), null, 2));
-        if (pdfData && typeof pdfData === 'object') {
-          console.error('   pdfData.text tipo:', typeof pdfData.text);
-          console.error('   pdfData.text valor (primeiros 100 chars):', String(pdfData.text || '').substring(0, 100));
-          // Tentar acessar propriedades aninhadas para debug
-          if (pdfData.doc) {
-            console.error('   pdfData.doc tipo:', typeof pdfData.doc);
-            console.error('   pdfData.doc keys:', Object.keys(pdfData.doc || {}));
-          }
+        // Tentar chamar métodos comuns
+        if (typeof pdfData.getText === 'function') {
+          textoPDF = await pdfData.getText();
+        } else if (typeof pdfData.extractText === 'function') {
+          textoPDF = await pdfData.extractText();
+        } else if (typeof pdfData.parse === 'function') {
+          textoPDF = await pdfData.parse();
         }
       }
 
@@ -974,74 +968,30 @@ exports.processarPDFStream = async (req, res) => {
       
       // Tentar diferentes formas de extrair o texto
       let textoPDF = '';
-      
-      // pdf-parse retorna o texto diretamente na propriedade text
-      if (pdfData.text && typeof pdfData.text === 'string') {
+      if (pdfData.text) {
         textoPDF = pdfData.text;
-        console.log('✅ Texto encontrado em pdfData.text');
-      } 
-      // Ou pode estar em pdfData.doc.text
-      else if (pdfData.doc) {
-        if (typeof pdfData.doc === 'string') {
-          textoPDF = pdfData.doc;
-          console.log('✅ Texto encontrado em pdfData.doc (string)');
-        } else if (pdfData.doc.text && typeof pdfData.doc.text === 'string') {
-          textoPDF = pdfData.doc.text;
-          console.log('✅ Texto encontrado em pdfData.doc.text');
-        } 
-        // NÃO chamar getText() pois isso tenta reprocessar o PDF e causa erro
-        // O pdf-parse já extrai o texto quando é chamado
-        else if (pdfData.doc.pages && Array.isArray(pdfData.doc.pages)) {
-          // Tentar extrair texto das páginas apenas se tiver propriedade text
-          textoPDF = pdfData.doc.pages.map((page, idx) => {
-            if (page.text && typeof page.text === 'string') {
-              return page.text;
-            }
-            return '';
-          }).filter(text => text.length > 0).join('\n');
-          if (textoPDF) {
-            console.log('✅ Texto extraído das páginas do PDF');
-          }
-        }
-      }
-      // Outras tentativas
-      else if (typeof pdfData === 'string') {
+      } else if (pdfData.doc && pdfData.doc.text) {
+        textoPDF = pdfData.doc.text;
+      } else if (typeof pdfData === 'string') {
         textoPDF = pdfData;
-        console.log('✅ pdfData é string direta');
+      } else if (pdfData.toString && typeof pdfData.toString === 'function') {
+        textoPDF = pdfData.toString();
       } else if (pdfData.data && pdfData.data.text) {
         textoPDF = pdfData.data.text;
-        console.log('✅ Texto encontrado em pdfData.data.text');
       } else if (pdfData.result && pdfData.result.text) {
         textoPDF = pdfData.result.text;
-        console.log('✅ Texto encontrado em pdfData.result.text');
       }
       
-      // NÃO tentar chamar métodos como getText() pois isso tenta reprocessar o PDF
-      // e causa erro: "Please provide binary data as `Uint8Array`, rather than `Buffer`"
-      // O pdf-parse já extrai o texto quando é chamado, então devemos ter o texto em pdfData.text
-      
-      if (!textoPDF || textoPDF.trim().length === 0 || textoPDF === '[object Object]') {
-        console.error('❌ Não foi possível extrair texto do PDF');
-        console.error('   pdfData estrutura:', JSON.stringify(Object.keys(pdfData || {}), null, 2));
-        if (pdfData && typeof pdfData === 'object') {
-          console.error('   pdfData.text tipo:', typeof pdfData.text);
-          console.error('   pdfData.text valor (primeiros 100 chars):', String(pdfData.text || '').substring(0, 100));
-          // Tentar acessar propriedades aninhadas para debug
-          if (pdfData.doc) {
-            console.error('   pdfData.doc tipo:', typeof pdfData.doc);
-            console.error('   pdfData.doc keys:', Object.keys(pdfData.doc || {}));
-          }
+      // Se ainda não tiver texto, verificar se precisa chamar um método
+      if (!textoPDF || textoPDF.trim().length === 0) {
+        // Tentar chamar métodos comuns
+        if (typeof pdfData.getText === 'function') {
+          textoPDF = await pdfData.getText();
+        } else if (typeof pdfData.extractText === 'function') {
+          textoPDF = await pdfData.extractText();
+        } else if (typeof pdfData.parse === 'function') {
+          textoPDF = await pdfData.parse();
         }
-        // Limpar texto inválido
-        if (textoPDF === '[object Object]') {
-          textoPDF = '';
-        }
-      }
-      
-      // Verificar se o texto é válido (não é [object Object])
-      if (textoPDF && textoPDF.toString().includes('[object Object]')) {
-        console.error('❌ Texto inválido detectado: [object Object]');
-        textoPDF = '';
       }
 
       console.log('🔍 Texto extraído, length:', textoPDF?.length || 0);
