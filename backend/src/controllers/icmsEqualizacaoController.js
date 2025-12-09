@@ -367,6 +367,7 @@ const processarPDFComIA = async (caminhoArquivo, nomeArquivo) => {
 Você é um especialista em análise de extratos fiscais. Sua tarefa é EXTRAIR TODAS as ocorrências de "ICMS EQUALIZAÇÃO SIMPLES NACIONAL" do documento abaixo.
 
 ARQUIVO: ${nomeArquivo}
+⚠️ ATENÇÃO: O nome do arquivo acima é APENAS para referência. NÃO use o nome do arquivo como razão social!
 
 CONTEÚDO COMPLETO DO EXTRATO:
 ${textoTruncado}
@@ -388,19 +389,27 @@ INSTRUÇÕES OBRIGATÓRIAS - SEGUIR À RISCA:
    - Tipo de Tributo: sempre "ICMS EQUALIZAÇÃO SIMPLES NACIONAL"
    - Valor Principal: apenas o valor principal, converta vírgula para ponto (ex: 208,87 → 208.87)
 
-3. EXTRAÇÃO DE DADOS DA EMPRESA:
-   - Procure no CABEÇALHO do extrato (primeiras linhas do documento)
-   - Procure por "Insc. Estadual:", "Inscrição Estadual:", "IE:", ou variações similares
-   - Extraia o NÚMERO REAL da Inscrição Estadual que aparece após esses rótulos
-   - Se encontrar, use o número EXATO do documento (não invente números)
-   - Se NÃO encontrar, deixe como string vazia "" ou null
-   - NUNCA use números fictícios como "123456789" - apenas números reais do documento
+3. EXTRAÇÃO DE DADOS DA EMPRESA (CRÍTICO - LEIA COM ATENÇÃO):
+   - Procure no CABEÇALHO do extrato (primeiras 50-100 linhas do documento)
+   - Para RAZÃO SOCIAL:
+     * Procure por "Razão Social:" ou "Razão Social" seguido de dois pontos
+     * Extraia o NOME COMPLETO da empresa que aparece APÓS "Razão Social:"
+     * NÃO use o nome do arquivo (ex: se o arquivo é "CHURRASCARIA 2022.pdf", NÃO use "CHURRASCARIA 2022")
+     * Use APENAS o nome que aparece no campo "Razão Social:" do documento
+     * Exemplo: Se o documento tem "Razão Social: CHURRASCARIA ANTUNES E ANTUNES LTDA", use exatamente "CHURRASCARIA ANTUNES E ANTUNES LTDA"
+   - Para INSCRIÇÃO ESTADUAL:
+     * Procure por "Insc. Estadual:", "Inscrição Estadual:", "IE:", ou variações similares
+     * Extraia o NÚMERO REAL da Inscrição Estadual que aparece após esses rótulos
+     * Se encontrar, use o número EXATO do documento (não invente números)
+     * Se NÃO encontrar, deixe como string vazia "" ou null
+     * NUNCA use números fictícios como "123456789" - apenas números reais do documento
+   - IMPORTANTE: O nome do arquivo NÃO é a razão social. A razão social está no CABEÇALHO do documento, no campo "Razão Social:".
 
 4. FORMATO DE RESPOSTA (JSON OBRIGATÓRIO):
 {
   "empresa": {
-    "razao_social": "nome da empresa extraído do documento",
-    "inscricao_estadual": "número real da inscrição estadual do documento OU string vazia se não encontrar"
+    "razao_social": "NOME COMPLETO extraído do campo 'Razão Social:' do documento (NÃO use o nome do arquivo)",
+    "inscricao_estadual": "número real extraído do campo 'Insc. Estadual:' ou 'Inscrição Estadual:' do documento OU string vazia se não encontrar"
   },
   "itens": [
     {
@@ -1091,6 +1100,7 @@ exports.processarPDFStream = async (req, res) => {
 Você é um especialista em análise de extratos fiscais. Sua tarefa é EXTRAIR TODAS as ocorrências de "ICMS EQUALIZAÇÃO SIMPLES NACIONAL" do documento abaixo.
 
 ARQUIVO: ${extratoData.nome_arquivo}
+⚠️ ATENÇÃO: O nome do arquivo acima é APENAS para referência. NÃO use o nome do arquivo como razão social!
 
 CONTEÚDO COMPLETO DO EXTRATO:
 ${textoTruncado}
@@ -1112,19 +1122,27 @@ INSTRUÇÕES OBRIGATÓRIAS - SEGUIR À RISCA:
    - Tipo de Tributo: sempre "ICMS EQUALIZAÇÃO SIMPLES NACIONAL"
    - Valor Principal: apenas o valor principal, converta vírgula para ponto (ex: 208,87 → 208.87)
 
-3. EXTRAÇÃO DE DADOS DA EMPRESA:
-   - Procure no CABEÇALHO do extrato (primeiras linhas do documento)
-   - Procure por "Insc. Estadual:", "Inscrição Estadual:", "IE:", ou variações similares
-   - Extraia o NÚMERO REAL da Inscrição Estadual que aparece após esses rótulos
-   - Se encontrar, use o número EXATO do documento (não invente números)
-   - Se NÃO encontrar, deixe como string vazia "" ou null
-   - NUNCA use números fictícios como "123456789" - apenas números reais do documento
+3. EXTRAÇÃO DE DADOS DA EMPRESA (CRÍTICO - LEIA COM ATENÇÃO):
+   - Procure no CABEÇALHO do extrato (primeiras 50-100 linhas do documento)
+   - Para RAZÃO SOCIAL:
+     * Procure por "Razão Social:" ou "Razão Social" seguido de dois pontos
+     * Extraia o NOME COMPLETO da empresa que aparece APÓS "Razão Social:"
+     * NÃO use o nome do arquivo (ex: se o arquivo é "CHURRASCARIA 2022.pdf", NÃO use "CHURRASCARIA 2022")
+     * Use APENAS o nome que aparece no campo "Razão Social:" do documento
+     * Exemplo: Se o documento tem "Razão Social: CHURRASCARIA ANTUNES E ANTUNES LTDA", use exatamente "CHURRASCARIA ANTUNES E ANTUNES LTDA"
+   - Para INSCRIÇÃO ESTADUAL:
+     * Procure por "Insc. Estadual:", "Inscrição Estadual:", "IE:", ou variações similares
+     * Extraia o NÚMERO REAL da Inscrição Estadual que aparece após esses rótulos
+     * Se encontrar, use o número EXATO do documento (não invente números)
+     * Se NÃO encontrar, deixe como string vazia "" ou null
+     * NUNCA use números fictícios como "123456789" - apenas números reais do documento
+   - IMPORTANTE: O nome do arquivo NÃO é a razão social. A razão social está no CABEÇALHO do documento, no campo "Razão Social:".
 
 4. FORMATO DE RESPOSTA (JSON OBRIGATÓRIO):
 {
   "empresa": {
-    "razao_social": "nome da empresa extraído do documento",
-    "inscricao_estadual": "número real da inscrição estadual do documento OU string vazia se não encontrar"
+    "razao_social": "NOME COMPLETO extraído do campo 'Razão Social:' do documento (NÃO use o nome do arquivo)",
+    "inscricao_estadual": "número real extraído do campo 'Insc. Estadual:' ou 'Inscrição Estadual:' do documento OU string vazia se não encontrar"
   },
   "itens": [
     {
