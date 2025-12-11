@@ -540,18 +540,32 @@ exports.removerPasta = async (req, res) => {
     // Verificar se é uma pasta de compliance (tem subpastas criadas automaticamente)
     const isComplianceFolder = pastaInfo[0].titulo && pastaInfo[0].titulo.includes('Documentos Compliance');
     
-    // Se for pasta de compliance, verificar se está vinculada a uma competência
+    // Se for pasta de compliance, verificar se está vinculada a uma competência ATIVA
     if (isComplianceFolder) {
       const complianceVinculado = await executeQueryWithRetry(
         'SELECT id FROM compliance_fiscal WHERE pasta_documentos_id = ?',
         [id]
       );
       
+      // Só bloquear se houver competência vinculada E ela ainda existir
       if (complianceVinculado && complianceVinculado.length > 0) {
-        return res.status(400).json({
-          error: 'Não é possível remover pasta de compliance vinculada a uma competência. A pasta está associada ao compliance fiscal e não pode ser removida diretamente.',
-          complianceId: complianceVinculado[0].id
-        });
+        const complianceId = complianceVinculado[0].id;
+        
+        // Verificar se a competência realmente ainda existe
+        const competenciaExiste = await executeQueryWithRetry(
+          'SELECT id FROM compliance_fiscal WHERE id = ?',
+          [complianceId]
+        );
+        
+        if (competenciaExiste && competenciaExiste.length > 0) {
+          // Competência existe, bloquear exclusão
+          return res.status(400).json({
+            error: 'Não é possível remover pasta de compliance vinculada a uma competência. A pasta está associada ao compliance fiscal e não pode ser removida diretamente.',
+            complianceId: complianceId
+          });
+        }
+        // Se a competência não existe mais (referência órfã), limpar antes de continuar
+        console.log(`⚠️ Limpando referência órfã: pasta ${id} estava vinculada à competência ${complianceId} que não existe mais`);
       }
       
       // Se a competência foi deletada, tratar subpastas primeiro

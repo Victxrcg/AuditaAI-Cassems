@@ -99,3 +99,4 @@ const HistoricoAlteracoes = ({ historico, loading }: HistoricoAlteracoesProps) =
 
 export default HistoricoAlteracoes;
 
+

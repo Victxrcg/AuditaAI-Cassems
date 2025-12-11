@@ -396,7 +396,9 @@ const ComplianceItemCard = memo(({
   }
 
   // Se for o Parecer Final, renderizar interface especial de IA
-  if (item.id === '8') {
+  // APENAS o item com id '8' (Parecer Final) deve mostrar esta seção
+  // Verificação dupla: ID e título para garantir que é realmente o Parecer Final
+  if (String(item.id) === '8' && item.title === 'Parecer Final') {
     return (
       <Card className="mb-6 bg-white transition-shadow shadow-sm hover:shadow-lg overflow-hidden">
         <CardHeader className="p-4 sm:p-6">
@@ -2627,9 +2629,9 @@ export default function Compliance({ tipoCompliance }: ComplianceProps) {
       )}
 
       <div className="space-y-6">
-        {complianceItems.map((item) => (
+        {complianceItems.map((item, index) => (
           <ComplianceItemCard
-            key={item.id}
+            key={`${item.id}-${index}`}
             item={item}
             onFieldChange={handleFieldChange}
             onFileUpload={handleFileUpload}
@@ -2712,9 +2714,9 @@ export default function Compliance({ tipoCompliance }: ComplianceProps) {
         </div>
       ) : (
         <div className="space-y-6">
-          {complianceItems.map((item) => (
+          {complianceItems.map((item, index) => (
           <ComplianceItemCard
-            key={item.id}
+            key={`${item.id}-${index}`}
             item={item}
             onFieldChange={handleFieldChange}
             onFileUpload={handleFileUpload}
