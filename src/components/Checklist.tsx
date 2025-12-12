@@ -105,6 +105,55 @@ export const Checklist: React.FC<ChecklistProps> = ({ cronogramaId, isOpen, onCl
   const handleCreateItem = async () => {
     if (!newItemTitle.trim()) return;
 
+    // Validar datas se a demanda tem período definido
+    if (demandaPrincipal?.data_inicio && demandaPrincipal?.data_fim) {
+      const demandaInicio = new Date(demandaPrincipal.data_inicio);
+      const demandaFim = new Date(demandaPrincipal.data_fim);
+      
+      if (newItemDataInicio) {
+        const checklistInicio = new Date(newItemDataInicio);
+        if (checklistInicio < demandaInicio) {
+          toast({
+            title: "Erro de validação",
+            description: `A data de início deve ser posterior a ${formatDateBR(demandaPrincipal.data_inicio)}`,
+            variant: "destructive",
+          });
+          return;
+        }
+        if (checklistInicio > demandaFim) {
+          toast({
+            title: "Erro de validação",
+            description: `A data de início deve ser anterior a ${formatDateBR(demandaPrincipal.data_fim)}`,
+            variant: "destructive",
+          });
+          return;
+        }
+      }
+      
+      if (newItemDataFim) {
+        const checklistFim = new Date(newItemDataFim);
+        if (newItemDataInicio) {
+          const checklistInicio = new Date(newItemDataInicio);
+          if (checklistFim < checklistInicio) {
+            toast({
+              title: "Erro de validação",
+              description: "A data de fim deve ser posterior à data de início",
+              variant: "destructive",
+            });
+            return;
+          }
+        }
+        if (checklistFim > demandaFim) {
+          toast({
+            title: "Erro de validação",
+            description: `A data de fim deve ser anterior a ${formatDateBR(demandaPrincipal.data_fim)}`,
+            variant: "destructive",
+          });
+          return;
+        }
+      }
+    }
+
     try {
       const newItemData: CreateChecklistItemData = {
         titulo: newItemTitle.trim(),
@@ -126,9 +175,10 @@ export const Checklist: React.FC<ChecklistProps> = ({ cronogramaId, isOpen, onCl
         description: "Item adicionado ao checklist",
       });
     } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Erro ao criar item';
       toast({
         title: "Erro",
-        description: "Erro ao criar item",
+        description: errorMessage,
         variant: "destructive",
       });
     }
@@ -318,8 +368,15 @@ export const Checklist: React.FC<ChecklistProps> = ({ cronogramaId, isOpen, onCl
                       type="date"
                       value={newItemDataInicio}
                       onChange={(e) => setNewItemDataInicio(e.target.value)}
+                      min={demandaPrincipal?.data_inicio ? demandaPrincipal.data_inicio.split('T')[0] : undefined}
+                      max={demandaPrincipal?.data_fim ? demandaPrincipal.data_fim.split('T')[0] : undefined}
                       className="w-full text-xs sm:text-sm h-9 sm:h-10"
                     />
+                    {demandaPrincipal?.data_inicio && demandaPrincipal?.data_fim && (
+                      <p className="text-xs text-gray-500 mt-0.5">
+                        Período permitido: {formatDateBR(demandaPrincipal.data_inicio)} a {formatDateBR(demandaPrincipal.data_fim)}
+                      </p>
+                    )}
                   </div>
                   <div className="space-y-1">
                     <label className="text-xs sm:text-sm font-medium text-gray-700 block">Data Fim (opcional)</label>
@@ -327,6 +384,8 @@ export const Checklist: React.FC<ChecklistProps> = ({ cronogramaId, isOpen, onCl
                       type="date"
                       value={newItemDataFim}
                       onChange={(e) => setNewItemDataFim(e.target.value)}
+                      min={newItemDataInicio || (demandaPrincipal?.data_inicio ? demandaPrincipal.data_inicio.split('T')[0] : undefined)}
+                      max={demandaPrincipal?.data_fim ? demandaPrincipal.data_fim.split('T')[0] : undefined}
                       className="w-full text-xs sm:text-sm h-9 sm:h-10"
                     />
                   </div>

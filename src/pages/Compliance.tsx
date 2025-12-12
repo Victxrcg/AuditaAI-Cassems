@@ -168,6 +168,7 @@ const ComplianceItemCard = memo(({
           const tipoAnexo = getTipoAnexoFromItemId(item.id);
           const anexosData = await listAnexos(currentCompetenciaId);
           const filteredAnexos = anexosData.filter(anexo => anexo.tipo_anexo === tipoAnexo);
+          console.log(`🔍 Carregando anexos para item ${item.id}: ${filteredAnexos.length} anexos encontrados`);
           setAnexos(filteredAnexos);
           
           // Verificar acesso novamente após carregar anexos
@@ -176,10 +177,13 @@ const ComplianceItemCard = memo(({
         } catch (error) {
           console.error('Erro ao carregar anexos:', error);
         }
+      } else {
+        // Se não há competência, limpar anexos
+        setAnexos([]);
       }
     };
     loadAnexosAndCheckAccess();
-  }, [currentCompetenciaId, item.id, complianceItems]);
+  }, [currentCompetenciaId, item.id, complianceItems, item.status]);
 
   const handleFileUpload = async (file: File) => {
     // Verificar se precisa criar competência primeiro
