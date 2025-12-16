@@ -2,6 +2,7 @@
 const multer = require('multer');
 const complianceController = require('../controllers/complianceController');
 const anexosController = require('../controllers/backend-anexos-controller');
+const firstAccessController = require('../controllers/complianceFirstAccessController');
 
 const router = express.Router();
 
@@ -148,6 +149,11 @@ router.get('/competencias/:id/historico', complianceController.getHistorico);
 
 // Migrar documentos de uma competência para subpastas
 router.post('/competencias/:id/migrar-documentos', complianceController.migrarDocumentosCompetencia);
+
+// Rotas para primeiro acesso
+router.post('/first-access/:tipoCompliance/check', firstAccessController.checkFirstAccess);
+router.post('/first-access/:tipoCompliance/save', firstAccessController.saveFirstAccess);
+router.get('/first-access/:tipoCompliance/:userId', firstAccessController.getFirstAccess);
 
 // Debug: listar todas as rotas registradas
 console.log('🔍 Rotas compliance registradas:');
