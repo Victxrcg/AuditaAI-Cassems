@@ -120,74 +120,51 @@ const ensureFirstAccessTable = async (pool) => {
         { nome: 'nome_assinante', tipo: 'VARCHAR(255) NULL' }
       ];
       
+      // Buscar todas as colunas existentes de uma vez para evitar múltiplas queries
+      let colunasExistentes = [];
+      try {
+        const [todasColunas] = await pool.execute(`
+          SELECT COLUMN_NAME 
+          FROM information_schema.COLUMNS 
+          WHERE TABLE_SCHEMA = DATABASE() 
+          AND TABLE_NAME = 'compliance_first_access'
+        `);
+        colunasExistentes = todasColunas.map((c) => c.COLUMN_NAME);
+        console.log(`🔍 [FIRST ACCESS] Colunas existentes na tabela:`, colunasExistentes);
+      } catch (listError) {
+        console.error(`⚠️ [FIRST ACCESS] Erro ao listar colunas existentes:`, listError.message);
+        // Continuar mesmo se falhar - vamos tentar adicionar e tratar erros de duplicata
+      }
+      
       for (const coluna of colunasNecessarias) {
-        let colunaExiste = false;
+        const colunaExiste = colunasExistentes.includes(coluna.nome);
+        
+        if (colunaExiste) {
+          console.log(`✅ [FIRST ACCESS] Coluna ${coluna.nome} já existe, pulando...`);
+          continue; // Pular se já existe
+        }
+        
+        // Se não existe, tentar adicionar
+        console.log(`🔧 [FIRST ACCESS] Adicionando coluna ${coluna.nome}...`);
         try {
-          const [colCheck] = await pool.execute(`
-            SELECT COLUMN_NAME 
-            FROM information_schema.COLUMNS 
-            WHERE TABLE_SCHEMA = DATABASE() 
-            AND TABLE_NAME = 'compliance_first_access'
-            AND COLUMN_NAME = ?
-          `, [coluna.nome]);
-          
-          colunaExiste = colCheck.length > 0;
-          
-          if (!colunaExiste) {
-            console.log(`🔧 [FIRST ACCESS] Adicionando coluna ${coluna.nome}...`);
-            try {
-              await executeQueryWithRetry(`
-                ALTER TABLE compliance_first_access 
-                ADD COLUMN ${coluna.nome} ${coluna.tipo}
-              `, []);
-              console.log(`✅ [FIRST ACCESS] Coluna ${coluna.nome} adicionada com sucesso`);
-              colunaExiste = true;
-            } catch (addError) {
-              if (addError.message && addError.message.includes('Duplicate column')) {
-                console.log(`✅ [FIRST ACCESS] Coluna ${coluna.nome} já existe (detectado por erro de duplicata)`);
-                colunaExiste = true;
-              } else {
-                console.error(`❌ [FIRST ACCESS] Erro ao adicionar coluna ${coluna.nome}:`, addError.message);
-                // Tentar novamente sem verificação
-                try {
-                  console.log(`🔧 [FIRST ACCESS] Tentando adicionar ${coluna.nome} diretamente (sem verificação)...`);
-                  await executeQueryWithRetry(`
-                    ALTER TABLE compliance_first_access 
-                    ADD COLUMN ${coluna.nome} ${coluna.tipo}
-                  `, []);
-                  console.log(`✅ [FIRST ACCESS] Coluna ${coluna.nome} adicionada com sucesso (tentativa direta)`);
-                  colunaExiste = true;
-                } catch (directError) {
-                  if (directError.message && directError.message.includes('Duplicate column')) {
-                    console.log(`✅ [FIRST ACCESS] Coluna ${coluna.nome} já existe`);
-                    colunaExiste = true;
-                  } else {
-                    console.error(`❌ [FIRST ACCESS] Erro ao adicionar ${coluna.nome} diretamente:`, directError.message);
-                  }
-                }
-              }
+          await executeQueryWithRetry(`
+            ALTER TABLE compliance_first_access 
+            ADD COLUMN ${coluna.nome} ${coluna.tipo}
+          `, []);
+          console.log(`✅ [FIRST ACCESS] Coluna ${coluna.nome} adicionada com sucesso`);
+          // Adicionar à lista para evitar tentar novamente na mesma execução
+          colunasExistentes.push(coluna.nome);
+        } catch (addError) {
+          // Se der erro de coluna duplicada, significa que ela existe (pode ter sido adicionada por outra conexão)
+          if (addError.message && (addError.message.includes('Duplicate column') || addError.message.includes('1060'))) {
+            console.log(`✅ [FIRST ACCESS] Coluna ${coluna.nome} já existe (detectado por erro de duplicata)`);
+            // Adicionar à lista para evitar tentar novamente
+            if (!colunasExistentes.includes(coluna.nome)) {
+              colunasExistentes.push(coluna.nome);
             }
           } else {
-            console.log(`✅ [FIRST ACCESS] Coluna ${coluna.nome} já existe`);
-          }
-        } catch (colError) {
-          console.error(`⚠️ [FIRST ACCESS] Erro ao verificar coluna ${coluna.nome}:`, colError.message);
-          // Tentar adicionar mesmo se a verificação falhar
-          if (!colunaExiste) {
-            try {
-              console.log(`🔧 [FIRST ACCESS] Tentando adicionar ${coluna.nome} após erro de verificação...`);
-              await executeQueryWithRetry(`
-                ALTER TABLE compliance_first_access 
-                ADD COLUMN ${coluna.nome} ${coluna.tipo}
-              `, []);
-              console.log(`✅ [FIRST ACCESS] Coluna ${coluna.nome} adicionada com sucesso (após erro de verificação)`);
-            } catch (addAfterError) {
-              if (addAfterError.message && addAfterError.message.includes('Duplicate column')) {
-                console.log(`✅ [FIRST ACCESS] Coluna ${coluna.nome} já existe (detectado após erro)`);
-              } else {
-                console.error(`❌ [FIRST ACCESS] Erro final ao adicionar ${coluna.nome}:`, addAfterError.message);
-              }
-            }
+            console.error(`❌ [FIRST ACCESS] Erro ao adicionar coluna ${coluna.nome}:`, addError.message);
+            // Não lançar erro, apenas logar - pode ser que a coluna já exista com configuração diferente
           }
         }
       }
