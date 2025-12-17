@@ -163,6 +163,8 @@ router.post('/first-access/:tipoCompliance/save', firstAccessController.saveFirs
 //   firstAccessController.assinarDigital
 // );
 router.post('/first-access/:tipoCompliance/assinar-simples', firstAccessController.assinarSimples);
+// Listar documentos de compliance por usuário
+router.get('/compliance-documentos/:userId', firstAccessController.listarDocumentosUsuario);
 // Rota GET genérica por último (para não capturar outras rotas)
 router.get('/first-access/:tipoCompliance/:userId', firstAccessController.getFirstAccess);
 

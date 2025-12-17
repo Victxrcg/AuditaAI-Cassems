@@ -4,6 +4,8 @@ const multer = require('multer');
 const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
+const { gerarPDFTermoAssinado } = require('../services/pdfGenerator');
+const { enviarEmailComAnexos } = require('../services/emailService');
 
 // Garantir que a tabela existe
 const ensureFirstAccessTable = async (pool) => {
@@ -962,13 +964,139 @@ exports.assinarSimples = async (req, res) => {
       console.log('✅ [ASSINATURA SIMPLES] Registro criado com sucesso');
     }
     
+    // Buscar email do usuário para envio
+    const [userRows] = await pool.query(`
+      SELECT email, nome FROM usuarios_cassems WHERE id = ?
+    `, [userId]);
+    
+    const userEmail = userRows && userRows.length > 0 ? userRows[0].email : null;
+    const userName = userRows && userRows.length > 0 ? userRows[0].nome : nomeAssinante;
+    
+    // Gerar PDF do termo assinado
+    console.log('📄 [ASSINATURA SIMPLES] Gerando PDF do termo assinado...');
+    let pdfBuffer = null;
+    let pdfPath = null;
+    
+    try {
+      // Preparar dados para o PDF
+      const dadosParaPDF = {
+        termoConteudo: generateNDAContentForPDF(dadosCadastroString, {
+          nomeAssinante,
+          dataAssinatura: dataAssinaturaDate.toLocaleDateString('pt-BR'),
+          horaAssinatura: dataAssinaturaDate.toLocaleTimeString('pt-BR')
+        }),
+        dadosCadastro: typeof dadosCadastro === 'string' ? JSON.parse(dadosCadastro) : dadosCadastro,
+        assinaturaInfo: {
+          nomeAssinante,
+          dataAssinatura: dataAssinaturaDate.toLocaleDateString('pt-BR'),
+          horaAssinatura: dataAssinaturaDate.toLocaleTimeString('pt-BR')
+        },
+        tipoCompliance
+      };
+      
+      pdfBuffer = await gerarPDFTermoAssinado(dadosParaPDF);
+      
+      // Salvar PDF em arquivo temporário
+      const uploadsDir = path.join(__dirname, '../../uploads/compliance-docs');
+      if (!fs.existsSync(uploadsDir)) {
+        fs.mkdirSync(uploadsDir, { recursive: true });
+      }
+      
+      const fileName = `termo-assinado-${userId}-${tipoCompliance}-${Date.now()}.pdf`;
+      pdfPath = path.join(uploadsDir, fileName);
+      fs.writeFileSync(pdfPath, pdfBuffer);
+      
+      console.log('✅ [ASSINATURA SIMPLES] PDF gerado e salvo:', pdfPath);
+      
+      // Garantir que a tabela de documentos de compliance existe
+      await ensureComplianceDocumentsTable(pool);
+      
+      // Salvar referência do documento no banco
+      const [docResult] = await pool.query(`
+        INSERT INTO compliance_documentos 
+        (user_id, tipo_compliance, nome_arquivo, caminho_arquivo, tipo_documento, tamanho_arquivo, created_at)
+        VALUES (?, ?, ?, ?, 'termo_assinado', ?, NOW())
+      `, [
+        userId,
+        tipoCompliance,
+        fileName,
+        pdfPath,
+        pdfBuffer.length
+      ]);
+      
+      console.log('✅ [ASSINATURA SIMPLES] Documento salvo no banco com ID:', docResult.insertId);
+      
+      // Enviar email com PDF anexado
+      if (userEmail) {
+        console.log('📧 [ASSINATURA SIMPLES] Enviando email para:', userEmail);
+        
+        const assunto = `Termo de Confidencialidade Assinado - Compliance ${tipoCompliance.toUpperCase()}`;
+        const corpo = `
+          <div style="font-family: Arial, sans-serif; line-height:1.6;">
+            <h2>Termo de Confidencialidade Assinado</h2>
+            
+            <p>Olá ${userName},</p>
+            
+            <p>O Termo de Confidencialidade e Compliance foi assinado com sucesso.</p>
+            
+            <div style="background-color: #f8fafc; padding: 15px; border-radius: 8px; margin: 20px 0;">
+              <h3 style="color: #1e40af; margin-top: 0;">📋 Detalhes da Assinatura:</h3>
+              <ul style="margin: 0; padding-left: 20px;">
+                <li><strong>Assinado por:</strong> ${nomeAssinante}</li>
+                <li><strong>Data:</strong> ${dataAssinaturaDate.toLocaleDateString('pt-BR')}</li>
+                <li><strong>Hora:</strong> ${dataAssinaturaDate.toLocaleTimeString('pt-BR')}</li>
+                <li><strong>Tipo de Compliance:</strong> ${tipoCompliance.toUpperCase()}</li>
+              </ul>
+            </div>
+            
+            <p>Segue em anexo o PDF do termo assinado para seus registros.</p>
+            
+            <p>Este email foi enviado automaticamente pelo sistema.</p>
+            
+            <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 30px 0;">
+            
+            <p style="color: #6b7280; font-size: 12px;">
+              Sistema de Compliance Fiscal - PORTES<br>
+              Enviado em: ${new Date().toLocaleString('pt-BR')}
+            </p>
+          </div>
+        `;
+        
+        const emailResult = await enviarEmailComAnexos(
+          userEmail,
+          process.env.SMTP_FROM || 'no-reply@portes.com.br',
+          assunto,
+          corpo,
+          [{
+            filename: fileName,
+            path: pdfPath,
+            contentType: 'application/pdf'
+          }]
+        );
+        
+        if (emailResult.success) {
+          console.log('✅ [ASSINATURA SIMPLES] Email enviado com sucesso');
+        } else {
+          console.error('⚠️ [ASSINATURA SIMPLES] Erro ao enviar email:', emailResult.error);
+        }
+      } else {
+        console.warn('⚠️ [ASSINATURA SIMPLES] Email do usuário não encontrado, pulando envio de email');
+      }
+      
+    } catch (pdfError) {
+      console.error('❌ [ASSINATURA SIMPLES] Erro ao gerar PDF ou enviar email:', pdfError);
+      // Não falhar a assinatura se o PDF/email falhar, apenas logar o erro
+    }
+    
     res.json({
       success: true,
       message: 'Documento assinado com sucesso',
       data: {
         nomeAssinante,
         dataAssinatura: dataAssinaturaDate.toISOString(),
-        tipoCompliance
+        tipoCompliance,
+        pdfGerado: pdfBuffer !== null,
+        emailEnviado: userEmail !== null
       }
     });
     
@@ -979,6 +1107,131 @@ exports.assinarSimples = async (req, res) => {
     res.status(500).json({
       success: false,
       error: 'Erro ao assinar documento',
+      details: err.message
+    });
+  } finally {
+    if (server) server.close();
+  }
+};
+
+// Função auxiliar para gerar conteúdo do termo para PDF (versão simplificada)
+function generateNDAContentForPDF(dadosCadastro, assinaturaInfo) {
+  const dados = typeof dadosCadastro === 'string' ? JSON.parse(dadosCadastro) : dadosCadastro;
+  
+  return `
+TERMO DE CONFIDENCIALIDADE
+(NDA - NON DISCLOSURE AGREEMENT)
+
+QUADRO RESUMO
+
+I – CONTRATANTE/PARTE DIVULGADORA
+
+I.1. ${dados.razao_social || '(NOME EMPRESA)'}, pessoa jurídica no CNPJ sob o nº ${dados.cnpj || '(CNPJ)'}, com sede na ${dados.endereco || '(ENDEREÇO)'}, ${dados.numero || ''}, ${dados.cidade || ''}/${dados.estado || ''}, CEP ${dados.cep || ''}, com os e-mails ${dados.email_contato || '(EMAIL)'}, neste ato representada na forma de seus atos societários, doravante denominada "CONTRATANTE".
+
+II – CONTRATADA/PARTE RECEPTORA
+
+DADOS DA EMPRESA PORTES
+
+[Conteúdo completo do termo conforme generateNDAContent...]
+
+ASSINADO POR:
+${assinaturaInfo.nomeAssinante}
+Data: ${assinaturaInfo.dataAssinatura}
+Hora: ${assinaturaInfo.horaAssinatura}
+  `;
+}
+
+// Garantir que a tabela de documentos de compliance existe
+const ensureComplianceDocumentsTable = async (pool) => {
+  try {
+    const tableCheck = await executeQueryWithRetry(`
+      SELECT COUNT(*) as count
+      FROM information_schema.tables
+      WHERE table_schema = DATABASE()
+      AND table_name = 'compliance_documentos'
+    `, []);
+    
+    const tableExists = tableCheck && tableCheck.length > 0 && tableCheck[0].count > 0;
+    
+    if (!tableExists) {
+      console.log('🔧 [DOCUMENTOS] Criando tabela compliance_documentos...');
+      await executeQueryWithRetry(`
+        CREATE TABLE IF NOT EXISTS compliance_documentos (
+          id INT AUTO_INCREMENT PRIMARY KEY,
+          user_id INT NOT NULL,
+          tipo_compliance VARCHAR(50) NOT NULL,
+          nome_arquivo VARCHAR(255) NOT NULL,
+          caminho_arquivo TEXT NOT NULL,
+          tipo_documento VARCHAR(50) NOT NULL DEFAULT 'termo_assinado',
+          tamanho_arquivo BIGINT NOT NULL,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (user_id) REFERENCES usuarios_cassems(id) ON DELETE CASCADE,
+          INDEX idx_user_compliance (user_id, tipo_compliance)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+      `, []);
+      console.log('✅ [DOCUMENTOS] Tabela compliance_documentos criada com sucesso');
+    }
+  } catch (error) {
+    console.error('❌ [DOCUMENTOS] Erro ao criar/verificar tabela compliance_documentos:', error);
+    throw error;
+  }
+};
+
+// Listar documentos de compliance por usuário
+exports.listarDocumentosUsuario = async (req, res) => {
+  let pool, server;
+  try {
+    const { userId } = req.params;
+    const userOrg = req.headers['x-user-organization'] || 'cassems';
+    
+    if (!userId) {
+      return res.status(400).json({
+        success: false,
+        error: 'ID do usuário é obrigatório'
+      });
+    }
+    
+    ({ pool, server } = await getDbPoolWithTunnel());
+    
+    await ensureComplianceDocumentsTable(pool);
+    
+    // Verificar se o usuário logado tem permissão (apenas Portes ou o próprio usuário)
+    if (userOrg !== 'portes') {
+      // Verificar se o userId solicitado é o mesmo do usuário logado
+      const currentUserId = req.headers['x-user-id'];
+      if (currentUserId && parseInt(currentUserId) !== parseInt(userId)) {
+        return res.status(403).json({
+          success: false,
+          error: 'Você não tem permissão para visualizar documentos de outros usuários'
+        });
+      }
+    }
+    
+    const documentos = await executeQueryWithRetry(`
+      SELECT 
+        id,
+        user_id,
+        tipo_compliance,
+        nome_arquivo,
+        caminho_arquivo,
+        tipo_documento,
+        tamanho_arquivo,
+        created_at
+      FROM compliance_documentos
+      WHERE user_id = ?
+      ORDER BY created_at DESC
+    `, [userId]);
+    
+    res.json({
+      success: true,
+      data: documentos
+    });
+    
+  } catch (err) {
+    console.error('❌ [DOCUMENTOS] Erro ao listar documentos:', err);
+    res.status(500).json({
+      success: false,
+      error: 'Erro ao listar documentos',
       details: err.message
     });
   } finally {
