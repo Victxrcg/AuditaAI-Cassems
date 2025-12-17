@@ -362,7 +362,7 @@ exports.saveFirstAccess = async (req, res) => {
       // Atualizar registro existente
       console.log('🔍 [SAVE FIRST ACCESS] Atualizando registro existente ID:', existing[0].id);
       try {
-        await executeQueryWithRetry(`
+        const updateResult = await executeQueryWithRetry(`
           UPDATE compliance_first_access
           SET dados_cadastro = ?,
               assinado_digital = ?,
@@ -379,6 +379,10 @@ exports.saveFirstAccess = async (req, res) => {
           tipoCompliance
         ]);
         console.log('✅ [SAVE FIRST ACCESS] Registro atualizado com sucesso');
+        console.log('🔍 [SAVE FIRST ACCESS] Resultado do UPDATE:', {
+          affectedRows: updateResult?.affectedRows,
+          changedRows: updateResult?.changedRows
+        });
 
         res.json({
           success: true,
@@ -398,6 +402,14 @@ exports.saveFirstAccess = async (req, res) => {
     } else {
       // Criar novo registro
       console.log('🔍 [SAVE FIRST ACCESS] Criando novo registro...');
+      console.log('🔍 [SAVE FIRST ACCESS] Valores para INSERT:', {
+        userId,
+        tipoCompliance,
+        dadosCadastroString: dadosCadastroString.substring(0, 100) + '...',
+        assinadoDigital,
+        tokenAssinaturaDigital: tokenAssinaturaDigital ? 'presente' : 'null',
+        dataAssinaturaDigital
+      });
       try {
         const result = await executeQueryWithRetry(`
           INSERT INTO compliance_first_access 
@@ -411,7 +423,11 @@ exports.saveFirstAccess = async (req, res) => {
           tokenAssinaturaDigital || null,
           dataAssinaturaDigital
         ]);
-        console.log('✅ [SAVE FIRST ACCESS] Registro criado com sucesso, ID:', result.insertId);
+        console.log('✅ [SAVE FIRST ACCESS] Registro criado com sucesso');
+        console.log('🔍 [SAVE FIRST ACCESS] Resultado do INSERT:', {
+          insertId: result?.insertId,
+          affectedRows: result?.affectedRows
+        });
 
         res.status(201).json({
           success: true,
@@ -436,13 +452,39 @@ exports.saveFirstAccess = async (req, res) => {
     console.error('❌ [SAVE FIRST ACCESS] Erro code:', err.code);
     console.error('❌ [SAVE FIRST ACCESS] Erro sqlMessage:', err.sqlMessage);
     console.error('❌ [SAVE FIRST ACCESS] Erro sqlState:', err.sqlState);
+    console.error('❌ [SAVE FIRST ACCESS] Erro errno:', err.errno);
+    console.error('❌ [SAVE FIRST ACCESS] Request body:', JSON.stringify(req.body, null, 2));
+    console.error('❌ [SAVE FIRST ACCESS] Request params:', req.params);
+    
+    // Verificar se é erro de coluna desconhecida
+    if (err.sqlMessage && err.sqlMessage.includes('Unknown column')) {
+      console.error('⚠️ [SAVE FIRST ACCESS] Erro de coluna desconhecida detectado - tentando adicionar colunas faltantes...');
+      try {
+        // Tentar obter pool novamente se não estiver disponível
+        if (!pool) {
+          const tempConnection = await getDbPoolWithTunnel();
+          pool = tempConnection.pool;
+          const tempServer = tempConnection.server;
+          if (tempServer && !server) {
+            server = tempServer;
+          }
+        }
+        if (pool) {
+          await ensureFirstAccessTable(pool);
+          console.log('✅ [SAVE FIRST ACCESS] Tabela atualizada, tente novamente');
+        }
+      } catch (migrationError) {
+        console.error('❌ [SAVE FIRST ACCESS] Erro ao atualizar tabela:', migrationError);
+      }
+    }
     
     res.status(500).json({ 
       success: false,
       error: 'Erro ao salvar dados do primeiro acesso', 
       details: err.message,
       sqlError: err.sqlMessage || null,
-      sqlState: err.sqlState || null
+      sqlState: err.sqlState || null,
+      errno: err.errno || null
     });
   } finally {
     if (server) server.close();
