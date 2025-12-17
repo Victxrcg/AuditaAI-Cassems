@@ -108,7 +108,7 @@ const ensureFirstAccessTable = async (pool) => {
         }
       }
       
-      // Verificar e adicionar colunas de assinatura digital se não existirem
+      // Verificar e adicionar colunas de assinatura digital e aceite de termo se não existirem
       const colunasNecessarias = [
         { nome: 'assinado_digital', tipo: 'BOOLEAN DEFAULT FALSE' },
         { nome: 'token_assinatura_digital', tipo: 'TEXT NULL' },
@@ -117,7 +117,10 @@ const ensureFirstAccessTable = async (pool) => {
         { nome: 'certificado_info', tipo: 'JSON NULL' },
         { nome: 'assinatura_id', tipo: 'VARCHAR(255) NULL' },
         { nome: 'cpf_assinante', tipo: 'VARCHAR(14) NULL' },
-        { nome: 'nome_assinante', tipo: 'VARCHAR(255) NULL' }
+        { nome: 'nome_assinante', tipo: 'VARCHAR(255) NULL' },
+        { nome: 'aceite_termo', tipo: 'BOOLEAN DEFAULT FALSE' },
+        { nome: 'data_aceite_termo', tipo: 'DATETIME NULL' },
+        { nome: 'nome_agente_aceite', tipo: 'VARCHAR(255) NULL' }
       ];
       
       // Buscar todas as colunas existentes de uma vez para evitar múltiplas queries
@@ -211,7 +214,7 @@ exports.checkFirstAccess = async (req, res) => {
     try {
       // Tentar query completa primeiro
       rows = await executeQueryWithRetry(`
-        SELECT id, dados_cadastro, assinado_digital, data_assinatura_digital, nome_assinante
+        SELECT id, dados_cadastro, assinado_digital, data_assinatura_digital, nome_assinante, aceite_termo, data_aceite_termo, nome_agente_aceite
         FROM compliance_first_access
         WHERE user_id = ? AND tipo_compliance = ?
       `, [userId, tipoCompliance]);
@@ -231,6 +234,9 @@ exports.checkFirstAccess = async (req, res) => {
             rows[0].assinado_digital = false;
             rows[0].data_assinatura_digital = null;
             rows[0].nome_assinante = null;
+            rows[0].aceite_termo = false;
+            rows[0].data_aceite_termo = null;
+            rows[0].nome_agente_aceite = null;
           }
         } catch (queryError2) {
           // Se ainda der erro, tentar sem tipo_compliance
@@ -246,6 +252,9 @@ exports.checkFirstAccess = async (req, res) => {
             if (rows.length > 0) {
               rows[0].assinado_digital = false;
               rows[0].data_assinatura_digital = null;
+              rows[0].aceite_termo = false;
+              rows[0].data_aceite_termo = null;
+              rows[0].nome_agente_aceite = null;
             }
           } else {
             throw queryError2;
@@ -271,7 +280,10 @@ exports.checkFirstAccess = async (req, res) => {
         dados_cadastro: rows[0]?.dados_cadastro,
         assinado_digital: rows[0]?.assinado_digital,
         data_assinatura_digital: rows[0]?.data_assinatura_digital,
-        nome_assinante: rows[0]?.nome_assinante || null
+        nome_assinante: rows[0]?.nome_assinante || null,
+        aceite_termo: rows[0]?.aceite_termo || false,
+        data_aceite_termo: rows[0]?.data_aceite_termo || null,
+        nome_agente_aceite: rows[0]?.nome_agente_aceite || null
       }
     };
 

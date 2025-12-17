@@ -153,6 +153,7 @@ router.post('/competencias/:id/migrar-documentos', complianceController.migrarDo
 // Rotas para primeiro acesso
 // IMPORTANTE: Rotas específicas ANTES das genéricas para evitar conflitos
 router.post('/first-access/:tipoCompliance/check', firstAccessController.checkFirstAccess);
+router.post('/first-access/:tipoCompliance/aceitar-termo', firstAccessController.aceitarTermo);
 router.post('/first-access/:tipoCompliance/save', firstAccessController.saveFirstAccess);
 // Novas rotas para Web PKI (antes da rota genérica)
 router.post('/first-access/:tipoCompliance/gerar-hash', firstAccessController.gerarHashDocumento);
