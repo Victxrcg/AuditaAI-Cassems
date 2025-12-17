@@ -121,6 +121,7 @@ const ensureFirstAccessTable = async (pool) => {
       ];
       
       for (const coluna of colunasNecessarias) {
+        let colunaExiste = false;
         try {
           const [colCheck] = await pool.execute(`
             SELECT COLUMN_NAME 
@@ -130,22 +131,63 @@ const ensureFirstAccessTable = async (pool) => {
             AND COLUMN_NAME = ?
           `, [coluna.nome]);
           
-          if (colCheck.length === 0) {
+          colunaExiste = colCheck.length > 0;
+          
+          if (!colunaExiste) {
             console.log(`🔧 [FIRST ACCESS] Adicionando coluna ${coluna.nome}...`);
-            await executeQueryWithRetry(`
-              ALTER TABLE compliance_first_access 
-              ADD COLUMN ${coluna.nome} ${coluna.tipo}
-            `, []);
-            console.log(`✅ [FIRST ACCESS] Coluna ${coluna.nome} adicionada com sucesso`);
+            try {
+              await executeQueryWithRetry(`
+                ALTER TABLE compliance_first_access 
+                ADD COLUMN ${coluna.nome} ${coluna.tipo}
+              `, []);
+              console.log(`✅ [FIRST ACCESS] Coluna ${coluna.nome} adicionada com sucesso`);
+              colunaExiste = true;
+            } catch (addError) {
+              if (addError.message && addError.message.includes('Duplicate column')) {
+                console.log(`✅ [FIRST ACCESS] Coluna ${coluna.nome} já existe (detectado por erro de duplicata)`);
+                colunaExiste = true;
+              } else {
+                console.error(`❌ [FIRST ACCESS] Erro ao adicionar coluna ${coluna.nome}:`, addError.message);
+                // Tentar novamente sem verificação
+                try {
+                  console.log(`🔧 [FIRST ACCESS] Tentando adicionar ${coluna.nome} diretamente (sem verificação)...`);
+                  await executeQueryWithRetry(`
+                    ALTER TABLE compliance_first_access 
+                    ADD COLUMN ${coluna.nome} ${coluna.tipo}
+                  `, []);
+                  console.log(`✅ [FIRST ACCESS] Coluna ${coluna.nome} adicionada com sucesso (tentativa direta)`);
+                  colunaExiste = true;
+                } catch (directError) {
+                  if (directError.message && directError.message.includes('Duplicate column')) {
+                    console.log(`✅ [FIRST ACCESS] Coluna ${coluna.nome} já existe`);
+                    colunaExiste = true;
+                  } else {
+                    console.error(`❌ [FIRST ACCESS] Erro ao adicionar ${coluna.nome} diretamente:`, directError.message);
+                  }
+                }
+              }
+            }
           } else {
             console.log(`✅ [FIRST ACCESS] Coluna ${coluna.nome} já existe`);
           }
         } catch (colError) {
-          if (colError.message && colError.message.includes('Duplicate column')) {
-            console.log(`✅ [FIRST ACCESS] Coluna ${coluna.nome} já existe (detectado por erro de duplicata)`);
-          } else {
-            console.error(`⚠️ [FIRST ACCESS] Erro ao verificar/adicionar coluna ${coluna.nome}:`, colError.message);
-            // Continuar mesmo se falhar
+          console.error(`⚠️ [FIRST ACCESS] Erro ao verificar coluna ${coluna.nome}:`, colError.message);
+          // Tentar adicionar mesmo se a verificação falhar
+          if (!colunaExiste) {
+            try {
+              console.log(`🔧 [FIRST ACCESS] Tentando adicionar ${coluna.nome} após erro de verificação...`);
+              await executeQueryWithRetry(`
+                ALTER TABLE compliance_first_access 
+                ADD COLUMN ${coluna.nome} ${coluna.tipo}
+              `, []);
+              console.log(`✅ [FIRST ACCESS] Coluna ${coluna.nome} adicionada com sucesso (após erro de verificação)`);
+            } catch (addAfterError) {
+              if (addAfterError.message && addAfterError.message.includes('Duplicate column')) {
+                console.log(`✅ [FIRST ACCESS] Coluna ${coluna.nome} já existe (detectado após erro)`);
+              } else {
+                console.error(`❌ [FIRST ACCESS] Erro final ao adicionar ${coluna.nome}:`, addAfterError.message);
+              }
+            }
           }
         }
       }
@@ -306,6 +348,50 @@ exports.saveFirstAccess = async (req, res) => {
     console.log('🔍 [SAVE FIRST ACCESS] Verificando/criando tabela...');
     await ensureFirstAccessTable(pool);
     console.log('✅ [SAVE FIRST ACCESS] Tabela verificada');
+    
+    // Verificar novamente se as colunas necessárias existem antes de fazer INSERT/UPDATE
+    console.log('🔍 [SAVE FIRST ACCESS] Verificando colunas necessárias...');
+    try {
+      const [colCheck] = await pool.execute(`
+        SELECT COLUMN_NAME 
+        FROM information_schema.COLUMNS 
+        WHERE TABLE_SCHEMA = DATABASE() 
+        AND TABLE_NAME = 'compliance_first_access'
+        AND COLUMN_NAME IN ('assinado_digital', 'token_assinatura_digital', 'data_assinatura_digital')
+      `);
+      
+      const colunasExistentes = colCheck.map(c => c.COLUMN_NAME);
+      console.log('🔍 [SAVE FIRST ACCESS] Colunas existentes:', colunasExistentes);
+      
+      // Se alguma coluna não existir, tentar adicionar novamente
+      const colunasNecessarias = ['assinado_digital', 'token_assinatura_digital', 'data_assinatura_digital'];
+      for (const coluna of colunasNecessarias) {
+        if (!colunasExistentes.includes(coluna)) {
+          console.log(`⚠️ [SAVE FIRST ACCESS] Coluna ${coluna} não encontrada, tentando adicionar...`);
+          try {
+            let tipoColuna = 'BOOLEAN DEFAULT FALSE';
+            if (coluna === 'token_assinatura_digital') tipoColuna = 'TEXT NULL';
+            if (coluna === 'data_assinatura_digital') tipoColuna = 'DATETIME NULL';
+            
+            await executeQueryWithRetry(`
+              ALTER TABLE compliance_first_access 
+              ADD COLUMN ${coluna} ${tipoColuna}
+            `, []);
+            console.log(`✅ [SAVE FIRST ACCESS] Coluna ${coluna} adicionada com sucesso`);
+          } catch (addError) {
+            if (addError.message && addError.message.includes('Duplicate column')) {
+              console.log(`✅ [SAVE FIRST ACCESS] Coluna ${coluna} já existe (duplicata detectada)`);
+            } else {
+              console.error(`❌ [SAVE FIRST ACCESS] Erro ao adicionar coluna ${coluna}:`, addError.message);
+              // Continuar mesmo se falhar - vamos tentar o INSERT sem essas colunas se necessário
+            }
+          }
+        }
+      }
+    } catch (verifyError) {
+      console.error('⚠️ [SAVE FIRST ACCESS] Erro ao verificar colunas:', verifyError.message);
+      // Continuar mesmo se a verificação falhar
+    }
 
     // Verificar se já existe registro
     console.log('🔍 [SAVE FIRST ACCESS] Verificando registro existente...');
@@ -411,18 +497,67 @@ exports.saveFirstAccess = async (req, res) => {
         dataAssinaturaDigital
       });
       try {
-        const result = await executeQueryWithRetry(`
-          INSERT INTO compliance_first_access 
-          (user_id, tipo_compliance, dados_cadastro, assinado_digital, token_assinatura_digital, data_assinatura_digital)
-          VALUES (?, ?, ?, ?, ?, ?)
-        `, [
-          userId,
-          tipoCompliance,
-          dadosCadastroString,
-          assinadoDigital,
-          tokenAssinaturaDigital || null,
-          dataAssinaturaDigital
-        ]);
+        // Tentar INSERT completo primeiro
+        let result;
+        try {
+          result = await executeQueryWithRetry(`
+            INSERT INTO compliance_first_access 
+            (user_id, tipo_compliance, dados_cadastro, assinado_digital, token_assinatura_digital, data_assinatura_digital)
+            VALUES (?, ?, ?, ?, ?, ?)
+          `, [
+            userId,
+            tipoCompliance,
+            dadosCadastroString,
+            assinadoDigital,
+            tokenAssinaturaDigital || null,
+            dataAssinaturaDigital
+          ]);
+          console.log('✅ [SAVE FIRST ACCESS] Registro criado com sucesso (INSERT completo)');
+        } catch (insertError) {
+          // Se der erro de coluna desconhecida, tentar INSERT sem as colunas de assinatura
+          if (insertError.message && insertError.message.includes('Unknown column')) {
+            console.log('⚠️ [SAVE FIRST ACCESS] Erro de coluna desconhecida, tentando INSERT simplificado...');
+            console.log('⚠️ [SAVE FIRST ACCESS] Erro:', insertError.message);
+            
+            // Tentar adicionar as colunas novamente
+            try {
+              await executeQueryWithRetry(`
+                ALTER TABLE compliance_first_access 
+                ADD COLUMN assinado_digital BOOLEAN DEFAULT FALSE
+              `, []);
+              await executeQueryWithRetry(`
+                ALTER TABLE compliance_first_access 
+                ADD COLUMN token_assinatura_digital TEXT NULL
+              `, []);
+              await executeQueryWithRetry(`
+                ALTER TABLE compliance_first_access 
+                ADD COLUMN data_assinatura_digital DATETIME NULL
+              `, []);
+              console.log('✅ [SAVE FIRST ACCESS] Colunas adicionadas, tentando INSERT novamente...');
+              
+              // Tentar INSERT completo novamente
+              result = await executeQueryWithRetry(`
+                INSERT INTO compliance_first_access 
+                (user_id, tipo_compliance, dados_cadastro, assinado_digital, token_assinatura_digital, data_assinatura_digital)
+                VALUES (?, ?, ?, ?, ?, ?)
+              `, [
+                userId,
+                tipoCompliance,
+                dadosCadastroString,
+                assinadoDigital,
+                tokenAssinaturaDigital || null,
+                dataAssinaturaDigital
+              ]);
+              console.log('✅ [SAVE FIRST ACCESS] Registro criado com sucesso (após adicionar colunas)');
+            } catch (retryError) {
+              console.error('❌ [SAVE FIRST ACCESS] Erro ao tentar novamente:', retryError.message);
+              throw retryError;
+            }
+          } else {
+            throw insertError;
+          }
+        }
+        
         console.log('✅ [SAVE FIRST ACCESS] Registro criado com sucesso');
         console.log('🔍 [SAVE FIRST ACCESS] Resultado do INSERT:', {
           insertId: result?.insertId,
