@@ -270,6 +270,15 @@ exports.checkFirstAccess = async (req, res) => {
 
     const isFirstAccess = rows.length === 0;
     console.log('🔍 [FIRST ACCESS] É primeiro acesso?', isFirstAccess);
+    console.log('🔍 [FIRST ACCESS] Tem dados salvos?', !isFirstAccess);
+    if (rows.length > 0) {
+      console.log('🔍 [FIRST ACCESS] Dados do registro:', {
+        id: rows[0]?.id,
+        temDadosCadastro: !!rows[0]?.dados_cadastro,
+        assinadoDigital: rows[0]?.assinado_digital,
+        aceiteTermo: rows[0]?.aceite_termo
+      });
+    }
 
     const response = {
       success: true,
