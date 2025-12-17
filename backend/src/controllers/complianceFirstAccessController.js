@@ -1021,32 +1021,57 @@ exports.aceitarTermo = async (req, res) => {
     const dataAceiteDate = dataAceiteTermo ? new Date(dataAceiteTermo) : new Date();
     
     console.log('🔍 [ACEITE TERMO] Verificando se já existe registro...');
-    const [existing] = await pool.query(
-      'SELECT id, aceite_termo FROM compliance_first_access WHERE user_id = ? AND tipo_compliance = ?',
-      [userId, tipoCompliance]
-    );
+    let existing;
+    try {
+      [existing] = await pool.query(
+        'SELECT id, aceite_termo, dados_cadastro FROM compliance_first_access WHERE user_id = ? AND tipo_compliance = ?',
+        [userId, tipoCompliance]
+      );
+      console.log('🔍 [ACEITE TERMO] Resultado da busca:', existing);
+    } catch (queryError) {
+      console.error('❌ [ACEITE TERMO] Erro ao buscar registro existente:', queryError);
+      throw queryError;
+    }
     
     if (existing && existing.length > 0) {
-      console.log('🔍 [ACEITE TERMO] Atualizando registro existente...');
-      await pool.query(
-        `UPDATE compliance_first_access 
-         SET aceite_termo = TRUE, 
-             data_aceite_termo = ?, 
-             nome_agente_aceite = ?,
-             updated_at = NOW()
-         WHERE user_id = ? AND tipo_compliance = ?`,
-        [dataAceiteDate, nomeAgenteAceite, userId, tipoCompliance]
-      );
-      console.log('✅ [ACEITE TERMO] Registro atualizado com sucesso');
+      console.log('🔍 [ACEITE TERMO] Atualizando registro existente (ID:', existing[0].id, ')...');
+      try {
+        await pool.query(
+          `UPDATE compliance_first_access 
+           SET aceite_termo = TRUE, 
+               data_aceite_termo = ?, 
+               nome_agente_aceite = ?,
+               updated_at = NOW()
+           WHERE user_id = ? AND tipo_compliance = ?`,
+          [dataAceiteDate, nomeAgenteAceite, userId, tipoCompliance]
+        );
+        console.log('✅ [ACEITE TERMO] Registro atualizado com sucesso');
+      } catch (updateError) {
+        console.error('❌ [ACEITE TERMO] Erro ao atualizar registro:', updateError);
+        throw updateError;
+      }
     } else {
       console.log('🔍 [ACEITE TERMO] Criando novo registro...');
-      await pool.query(
-        `INSERT INTO compliance_first_access 
-         (user_id, tipo_compliance, aceite_termo, data_aceite_termo, nome_agente_aceite, created_at, updated_at)
-         VALUES (?, ?, TRUE, ?, ?, NOW(), NOW())`,
-        [userId, tipoCompliance, dataAceiteDate, nomeAgenteAceite]
-      );
-      console.log('✅ [ACEITE TERMO] Registro criado com sucesso');
+      try {
+        // Se não existe registro, criar com dados mínimos
+        // dados_cadastro é obrigatório, então precisamos passar um JSON vazio válido
+        const dadosCadastroVazio = JSON.stringify({});
+        await pool.query(
+          `INSERT INTO compliance_first_access 
+           (user_id, tipo_compliance, dados_cadastro, aceite_termo, data_aceite_termo, nome_agente_aceite, created_at, updated_at)
+           VALUES (?, ?, ?, TRUE, ?, ?, NOW(), NOW())`,
+          [userId, tipoCompliance, dadosCadastroVazio, dataAceiteDate, nomeAgenteAceite]
+        );
+        console.log('✅ [ACEITE TERMO] Registro criado com sucesso');
+      } catch (insertError) {
+        console.error('❌ [ACEITE TERMO] Erro ao criar registro:', insertError);
+        console.error('❌ [ACEITE TERMO] Detalhes do erro:', {
+          message: insertError.message,
+          code: insertError.code,
+          sqlMessage: insertError.sqlMessage
+        });
+        throw insertError;
+      }
     }
     
     res.json({
@@ -1062,11 +1087,30 @@ exports.aceitarTermo = async (req, res) => {
   } catch (err) {
     console.error('❌ [ACEITE TERMO] Erro ao registrar aceite do termo:', err);
     console.error('❌ [ACEITE TERMO] Stack:', err.stack);
+    console.error('❌ [ACEITE TERMO] Erro completo:', {
+      message: err.message,
+      code: err.code,
+      errno: err.errno,
+      sqlState: err.sqlState,
+      sqlMessage: err.sqlMessage
+    });
+    
+    // Extrair detalhes do erro SQL se disponível
+    let errorDetails = err.message;
+    if (err.sqlMessage) {
+      errorDetails = err.sqlMessage;
+    }
+    if (err.code) {
+      errorDetails += ` (Code: ${err.code})`;
+    }
     
     res.status(500).json({
       success: false,
       error: 'Erro ao registrar aceite do termo',
-      details: err.message
+      details: errorDetails,
+      sqlError: err.sqlMessage || null,
+      sqlState: err.sqlState || null,
+      errno: err.errno || null
     });
   } finally {
     if (server) server.close();
