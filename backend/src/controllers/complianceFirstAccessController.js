@@ -977,6 +977,93 @@ exports.assinarSimples = async (req, res) => {
   }
 };
 
+// Aceitar termo de confidencialidade e compliance
+exports.aceitarTermo = async (req, res) => {
+  let pool, server;
+  try {
+    console.log('🔍 [ACEITE TERMO] Iniciando aceite do termo...');
+    console.log('🔍 [ACEITE TERMO] Body:', JSON.stringify(req.body, null, 2));
+    console.log('🔍 [ACEITE TERMO] Params:', req.params);
+    
+    const { userId, nomeAgenteAceite, dataAceiteTermo, tipoCompliance: tipoComplianceBody } = req.body;
+    const tipoCompliance = req.params.tipoCompliance || tipoComplianceBody || 'rat-fat';
+    
+    if (!userId) {
+      return res.status(400).json({
+        success: false,
+        error: 'ID do usuário é obrigatório'
+      });
+    }
+    
+    if (!nomeAgenteAceite) {
+      return res.status(400).json({
+        success: false,
+        error: 'Nome do agente que aceitou o termo é obrigatório'
+      });
+    }
+    
+    console.log('🔍 [ACEITE TERMO] Obtendo pool de conexão...');
+    ({ pool, server } = await getDbPoolWithTunnel());
+    console.log('✅ [ACEITE TERMO] Pool obtido');
+    
+    // Garantir que a tabela existe com todas as colunas necessárias
+    await ensureFirstAccessTable(pool);
+    
+    const dataAceiteDate = dataAceiteTermo ? new Date(dataAceiteTermo) : new Date();
+    
+    console.log('🔍 [ACEITE TERMO] Verificando se já existe registro...');
+    const [existing] = await pool.query(
+      'SELECT id, aceite_termo FROM compliance_first_access WHERE user_id = ? AND tipo_compliance = ?',
+      [userId, tipoCompliance]
+    );
+    
+    if (existing && existing.length > 0) {
+      console.log('🔍 [ACEITE TERMO] Atualizando registro existente...');
+      await pool.query(
+        `UPDATE compliance_first_access 
+         SET aceite_termo = TRUE, 
+             data_aceite_termo = ?, 
+             nome_agente_aceite = ?,
+             updated_at = NOW()
+         WHERE user_id = ? AND tipo_compliance = ?`,
+        [dataAceiteDate, nomeAgenteAceite, userId, tipoCompliance]
+      );
+      console.log('✅ [ACEITE TERMO] Registro atualizado com sucesso');
+    } else {
+      console.log('🔍 [ACEITE TERMO] Criando novo registro...');
+      await pool.query(
+        `INSERT INTO compliance_first_access 
+         (user_id, tipo_compliance, aceite_termo, data_aceite_termo, nome_agente_aceite, created_at, updated_at)
+         VALUES (?, ?, TRUE, ?, ?, NOW(), NOW())`,
+        [userId, tipoCompliance, dataAceiteDate, nomeAgenteAceite]
+      );
+      console.log('✅ [ACEITE TERMO] Registro criado com sucesso');
+    }
+    
+    res.json({
+      success: true,
+      message: 'Aceite do termo registrado com sucesso',
+      data: {
+        nomeAgenteAceite,
+        dataAceiteTermo: dataAceiteDate.toISOString(),
+        tipoCompliance
+      }
+    });
+    
+  } catch (err) {
+    console.error('❌ [ACEITE TERMO] Erro ao registrar aceite do termo:', err);
+    console.error('❌ [ACEITE TERMO] Stack:', err.stack);
+    
+    res.status(500).json({
+      success: false,
+      error: 'Erro ao registrar aceite do termo',
+      details: err.message
+    });
+  } finally {
+    if (server) server.close();
+  }
+};
+
 exports.validarAssinaturaWebPKI = async (req, res) => {
   let pool, server;
   try {

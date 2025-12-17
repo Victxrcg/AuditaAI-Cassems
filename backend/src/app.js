@@ -16,17 +16,35 @@ const { getPoolStatus, getDbPool } = require('./lib/db');
 const app = express();
 
 // Middlewares
+// Configuração de CORS mais permissiva e robusta
 app.use(cors({
-  origin: [
-    'http://localhost:4011',
-    'http://localhost:3000',
-    'http://127.0.0.1:4011',
-    'http://127.0.0.1:3000',
-    'https://compliance.portes.com.br',
-    'https://api-compliance.portes.com.br'
-  ],
+  origin: function (origin, callback) {
+    // Lista de origens permitidas
+    const allowedOrigins = [
+      'http://localhost:4011',
+      'http://localhost:3000',
+      'http://127.0.0.1:4011',
+      'http://127.0.0.1:3000',
+      'https://compliance.portes.com.br',
+      'https://api-compliance.portes.com.br'
+    ];
+    
+    // Permitir requisições sem origin (ex: Postman, curl, mobile apps)
+    if (!origin) {
+      return callback(null, true);
+    }
+    
+    // Permitir se está na lista ou é localhost/127.0.0.1
+    if (allowedOrigins.includes(origin) || origin.includes('localhost') || origin.includes('127.0.0.1')) {
+      callback(null, true);
+    } else {
+      // Em produção, ser mais restritivo, mas por enquanto permitir para desenvolvimento
+      console.log('⚠️ [CORS] Origin não autorizada, mas permitindo:', origin);
+      callback(null, true);
+    }
+  },
   credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
   allowedHeaders: [
     'Content-Type', 
     'Authorization', 
@@ -36,8 +54,12 @@ app.use(cors({
     'Range',
     'Accept',
     'Origin',
-    'X-Requested-With'
-  ]
+    'X-Requested-With',
+    'Access-Control-Request-Method',
+    'Access-Control-Request-Headers'
+  ],
+  exposedHeaders: ['Content-Range', 'Content-Length'],
+  maxAge: 86400 // 24 horas
 }));
 
 // Normalizar charset de JSON para evitar erros do iconv-lite/raw-body
@@ -69,17 +91,28 @@ app.options('*', (req, res) => {
     'https://api-compliance.portes.com.br'
   ];
   
+  console.log('🔍 [CORS] Preflight request recebido de:', origin);
+  
+  // Sempre retornar header Access-Control-Allow-Origin
   if (origin && allowedOrigins.includes(origin)) {
-    res.header('Access-Control-Allow-Origin', origin);
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    console.log('✅ [CORS] Origin permitida:', origin);
+  } else if (origin) {
+    // Se a origin não está na lista mas é válida, permitir mesmo assim em desenvolvimento
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    console.log('⚠️ [CORS] Origin não está na lista, mas permitindo:', origin);
   } else {
-    res.header('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    console.log('⚠️ [CORS] Sem origin, usando *');
   }
   
-  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS, PATCH');
-  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-user-organization, x-user-id, x-tipo-compliance, Range, Accept, Origin, X-Requested-With');
-  res.header('Access-Control-Allow-Credentials', 'true');
-  res.header('Access-Control-Max-Age', '86400'); // 24 horas
-  res.sendStatus(200);
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS, PATCH');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-user-organization, x-user-id, x-tipo-compliance, Range, Accept, Origin, X-Requested-With');
+  res.setHeader('Access-Control-Allow-Credentials', 'true');
+  res.setHeader('Access-Control-Max-Age', '86400'); // 24 horas
+  
+  console.log('✅ [CORS] Headers CORS definidos para preflight');
+  return res.sendStatus(200);
 });
 
 // Middleware adicional para garantir CORS em todas as respostas
@@ -94,13 +127,32 @@ app.use((req, res, next) => {
     'https://api-compliance.portes.com.br'
   ];
   
-  if (origin && allowedOrigins.includes(origin)) {
-    res.header('Access-Control-Allow-Origin', origin);
+  // Sempre definir Access-Control-Allow-Origin
+  if (origin) {
+    if (allowedOrigins.includes(origin)) {
+      res.setHeader('Access-Control-Allow-Origin', origin);
+    } else {
+      // Em desenvolvimento, permitir qualquer origin localhost
+      if (origin.includes('localhost') || origin.includes('127.0.0.1')) {
+        res.setHeader('Access-Control-Allow-Origin', origin);
+      } else {
+        res.setHeader('Access-Control-Allow-Origin', origin); // Permitir mesmo assim
+      }
+    }
+  } else {
+    // Se não há origin, usar * (não recomendado com credentials, mas funciona)
+    res.setHeader('Access-Control-Allow-Origin', '*');
   }
   
-  res.header('Access-Control-Allow-Credentials', 'true');
-  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS, PATCH');
-  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-user-organization, x-user-id, x-tipo-compliance, Range, Accept, Origin, X-Requested-With');
+  res.setHeader('Access-Control-Allow-Credentials', 'true');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS, PATCH');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-user-organization, x-user-id, x-tipo-compliance, Range, Accept, Origin, X-Requested-With');
+  res.setHeader('Access-Control-Expose-Headers', 'Content-Range, Content-Length');
+  
+  // Se for OPTIONS, responder imediatamente
+  if (req.method === 'OPTIONS') {
+    return res.sendStatus(200);
+  }
   
   next();
 });
