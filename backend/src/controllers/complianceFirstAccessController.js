@@ -234,7 +234,7 @@ exports.checkFirstAccess = async (req, res) => {
     try {
       // Tentar query completa primeiro
       rows = await executeQueryWithRetry(`
-        SELECT id, dados_cadastro, assinado_digital, data_assinatura_digital
+        SELECT id, dados_cadastro, assinado_digital, data_assinatura_digital, nome_assinante
         FROM compliance_first_access
         WHERE user_id = ? AND tipo_compliance = ?
       `, [userId, tipoCompliance]);
@@ -253,6 +253,7 @@ exports.checkFirstAccess = async (req, res) => {
           if (rows.length > 0) {
             rows[0].assinado_digital = false;
             rows[0].data_assinatura_digital = null;
+            rows[0].nome_assinante = null;
           }
         } catch (queryError2) {
           // Se ainda der erro, tentar sem tipo_compliance
@@ -292,7 +293,8 @@ exports.checkFirstAccess = async (req, res) => {
         id: rows[0]?.id,
         dados_cadastro: rows[0]?.dados_cadastro,
         assinado_digital: rows[0]?.assinado_digital,
-        data_assinatura_digital: rows[0]?.data_assinatura_digital
+        data_assinatura_digital: rows[0]?.data_assinatura_digital,
+        nome_assinante: rows[0]?.nome_assinante || null
       }
     };
 
@@ -878,6 +880,114 @@ exports.gerarHashDocumento = async (req, res) => {
 };
 
 // Validar assinatura Web PKI
+// Assinatura simples (sem certificado digital)
+exports.assinarSimples = async (req, res) => {
+  let pool, server;
+  try {
+    console.log('🔍 [ASSINATURA SIMPLES] Iniciando assinatura simples...');
+    console.log('🔍 [ASSINATURA SIMPLES] Body:', JSON.stringify(req.body, null, 2));
+    console.log('🔍 [ASSINATURA SIMPLES] Params:', req.params);
+    
+    const { userId, nomeAssinante, dataAssinatura, dadosCadastro } = req.body;
+    const tipoCompliance = req.params.tipoCompliance || 'rat-fat';
+    
+    if (!userId) {
+      return res.status(400).json({
+        success: false,
+        error: 'ID do usuário é obrigatório'
+      });
+    }
+    
+    if (!nomeAssinante) {
+      return res.status(400).json({
+        success: false,
+        error: 'Nome do assinante é obrigatório'
+      });
+    }
+    
+    console.log('🔍 [ASSINATURA SIMPLES] Obtendo pool de conexão...');
+    ({ pool, server } = await getDbPoolWithTunnel());
+    console.log('✅ [ASSINATURA SIMPLES] Pool obtido');
+    
+    await ensureFirstAccessTable(pool);
+    
+    // Converter dadosCadastro para JSON string se necessário
+    let dadosCadastroString;
+    if (typeof dadosCadastro === 'string') {
+      dadosCadastroString = dadosCadastro;
+    } else {
+      dadosCadastroString = JSON.stringify(dadosCadastro || {});
+    }
+    
+    // Converter dataAssinatura para Date
+    const dataAssinaturaDate = dataAssinatura ? new Date(dataAssinatura) : new Date();
+    
+    // Verificar se já existe registro
+    const existing = await executeQueryWithRetry(`
+      SELECT id FROM compliance_first_access
+      WHERE user_id = ? AND tipo_compliance = ?
+    `, [userId, tipoCompliance]);
+    
+    if (existing.length > 0) {
+      // Atualizar registro existente
+      console.log('🔍 [ASSINATURA SIMPLES] Atualizando registro existente...');
+      await executeQueryWithRetry(`
+        UPDATE compliance_first_access
+        SET dados_cadastro = ?,
+            assinado_digital = TRUE,
+            data_assinatura_digital = ?,
+            nome_assinante = ?,
+            updated_at = NOW()
+        WHERE user_id = ? AND tipo_compliance = ?
+      `, [
+        dadosCadastroString,
+        dataAssinaturaDate,
+        nomeAssinante,
+        userId,
+        tipoCompliance
+      ]);
+      console.log('✅ [ASSINATURA SIMPLES] Registro atualizado com sucesso');
+    } else {
+      // Criar novo registro
+      console.log('🔍 [ASSINATURA SIMPLES] Criando novo registro...');
+      await executeQueryWithRetry(`
+        INSERT INTO compliance_first_access 
+        (user_id, tipo_compliance, dados_cadastro, assinado_digital, data_assinatura_digital, nome_assinante)
+        VALUES (?, ?, ?, TRUE, ?, ?)
+      `, [
+        userId,
+        tipoCompliance,
+        dadosCadastroString,
+        dataAssinaturaDate,
+        nomeAssinante
+      ]);
+      console.log('✅ [ASSINATURA SIMPLES] Registro criado com sucesso');
+    }
+    
+    res.json({
+      success: true,
+      message: 'Documento assinado com sucesso',
+      data: {
+        nomeAssinante,
+        dataAssinatura: dataAssinaturaDate.toISOString(),
+        tipoCompliance
+      }
+    });
+    
+  } catch (err) {
+    console.error('❌ [ASSINATURA SIMPLES] Erro ao assinar documento:', err);
+    console.error('❌ [ASSINATURA SIMPLES] Stack:', err.stack);
+    
+    res.status(500).json({
+      success: false,
+      error: 'Erro ao assinar documento',
+      details: err.message
+    });
+  } finally {
+    if (server) server.close();
+  }
+};
+
 exports.validarAssinaturaWebPKI = async (req, res) => {
   let pool, server;
   try {

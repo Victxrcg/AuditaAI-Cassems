@@ -161,6 +161,7 @@ router.post('/first-access/:tipoCompliance/assinar-digital',
   upload.single('certificado'),
   firstAccessController.assinarDigital
 );
+router.post('/first-access/:tipoCompliance/assinar-simples', firstAccessController.assinarSimples);
 // Rota GET genérica por último (para não capturar outras rotas)
 router.get('/first-access/:tipoCompliance/:userId', firstAccessController.getFirstAccess);
 
