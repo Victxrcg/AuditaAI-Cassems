@@ -980,6 +980,7 @@ exports.assinarSimples = async (req, res) => {
     console.log('📄 [ASSINATURA SIMPLES] Gerando PDF do termo assinado...');
     let pdfBuffer = null;
     let pdfPath = null;
+    let emailEnviadoComSucesso = false;
     
     try {
       // Preparar dados para o PDF
@@ -1036,57 +1037,89 @@ exports.assinarSimples = async (req, res) => {
       if (userEmail) {
         console.log('📧 [ASSINATURA SIMPLES] Enviando email para:', userEmail);
         
+        // Gerar conteúdo HTML do termo para o email
+        const termoConteudoHTML = formatarTermoParaEmail(dadosParaPDF.termoConteudo);
+        
         const assunto = `Termo de Confidencialidade Assinado - Compliance ${tipoCompliance.toUpperCase()}`;
         const corpo = `
-          <div style="font-family: Arial, sans-serif; line-height:1.6;">
-            <h2>Termo de Confidencialidade Assinado</h2>
-            
-            <p>Olá ${userName},</p>
-            
-            <p>O Termo de Confidencialidade e Compliance foi assinado com sucesso.</p>
-            
-            <div style="background-color: #f8fafc; padding: 15px; border-radius: 8px; margin: 20px 0;">
-              <h3 style="color: #1e40af; margin-top: 0;">📋 Detalhes da Assinatura:</h3>
-              <ul style="margin: 0; padding-left: 20px;">
-                <li><strong>Assinado por:</strong> ${nomeAssinante}</li>
-                <li><strong>Data:</strong> ${dataAssinaturaDate.toLocaleDateString('pt-BR')}</li>
-                <li><strong>Hora:</strong> ${dataAssinaturaDate.toLocaleTimeString('pt-BR')}</li>
-                <li><strong>Tipo de Compliance:</strong> ${tipoCompliance.toUpperCase()}</li>
-              </ul>
+          <div style="font-family: Arial, sans-serif; line-height:1.6; color: #1f2937;">
+            <div style="background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%); padding: 30px; text-align: center; margin-bottom: 30px;">
+              <h1 style="color: #ffffff; margin: 0; font-size: 24px; font-weight: bold;">Termo de Confidencialidade Assinado</h1>
+              <p style="color: #e0e7ff; margin: 10px 0 0 0; font-size: 14px;">Compliance ${tipoCompliance.toUpperCase()}</p>
             </div>
             
-            <p>Segue em anexo o PDF do termo assinado para seus registros.</p>
-            
-            <p>Este email foi enviado automaticamente pelo sistema.</p>
-            
-            <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 30px 0;">
-            
-            <p style="color: #6b7280; font-size: 12px;">
-              Sistema de Compliance Fiscal - PORTES<br>
-              Enviado em: ${new Date().toLocaleString('pt-BR')}
-            </p>
+            <div style="max-width: 800px; margin: 0 auto; padding: 0 20px;">
+              <p style="font-size: 16px; margin-bottom: 20px;">Olá <strong>${userName}</strong>,</p>
+              
+              <p style="font-size: 16px; margin-bottom: 20px;">O Termo de Confidencialidade e Compliance foi assinado com sucesso.</p>
+              
+              <div style="background-color: #f8fafc; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #1e40af;">
+                <h3 style="color: #1e40af; margin-top: 0; margin-bottom: 15px; font-size: 18px;">📋 Detalhes da Assinatura:</h3>
+                <ul style="margin: 0; padding-left: 20px; list-style: none;">
+                  <li style="margin-bottom: 8px;"><strong>Assinado por:</strong> ${nomeAssinante}</li>
+                  <li style="margin-bottom: 8px;"><strong>Data:</strong> ${dataAssinaturaDate.toLocaleDateString('pt-BR')}</li>
+                  <li style="margin-bottom: 8px;"><strong>Hora:</strong> ${dataAssinaturaDate.toLocaleTimeString('pt-BR')}</li>
+                  <li style="margin-bottom: 8px;"><strong>Tipo de Compliance:</strong> ${tipoCompliance.toUpperCase()}</li>
+                </ul>
+              </div>
+              
+              <div style="background-color: #ffffff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 30px; margin: 30px 0;">
+                <h2 style="color: #1e40af; margin-top: 0; margin-bottom: 20px; font-size: 20px; text-align: center; border-bottom: 2px solid #1e40af; padding-bottom: 10px;">
+                  TERMO DE CONFIDENCIALIDADE
+                </h2>
+                
+                <div style="color: #374151; font-size: 14px; line-height: 1.8;">
+                  ${termoConteudoHTML}
+                </div>
+              </div>
+              
+              <div style="background-color: #eff6ff; padding: 20px; border-radius: 8px; margin: 30px 0; border-left: 4px solid #3b82f6;">
+                <p style="margin: 0; font-size: 14px; color: #1e40af;">
+                  <strong>📎 Anexo:</strong> Segue em anexo o PDF do termo assinado para seus registros.
+                </p>
+              </div>
+              
+              <p style="font-size: 14px; color: #6b7280; margin-top: 30px;">
+                Este email foi enviado automaticamente pelo sistema.
+              </p>
+              
+              <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 30px 0;">
+              
+              <p style="color: #6b7280; font-size: 12px; text-align: center;">
+                Sistema de Compliance Fiscal - PORTES<br>
+                Enviado em: ${new Date().toLocaleString('pt-BR')}
+              </p>
+            </div>
           </div>
         `;
         
-        const emailResult = await enviarEmailComAnexos(
-          userEmail,
-          process.env.SMTP_FROM || 'no-reply@portes.com.br',
-          assunto,
-          corpo,
-          [{
-            filename: fileName,
-            path: pdfPath,
-            contentType: 'application/pdf'
-          }]
-        );
-        
-        if (emailResult.success) {
-          console.log('✅ [ASSINATURA SIMPLES] Email enviado com sucesso');
-        } else {
-          console.error('⚠️ [ASSINATURA SIMPLES] Erro ao enviar email:', emailResult.error);
+        try {
+          const emailResult = await enviarEmailComAnexos(
+            userEmail,
+            process.env.SMTP_FROM || 'no-reply@portes.com.br',
+            assunto,
+            corpo,
+            [{
+              filename: fileName,
+              path: pdfPath,
+              contentType: 'application/pdf'
+            }]
+          );
+          
+          if (emailResult.success) {
+            console.log('✅ [ASSINATURA SIMPLES] Email enviado com sucesso');
+            emailEnviadoComSucesso = true;
+          } else {
+            console.error('⚠️ [ASSINATURA SIMPLES] Erro ao enviar email:', emailResult.error);
+            emailEnviadoComSucesso = false;
+          }
+        } catch (emailError) {
+          console.error('❌ [ASSINATURA SIMPLES] Erro ao tentar enviar email:', emailError);
+          emailEnviadoComSucesso = false;
         }
       } else {
         console.warn('⚠️ [ASSINATURA SIMPLES] Email do usuário não encontrado, pulando envio de email');
+        emailEnviadoComSucesso = false;
       }
       
     } catch (pdfError) {
@@ -1102,7 +1135,8 @@ exports.assinarSimples = async (req, res) => {
         dataAssinatura: dataAssinaturaDate.toISOString(),
         tipoCompliance,
         pdfGerado: pdfBuffer !== null,
-        emailEnviado: userEmail !== null
+        emailEnviado: emailEnviadoComSucesso,
+        userEmail: userEmail || null
       }
     });
     
@@ -1120,31 +1154,422 @@ exports.assinarSimples = async (req, res) => {
   }
 };
 
-// Função auxiliar para gerar conteúdo do termo para PDF (versão simplificada)
+// Função auxiliar para formatar termo em HTML para email (similar ao template de overview)
+function formatarTermoParaEmail(termoTexto) {
+  if (!termoTexto) return '';
+  
+  // Dividir em linhas para processar linha por linha
+  const linhas = termoTexto.split('\n');
+  let html = '';
+  
+  for (let i = 0; i < linhas.length; i++) {
+    let linha = linhas[i].trim();
+    
+    // Pular linhas vazias (mas manter espaçamento)
+    if (!linha) {
+      html += '<br>';
+      continue;
+    }
+    
+    // Formatar negrito
+    linha = linha.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+    
+    // Títulos principais
+    if (linha === 'TERMO DE CONFIDENCIALIDADE') {
+      html += '<h2 style="color: #1e40af; font-size: 18px; font-weight: bold; margin-top: 20px; margin-bottom: 10px; text-align: center;">TERMO DE CONFIDENCIALIDADE</h2>';
+    }
+    // Subtítulo NDA
+    else if (linha.match(/^\(NDA[^)]+\)$/)) {
+      html += `<p style="text-align: center; color: #6b7280; font-size: 12px; margin-bottom: 20px;">${linha}</p>`;
+    }
+    // QUADRO RESUMO
+    else if (linha === 'QUADRO RESUMO') {
+      html += '<h3 style="color: #1e40af; font-size: 16px; font-weight: bold; margin-top: 25px; margin-bottom: 15px; border-bottom: 1px solid #e5e7eb; padding-bottom: 5px;">QUADRO RESUMO</h3>';
+    }
+    // Seções numeradas (I –, II –, etc)
+    else if (linha.match(/^(I{1,3}|IV|V|VI|VII|VIII|IX|X)\s*[–-]\s*(.+)$/)) {
+      html += `<h4 style="color: #374151; font-size: 15px; font-weight: bold; margin-top: 20px; margin-bottom: 10px;">${linha}</h4>`;
+    }
+    // CLÁUSULA
+    else if (linha.match(/^CLÁUSULA\s+(PRIMEIRA|SEGUNDA|TERCEIRA|QUARTA|QUINTA|SEXTA)[^:]*:/)) {
+      html += `<h3 style="color: #1e40af; font-size: 16px; font-weight: bold; margin-top: 25px; margin-bottom: 15px; border-bottom: 1px solid #e5e7eb; padding-bottom: 5px;">${linha}</h3>`;
+    }
+    // CONSIDERANDO
+    else if (linha.startsWith('CONSIDERANDO')) {
+      html += `<p style="margin: 10px 0; padding-left: 15px; border-left: 3px solid #3b82f6; color: #4b5563; font-style: italic;">${linha}</p>`;
+    }
+    // RESOLVEM
+    else if (linha.startsWith('RESOLVEM')) {
+      html += `<p style="margin: 15px 0; font-weight: bold; color: #374151;">${linha}</p>`;
+    }
+    // Itens numerados (III.1., IV.2., etc)
+    else if (linha.match(/^[IVX]+\.\d+\./)) {
+      html += `<p style="margin: 10px 0; font-weight: bold; color: #374151;">${linha}</p>`;
+    }
+    // Listas com bullet
+    else if (linha.startsWith('•') || linha.startsWith('-')) {
+      html += `<p style="margin: 5px 0; padding-left: 20px; color: #4b5563;">${linha}</p>`;
+    }
+    // Itens com letra (a), b), etc)
+    else if (linha.match(/^[a-z]\)\s+/)) {
+      html += `<p style="margin: 5px 0; padding-left: 20px; color: #4b5563;">${linha}</p>`;
+    }
+    // ASSINADO POR
+    else if (linha === 'ASSINADO POR:' || linha.startsWith('ASSINADO POR:')) {
+      html += `<p style="text-align: center; font-weight: bold; margin-top: 30px; margin-bottom: 10px; color: #1e40af; font-size: 16px;">${linha}</p>`;
+    }
+    // Data/Hora
+    else if (linha.startsWith('Data:') || linha.startsWith('Hora:')) {
+      html += `<p style="text-align: center; margin: 5px 0; color: #6b7280;">${linha}</p>`;
+    }
+    // Separador
+    else if (linha.match(/^[–-]{4,}$/)) {
+      html += '<hr style="border: none; border-top: 2px solid #e5e7eb; margin: 30px 0;">';
+    }
+    // Nome do assinante (linha após ASSINADO POR)
+    else if (i > 0 && linhas[i-1].trim().startsWith('ASSINADO POR:')) {
+      html += `<p style="text-align: center; font-weight: bold; margin: 5px 0; color: #374151; font-size: 16px;">${linha}</p>`;
+    }
+    // ASSINATURAS ELETRÔNICAS
+    else if (linha === 'ASSINATURAS ELETRÔNICAS') {
+      html += `<h3 style="color: #1e40af; font-size: 16px; font-weight: bold; margin-top: 25px; margin-bottom: 15px; text-align: center;">${linha}</h3>`;
+    }
+    // Parágrafo normal
+    else {
+      html += `<p style="margin: 8px 0; color: #374151; text-align: justify; line-height: 1.6;">${linha}</p>`;
+    }
+  }
+  
+  return html;
+}
+
+// Função auxiliar para gerar conteúdo completo do termo para PDF
 function generateNDAContentForPDF(dadosCadastro, assinaturaInfo) {
   const dados = typeof dadosCadastro === 'string' ? JSON.parse(dadosCadastro) : dadosCadastro;
   
+  const razaoSocial = dados.razao_social || '(NOME EMPRESA / RAZÃO SOCIAL)';
+  const cnpj = dados.cnpj || '(NÚMERO DO CNPJ)';
+  const endereco = dados.endereco || '(ENDEREÇO COMPLETO)';
+  const cep = dados.cep || '';
+  const cidade = dados.cidade || '';
+  const estado = dados.estado || '';
+  const email = dados.email_contato || '(EMAILS DOS REPRESENTANTES)';
+  const numero = dados.numero || '';
+  
+  // Montar endereço completo
+  const partesEndereco = [];
+  if (endereco && !endereco.includes('(ENDEREÇO')) {
+    const enderecoComNumero = numero ? `${endereco}, ${numero}` : endereco;
+    partesEndereco.push(enderecoComNumero);
+  }
+  if (cidade && estado) {
+    partesEndereco.push(`${cidade}/${estado}`);
+  } else if (cidade) {
+    partesEndereco.push(cidade);
+  } else if (estado) {
+    partesEndereco.push(estado);
+  }
+  if (cep && !cep.includes('(CEP')) partesEndereco.push(`CEP ${cep}`);
+  const enderecoCompleto = partesEndereco.length > 0 
+    ? partesEndereco.join(', ') 
+    : '(ENDEREÇO COMPLETO)';
+  
+  const cidadeEstado = cidade && estado 
+    ? `${cidade}/${estado}` 
+    : cidade 
+      ? cidade 
+      : estado 
+        ? estado 
+        : 'Campo Grande/MS';
+  
+  const dataAtual = new Date();
+  const dataFormatada = dataAtual.toLocaleDateString('pt-BR', {
+    day: '2-digit',
+    month: 'long',
+    year: 'numeric'
+  });
+  
   return `
 TERMO DE CONFIDENCIALIDADE
-(NDA - NON DISCLOSURE AGREEMENT)
+
+(NDA – NON DISCLOSURE AGREEMENT)
+
+
 
 QUADRO RESUMO
 
-I – CONTRATANTE/PARTE DIVULGADORA
 
-I.1. ${dados.razao_social || '(NOME EMPRESA)'}, pessoa jurídica no CNPJ sob o nº ${dados.cnpj || '(CNPJ)'}, com sede na ${dados.endereco || '(ENDEREÇO)'}, ${dados.numero || ''}, ${dados.cidade || ''}/${dados.estado || ''}, CEP ${dados.cep || ''}, com os e-mails ${dados.email_contato || '(EMAIL)'}, neste ato representada na forma de seus atos societários, doravante denominada "CONTRATANTE".
 
-II – CONTRATADA/PARTE RECEPTORA
+I – CONTRATANTE / PARTE DIVULGADORA
 
-DADOS DA EMPRESA PORTES
 
-[Conteúdo completo do termo conforme generateNDAContent...]
 
-ASSINADO POR:
-${assinaturaInfo.nomeAssinante}
+I.1. ${razaoSocial}, pessoa jurídica de direito privado, inscrita no CNPJ sob o nº ${cnpj}, com sede em ${enderecoCompleto}, com e-mails ${email}, neste ato representada na forma de seus atos societários, doravante denominada simplesmente **"CONTRATANTE"** ou **"PARTE DIVULGADORA"**.
+
+
+
+II – CONTRATADA / PARTE RECEPTORA
+
+
+
+II.1. PORTES FINTECH TECNOLOGIA EMPRESARIAL LTDA., pessoa jurídica de direito privado, inscrita no CNPJ sob o nº 30.555.548/0001-69, com sede na Rua Hélio Yoshiaki Ikieziri, nº 34, Loja 04, Bairro Royal Park, Ed. Evidence Prime Office, CEP 79.021-435, Campo Grande/MS; e PORTES ADVOGADOS ASSOCIADOS, sociedade de advogados, inscrita no CNPJ/MF sob o nº 14.806.853/0001-20, com sede na Rua Hélio Yoshiaki Ikieziri, nº 34, Sala 306, Bairro Royal Park, Ed. Evidence Prime Office, CEP 79.021-435, Campo Grande/MS, ambas neste ato representadas por seu sócio majoritário PAULO EUGÊNIO SOUZA PORTES DE OLIVEIRA, brasileiro, casado, advogado, inscrito na OAB/MS sob o nº 14.607, portador do RG nº 982.333 SSP/MS e CPF nº 020.492.631-98, com endereço eletrônico juridico@portesadv.com, doravante denominadas, em conjunto, **"CONTRATADA"** ou **"PARTE RECEPTORA"**.
+
+III – OBJETO
+
+
+
+III.1. O presente Termo tem por objeto garantir o sigilo absoluto das **INFORMAÇÕES CONFIDENCIAIS** trocadas entre as PARTES, referentes à execução dos trabalhos, análises, cálculos, diagnósticos e tratativas comerciais relacionadas à prestação de serviços de compliance fiscal e previdenciário, em especial no que se refere a RAT (Riscos Ambientais do Trabalho) e FAP (Fator Acidentário de Prevenção), em estrita observância à Lei Geral de Proteção de Dados Pessoais – LGPD (Lei nº 13.709/2018).
+
+
+
+III.2. A relação jurídica entre as PARTES tem como finalidade a prestação de serviços especializados de consultoria, estruturação, análise e implementação de uma operação integrada de compliance fiscal e previdenciário, incluindo, mas não se limitando a:
+
+
+
+• Diagnóstico da operação atual de compliance RAT e FAP;
+
+• Análise de alíquotas RAT conforme Decreto nº 3.048/1999 e legislação vigente;
+
+• Estruturação de fluxos, políticas, procedimentos e manuais de compliance previdenciário;
+
+• Implementação de ferramentas tecnológicas para cálculo, automação e monitoramento de RAT e FAP;
+
+• Treinamento de equipes internas;
+
+• Definição de indicadores de desempenho (KPIs);
+
+• Mitigação de riscos previdenciários;
+
+• Análise e otimização do FAP conforme Portaria nº 1.263/2012;
+
+• Consultoria para recuperação de créditos previdenciários.
+
+
+
+IV – PRINCIPAIS OBRIGAÇÕES
+
+
+
+IV.1. As PARTES obrigam-se a:
+
+
+
+• Manter absoluto sigilo sobre todas as INFORMAÇÕES CONFIDENCIAIS;
+
+• Limitar o acesso às informações apenas às pessoas estritamente necessárias;
+
+• Não utilizar as informações para benefício próprio ou de terceiros;
+
+• Não divulgar informações, relatórios, pareceres ou estratégias sem autorização expressa;
+
+• Adotar todas as medidas de segurança técnicas e administrativas necessárias para proteção das informações.
+
+
+
+V – PENALIDADES
+
+
+
+V.1. Multa equivalente a 20% (vinte por cento) do valor total do Contrato principal;
+
+
+
+V.2. Multa não compensatória de R$ 150.000,00 (cento e cinquenta mil reais) por cada ato de divulgação, contato ou tentativa de repasse indevido de informações confidenciais;
+
+
+
+V.3. Multa diária de R$ 5.000,00 (cinco mil reais) enquanto perdurar a violação, sem prejuízo da apuração de perdas e danos.
+
+
+
+VI – PRAZO
+
+
+
+VI.1. O presente Termo terá vigência de 06 (seis) anos, contados da data da assinatura eletrônica, independentemente da vigência do Contrato principal.
+
+
+
+VII – FORO
+
+
+
+VII.1. Fica eleito o Foro da Comarca de Campo Grande/MS, com renúncia expressa a qualquer outro, por mais privilegiado que seja.
+
+
+
+VIII – CONDIÇÕES ESPECIAIS
+
+
+
+VIII.1. Todas as informações relacionadas a RAT, FAP, dados previdenciários, acidentalidade, CNAE, massa salarial e estratégias de compliance serão consideradas informações sensíveis e tratadas com máximo rigor de confidencialidade.
+
+
+
+VIII.2. É vedada a utilização dessas informações para qualquer finalidade diversa da execução do objeto contratual.
+
+
+
+IX – FORMA DE ASSINATURA
+
+
+
+IX.1. O presente Termo será firmado por meio de **assinatura eletrônica ou digital**, inclusive mediante **certificado digital ICP-Brasil**, realizada diretamente no ambiente eletrônico do sistema da CONTRATADA, sem que haja coleta, armazenamento ou compartilhamento do certificado digital do usuário.
+
+
+
+IX.2. As PARTES reconhecem que a assinatura eletrônica confere plena validade jurídica ao presente instrumento, nos termos da Medida Provisória nº 2.200-2/2001 e do Decreto nº 10.278/2020.
+
+
+
+––––––––––––––––––––––––––––––––––
+
+TERMO DE CONFIDENCIALIDADE
+
+(NDA – NON DISCLOSURE AGREEMENT)
+
+
+
+CONSIDERANDOS
+
+
+
+CONSIDERANDO que as PARTES necessitarão compartilhar informações de natureza técnica, jurídica, financeira, estratégica e previdenciária, dotadas de elevado valor econômico e estratégico;
+
+
+
+CONSIDERANDO que a proteção dessas informações é condição essencial para a realização do negócio pretendido;
+
+
+
+RESOLVEM as PARTES celebrar o presente TERMO, que se regerá pelas cláusulas seguintes:
+
+
+
+CLÁUSULA PRIMEIRA – DO OBJETO
+
+
+
+1.1. Constitui objeto deste TERMO a proteção das INFORMAÇÕES CONFIDENCIAIS trocadas entre as PARTES, em qualquer meio ou formato, relacionadas direta ou indiretamente ao NEGÓCIO.
+
+
+
+1.2. Consideram-se INFORMAÇÕES CONFIDENCIAIS, sem limitação:
+
+
+
+a) Informações jurídicas, técnicas, financeiras e estratégicas relacionadas a RAT e FAP;
+
+
+
+b) Metodologias, know-how, algoritmos, relatórios e análises;
+
+
+
+c) Dados previdenciários, acidentários, massa salarial, CNAE e informações de empregados;
+
+
+
+d) Quaisquer informações não públicas cujo sigilo seja razoavelmente esperado.
+
+
+
+CLÁUSULA SEGUNDA – DAS OBRIGAÇÕES
+
+
+
+2.1. A PARTE RECEPTORA obriga-se a:
+
+
+
+• Utilizar as informações exclusivamente para o objeto contratual;
+
+• Manter sigilo absoluto;
+
+• Impedir acesso não autorizado;
+
+• Comunicar imediatamente qualquer violação;
+
+• Cumprir integralmente a LGPD.
+
+
+
+CLÁUSULA TERCEIRA – DAS EXCEÇÕES
+
+
+
+3.1. Não se aplicam as obrigações de sigilo às informações que:
+
+
+
+• Se tornarem públicas sem violação deste Termo;
+
+• Forem exigidas por ordem legal;
+
+• Forem previamente autorizadas por escrito.
+
+
+
+CLÁUSULA QUARTA – DAS PENALIDADES
+
+
+
+4.1. A violação deste TERMO sujeitará a Parte infratora às penalidades previstas no Quadro Resumo, cumulativamente, sem prejuízo de perdas e danos.
+
+
+
+CLÁUSULA QUINTA – DA VIGÊNCIA
+
+
+
+5.1. As obrigações de confidencialidade subsistirão pelo prazo de 06 (seis) anos e, quanto às informações sensíveis, por prazo indeterminado.
+
+
+
+CLÁUSULA SEXTA – DISPOSIÇÕES GERAIS
+
+
+
+6.1. Este TERMO não gera vínculo societário ou trabalhista.
+
+
+
+6.2. É vedada a cessão sem autorização.
+
+
+
+6.3. A nulidade de qualquer cláusula não afetará as demais.
+
+
+
+6.4. Este TERMO é regido pelas leis da República Federativa do Brasil.
+
+
+
+6.5. Fica eleito o Foro da Comarca de Campo Grande/MS.
+
+
+
+––––––––––––––––––––––––––––––––––
+
+
+
+${cidadeEstado}, na data da assinatura eletrônica.
+
+
+
+ASSINATURAS ELETRÔNICAS
+
+
+
+As PARTES declaram que este instrumento foi firmado eletronicamente, com plena validade jurídica, dispensada a assinatura de testemunhas, nos termos do art. 784, III, do Código de Processo Civil, quando aplicável.
+
+${assinaturaInfo ? `
+ASSINADO POR: ${assinaturaInfo.nomeAssinante}
 Data: ${assinaturaInfo.dataAssinatura}
 Hora: ${assinaturaInfo.horaAssinatura}
-  `;
+` : ''}
+  `.trim();
 }
 
 // Garantir que a tabela de documentos de compliance existe
