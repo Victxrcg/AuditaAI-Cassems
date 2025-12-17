@@ -49,6 +49,49 @@ const ensureFirstAccessTable = async (pool) => {
       console.log('✅ [FIRST ACCESS] Tabela compliance_first_access criada com sucesso');
     } else {
       console.log('✅ [FIRST ACCESS] Tabela compliance_first_access já existe');
+      
+      // Verificar se a coluna tipo_compliance existe
+      try {
+        const [columns] = await pool.execute(`
+          SELECT COLUMN_NAME 
+          FROM information_schema.COLUMNS 
+          WHERE TABLE_SCHEMA = DATABASE() 
+          AND TABLE_NAME = 'compliance_first_access'
+          AND COLUMN_NAME = 'tipo_compliance'
+        `);
+        
+        if (columns.length === 0) {
+          console.log('🔧 [FIRST ACCESS] Adicionando coluna tipo_compliance...');
+          try {
+            // Adicionar coluna tipo_compliance
+            await executeQueryWithRetry(`
+              ALTER TABLE compliance_first_access 
+              ADD COLUMN tipo_compliance VARCHAR(50) NOT NULL DEFAULT 'rat-fat' AFTER user_id
+            `, []);
+            
+            // Adicionar índice único se não existir
+            try {
+              await executeQueryWithRetry(`
+                ALTER TABLE compliance_first_access 
+                ADD UNIQUE KEY unique_user_compliance (user_id, tipo_compliance)
+              `, []);
+            } catch (idxError) {
+              // Índice pode já existir, ignorar erro
+              console.log('⚠️ [FIRST ACCESS] Índice unique_user_compliance pode já existir:', idxError.message);
+            }
+            
+            console.log('✅ [FIRST ACCESS] Coluna tipo_compliance adicionada com sucesso');
+          } catch (alterError) {
+            console.error('❌ [FIRST ACCESS] Erro ao adicionar coluna tipo_compliance:', alterError);
+            // Não lançar erro, apenas logar - pode ser que a coluna já exista com nome diferente
+          }
+        } else {
+          console.log('✅ [FIRST ACCESS] Coluna tipo_compliance já existe');
+        }
+      } catch (checkError) {
+        console.error('⚠️ [FIRST ACCESS] Erro ao verificar coluna tipo_compliance:', checkError.message);
+        // Continuar mesmo se houver erro na verificação
+      }
     }
   } catch (error) {
     console.error('❌ [FIRST ACCESS] Erro ao criar/verificar tabela compliance_first_access:', error);
