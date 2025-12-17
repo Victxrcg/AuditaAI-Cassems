@@ -155,13 +155,13 @@ router.post('/competencias/:id/migrar-documentos', complianceController.migrarDo
 router.post('/first-access/:tipoCompliance/check', firstAccessController.checkFirstAccess);
 router.post('/first-access/:tipoCompliance/aceitar-termo', firstAccessController.aceitarTermo);
 router.post('/first-access/:tipoCompliance/save', firstAccessController.saveFirstAccess);
-// Novas rotas para Web PKI (antes da rota genérica)
-router.post('/first-access/:tipoCompliance/gerar-hash', firstAccessController.gerarHashDocumento);
-router.post('/first-access/:tipoCompliance/validar-assinatura-webpki', firstAccessController.validarAssinaturaWebPKI);
-router.post('/first-access/:tipoCompliance/assinar-digital', 
-  upload.single('certificado'),
-  firstAccessController.assinarDigital
-);
+// Rotas do Web PKI comentadas - não estão mais em uso (assinatura simples implementada)
+// router.post('/first-access/:tipoCompliance/gerar-hash', firstAccessController.gerarHashDocumento);
+// router.post('/first-access/:tipoCompliance/validar-assinatura-webpki', firstAccessController.validarAssinaturaWebPKI);
+// router.post('/first-access/:tipoCompliance/assinar-digital', 
+//   upload.single('certificado'),
+//   firstAccessController.assinarDigital
+// );
 router.post('/first-access/:tipoCompliance/assinar-simples', firstAccessController.assinarSimples);
 // Rota GET genérica por último (para não capturar outras rotas)
 router.get('/first-access/:tipoCompliance/:userId', firstAccessController.getFirstAccess);
