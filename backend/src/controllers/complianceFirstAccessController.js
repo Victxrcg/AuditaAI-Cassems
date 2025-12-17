@@ -107,6 +107,48 @@ const ensureFirstAccessTable = async (pool) => {
           }
         }
       }
+      
+      // Verificar e adicionar colunas de assinatura digital se não existirem
+      const colunasNecessarias = [
+        { nome: 'assinado_digital', tipo: 'BOOLEAN DEFAULT FALSE' },
+        { nome: 'token_assinatura_digital', tipo: 'TEXT NULL' },
+        { nome: 'data_assinatura_digital', tipo: 'DATETIME NULL' },
+        { nome: 'documento_hash', tipo: 'VARCHAR(255) NULL' },
+        { nome: 'certificado_info', tipo: 'JSON NULL' },
+        { nome: 'assinatura_id', tipo: 'VARCHAR(255) NULL' },
+        { nome: 'cpf_assinante', tipo: 'VARCHAR(14) NULL' },
+        { nome: 'nome_assinante', tipo: 'VARCHAR(255) NULL' }
+      ];
+      
+      for (const coluna of colunasNecessarias) {
+        try {
+          const [colCheck] = await pool.execute(`
+            SELECT COLUMN_NAME 
+            FROM information_schema.COLUMNS 
+            WHERE TABLE_SCHEMA = DATABASE() 
+            AND TABLE_NAME = 'compliance_first_access'
+            AND COLUMN_NAME = ?
+          `, [coluna.nome]);
+          
+          if (colCheck.length === 0) {
+            console.log(`🔧 [FIRST ACCESS] Adicionando coluna ${coluna.nome}...`);
+            await executeQueryWithRetry(`
+              ALTER TABLE compliance_first_access 
+              ADD COLUMN ${coluna.nome} ${coluna.tipo}
+            `, []);
+            console.log(`✅ [FIRST ACCESS] Coluna ${coluna.nome} adicionada com sucesso`);
+          } else {
+            console.log(`✅ [FIRST ACCESS] Coluna ${coluna.nome} já existe`);
+          }
+        } catch (colError) {
+          if (colError.message && colError.message.includes('Duplicate column')) {
+            console.log(`✅ [FIRST ACCESS] Coluna ${coluna.nome} já existe (detectado por erro de duplicata)`);
+          } else {
+            console.error(`⚠️ [FIRST ACCESS] Erro ao verificar/adicionar coluna ${coluna.nome}:`, colError.message);
+            // Continuar mesmo se falhar
+          }
+        }
+      }
     }
   } catch (error) {
     console.error('❌ [FIRST ACCESS] Erro ao criar/verificar tabela compliance_first_access:', error);
@@ -145,25 +187,50 @@ exports.checkFirstAccess = async (req, res) => {
 
     console.log('🔍 [FIRST ACCESS] Buscando registro para userId:', userId, 'tipoCompliance:', tipoCompliance);
     
-    // Verificar se a coluna tipo_compliance existe antes de usar
+    // Verificar se as colunas existem antes de usar
     let rows;
     try {
-      // Tentar query com tipo_compliance primeiro
+      // Tentar query completa primeiro
       rows = await executeQueryWithRetry(`
         SELECT id, dados_cadastro, assinado_digital, data_assinatura_digital
         FROM compliance_first_access
         WHERE user_id = ? AND tipo_compliance = ?
       `, [userId, tipoCompliance]);
     } catch (queryError) {
-      // Se der erro de coluna desconhecida, tentar sem tipo_compliance (compatibilidade com tabela antiga)
-      if (queryError.message && queryError.message.includes('Unknown column') && queryError.message.includes('tipo_compliance')) {
-        console.log('⚠️ [FIRST ACCESS] Coluna tipo_compliance não existe, usando query sem filtro de tipo');
-        rows = await executeQueryWithRetry(`
-          SELECT id, dados_cadastro, assinado_digital, data_assinatura_digital
-          FROM compliance_first_access
-          WHERE user_id = ?
-          LIMIT 1
-        `, [userId]);
+      // Se der erro de coluna desconhecida, tentar query mais simples
+      if (queryError.message && queryError.message.includes('Unknown column')) {
+        console.log('⚠️ [FIRST ACCESS] Alguma coluna não existe, tentando query simplificada...');
+        try {
+          // Tentar com tipo_compliance mas sem assinado_digital
+          rows = await executeQueryWithRetry(`
+            SELECT id, dados_cadastro
+            FROM compliance_first_access
+            WHERE user_id = ? AND tipo_compliance = ?
+          `, [userId, tipoCompliance]);
+          // Se chegou aqui, as colunas de assinatura não existem, considerar como não assinado
+          if (rows.length > 0) {
+            rows[0].assinado_digital = false;
+            rows[0].data_assinatura_digital = null;
+          }
+        } catch (queryError2) {
+          // Se ainda der erro, tentar sem tipo_compliance
+          if (queryError2.message && queryError2.message.includes('Unknown column') && queryError2.message.includes('tipo_compliance')) {
+            console.log('⚠️ [FIRST ACCESS] Coluna tipo_compliance não existe, usando query sem filtro de tipo');
+            rows = await executeQueryWithRetry(`
+              SELECT id, dados_cadastro
+              FROM compliance_first_access
+              WHERE user_id = ?
+              LIMIT 1
+            `, [userId]);
+            // Considerar como não assinado se as colunas não existem
+            if (rows.length > 0) {
+              rows[0].assinado_digital = false;
+              rows[0].data_assinatura_digital = null;
+            }
+          } else {
+            throw queryError2;
+          }
+        }
       } else {
         throw queryError;
       }
