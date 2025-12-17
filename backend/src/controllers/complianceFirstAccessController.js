@@ -128,13 +128,15 @@ const ensureFirstAccessTable = async (pool) => {
       // Buscar todas as colunas existentes de uma vez para evitar múltiplas queries
       let colunasExistentes = [];
       try {
-        const [todasColunas] = await pool.execute(`
+        const todasColunas = await pool.execute(`
           SELECT COLUMN_NAME 
           FROM information_schema.COLUMNS 
           WHERE TABLE_SCHEMA = DATABASE() 
           AND TABLE_NAME = 'compliance_first_access'
         `);
-        colunasExistentes = todasColunas.map((c) => c.COLUMN_NAME);
+        // pool.execute retorna o array diretamente, não [rows, fields]
+        const colunasArray = Array.isArray(todasColunas) ? todasColunas : (todasColunas && Array.isArray(todasColunas[0]) ? todasColunas[0] : []);
+        colunasExistentes = colunasArray.map((c) => c.COLUMN_NAME || c.column_name || c);
         console.log(`🔍 [FIRST ACCESS] Colunas existentes na tabela:`, colunasExistentes);
       } catch (listError) {
         console.error(`⚠️ [FIRST ACCESS] Erro ao listar colunas existentes:`, listError.message);
@@ -965,12 +967,14 @@ exports.assinarSimples = async (req, res) => {
     }
     
     // Buscar email do usuário para envio
-    const [userRows] = await pool.query(`
+    const userRows = await pool.query(`
       SELECT email, nome FROM usuarios_cassems WHERE id = ?
     `, [userId]);
     
-    const userEmail = userRows && userRows.length > 0 ? userRows[0].email : null;
-    const userName = userRows && userRows.length > 0 ? userRows[0].nome : nomeAssinante;
+    // pool.query retorna array diretamente para SELECT
+    const userRowsArray = Array.isArray(userRows) ? userRows : (userRows && Array.isArray(userRows[0]) ? userRows[0] : []);
+    const userEmail = userRowsArray && userRowsArray.length > 0 ? userRowsArray[0].email : null;
+    const userName = userRowsArray && userRowsArray.length > 0 ? userRowsArray[0].nome : nomeAssinante;
     
     // Gerar PDF do termo assinado
     console.log('📄 [ASSINATURA SIMPLES] Gerando PDF do termo assinado...');
@@ -1012,7 +1016,7 @@ exports.assinarSimples = async (req, res) => {
       await ensureComplianceDocumentsTable(pool);
       
       // Salvar referência do documento no banco
-      const [docResult] = await pool.query(`
+      const docResult = await pool.query(`
         INSERT INTO compliance_documentos 
         (user_id, tipo_compliance, nome_arquivo, caminho_arquivo, tipo_documento, tamanho_arquivo, created_at)
         VALUES (?, ?, ?, ?, 'termo_assinado', ?, NOW())
@@ -1024,7 +1028,9 @@ exports.assinarSimples = async (req, res) => {
         pdfBuffer.length
       ]);
       
-      console.log('✅ [ASSINATURA SIMPLES] Documento salvo no banco com ID:', docResult.insertId);
+      // pool.query para INSERT retorna OkPacket diretamente, não um array
+      const insertId = docResult?.insertId || (Array.isArray(docResult) && docResult[0]?.insertId) || null;
+      console.log('✅ [ASSINATURA SIMPLES] Documento salvo no banco com ID:', insertId);
       
       // Enviar email com PDF anexado
       if (userEmail) {
@@ -1276,10 +1282,12 @@ exports.aceitarTermo = async (req, res) => {
     console.log('🔍 [ACEITE TERMO] Verificando se já existe registro...');
     let existing;
     try {
-      [existing] = await pool.query(
+      const existingResult = await pool.query(
         'SELECT id, aceite_termo, dados_cadastro FROM compliance_first_access WHERE user_id = ? AND tipo_compliance = ?',
         [userId, tipoCompliance]
       );
+      // pool.query retorna array diretamente para SELECT
+      existing = Array.isArray(existingResult) ? existingResult : (existingResult && Array.isArray(existingResult[0]) ? existingResult[0] : []);
       console.log('🔍 [ACEITE TERMO] Resultado da busca:', existing);
     } catch (queryError) {
       console.error('❌ [ACEITE TERMO] Erro ao buscar registro existente:', queryError);
