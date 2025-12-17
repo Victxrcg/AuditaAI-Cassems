@@ -57,13 +57,52 @@ try {
   require('iconv-lite').encodingExists('utf-8');
 } catch (_) {}
 
-// Middleware para lidar com preflight requests
+// Middleware para lidar com preflight requests (ANTES de qualquer rota)
 app.options('*', (req, res) => {
-  res.header('Access-Control-Allow-Origin', req.headers.origin || '*');
-  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  const origin = req.headers.origin;
+  const allowedOrigins = [
+    'http://localhost:4011',
+    'http://localhost:3000',
+    'http://127.0.0.1:4011',
+    'http://127.0.0.1:3000',
+    'https://compliance.portes.com.br',
+    'https://api-compliance.portes.com.br'
+  ];
+  
+  if (origin && allowedOrigins.includes(origin)) {
+    res.header('Access-Control-Allow-Origin', origin);
+  } else {
+    res.header('Access-Control-Allow-Origin', '*');
+  }
+  
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS, PATCH');
   res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-user-organization, x-user-id, x-tipo-compliance, Range, Accept, Origin, X-Requested-With');
   res.header('Access-Control-Allow-Credentials', 'true');
+  res.header('Access-Control-Max-Age', '86400'); // 24 horas
   res.sendStatus(200);
+});
+
+// Middleware adicional para garantir CORS em todas as respostas
+app.use((req, res, next) => {
+  const origin = req.headers.origin;
+  const allowedOrigins = [
+    'http://localhost:4011',
+    'http://localhost:3000',
+    'http://127.0.0.1:4011',
+    'http://127.0.0.1:3000',
+    'https://compliance.portes.com.br',
+    'https://api-compliance.portes.com.br'
+  ];
+  
+  if (origin && allowedOrigins.includes(origin)) {
+    res.header('Access-Control-Allow-Origin', origin);
+  }
+  
+  res.header('Access-Control-Allow-Credentials', 'true');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS, PATCH');
+  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-user-organization, x-user-id, x-tipo-compliance, Range, Accept, Origin, X-Requested-With');
+  
+  next();
 });
 
 app.use(express.json({ limit: '1gb' }));
