@@ -3,8 +3,17 @@ const PDFDocument = require('pdfkit');
 const fs = require('fs');
 const path = require('path');
 
+// Cores do layout PORTES (adaptado de pdfLayoutUtils.ts)
+const LAYOUT_COLORS = {
+  primary: [0, 51, 102],      // Azul escuro (#003366)
+  secondary: [0, 102, 204],  // Azul médio (#0066CC)
+  text: [51, 51, 51],        // Cinza escuro (#333333)
+  lightGray: [128, 128, 128], // Cinza médio
+  border: [220, 225, 235],   // Cinza claro para bordas
+};
+
 /**
- * Gera PDF do termo de confidencialidade assinado no padrão ABNT
+ * Gera PDF do termo de confidencialidade assinado no padrão ABNT com estilo PORTES
  * @param {Object} dados - Dados do termo e assinatura
  * @param {string} dados.termoConteudo - Conteúdo HTML/texto do termo
  * @param {Object} dados.dadosCadastro - Dados da empresa
@@ -74,7 +83,7 @@ async function gerarPDFTermoAssinado(dados) {
         }
       };
 
-      // Configurações ABNT padrão
+      // Configurações ABNT padrão com estilo PORTES
       const fonteNormal = 'Times-Roman';
       const fonteNegrito = 'Times-Bold';
       const tamanhoFonteNormal = 12;
@@ -83,10 +92,10 @@ async function gerarPDFTermoAssinado(dados) {
       const espacamentoLinhas = 1.5; // Espaçamento 1,5 (ABNT)
       const espacamentoEntreParagrafos = 6; // 6pt entre parágrafos
 
-      // TÍTULO PRINCIPAL (Centralizado, Negrito, 14pt)
+      // TÍTULO PRINCIPAL (Centralizado, Negrito, 14pt, cor PORTES)
       doc.fontSize(tamanhoFonteTitulo)
          .font(fonteNegrito)
-         .fillColor('black')
+         .fillColor(LAYOUT_COLORS.primary[0], LAYOUT_COLORS.primary[1], LAYOUT_COLORS.primary[2])
          .text('TERMO DE CONFIDENCIALIDADE', {
            align: 'center',
            lineGap: 6
@@ -95,9 +104,10 @@ async function gerarPDFTermoAssinado(dados) {
       checkNewPage(20);
       doc.moveDown(0.5);
       
-      // Subtítulo (Centralizado, Normal, 12pt)
+      // Subtítulo (Centralizado, Normal, 12pt, cor texto)
       doc.fontSize(tamanhoFonteNormal)
          .font(fonteNormal)
+         .fillColor(LAYOUT_COLORS.text[0], LAYOUT_COLORS.text[1], LAYOUT_COLORS.text[2])
          .text('(NDA – NON DISCLOSURE AGREEMENT)', {
            align: 'center',
            lineGap: 6
@@ -132,11 +142,12 @@ async function gerarPDFTermoAssinado(dados) {
         // Verificar espaço necessário antes de adicionar conteúdo
         checkNewPage(30);
         
-        // TÍTULO PRINCIPAL DO TERMO
+        // TÍTULO PRINCIPAL DO TERMO (cor PORTES)
         if (linha === 'TERMO DE CONFIDENCIALIDADE') {
           doc.moveDown(0.5);
           doc.fontSize(tamanhoFonteTitulo)
              .font(fonteNegrito)
+             .fillColor(LAYOUT_COLORS.primary[0], LAYOUT_COLORS.primary[1], LAYOUT_COLORS.primary[2])
              .text(linha, {
                align: 'center',
                lineGap: 6
@@ -147,50 +158,55 @@ async function gerarPDFTermoAssinado(dados) {
         else if (linha.match(/^\(NDA[^)]+\)$/)) {
           doc.fontSize(tamanhoFonteNormal)
              .font(fonteNormal)
+             .fillColor(LAYOUT_COLORS.text[0], LAYOUT_COLORS.text[1], LAYOUT_COLORS.text[2])
              .text(linha, {
                align: 'center',
                lineGap: 6
              });
           doc.moveDown(0.5);
         }
-        // QUADRO RESUMO (Título de Seção)
+        // QUADRO RESUMO (Título de Seção, cor PORTES)
         else if (linha === 'QUADRO RESUMO') {
           doc.moveDown(espacamentoEntreParagrafos / 6);
           doc.fontSize(tamanhoFonteTitulo)
              .font(fonteNegrito)
+             .fillColor(LAYOUT_COLORS.primary[0], LAYOUT_COLORS.primary[1], LAYOUT_COLORS.primary[2])
              .text(linha, {
                align: 'left',
                lineGap: 6
              });
           doc.moveDown(0.5);
         }
-        // CONSIDERANDOS (Título de Seção)
+        // CONSIDERANDOS (Título de Seção, cor PORTES)
         else if (linha === 'CONSIDERANDOS') {
           doc.moveDown(espacamentoEntreParagrafos / 6);
           doc.fontSize(tamanhoFonteTitulo)
              .font(fonteNegrito)
+             .fillColor(LAYOUT_COLORS.primary[0], LAYOUT_COLORS.primary[1], LAYOUT_COLORS.primary[2])
              .text(linha, {
                align: 'left',
                lineGap: 6
              });
           doc.moveDown(0.5);
         }
-        // CLÁUSULA (Título de Seção)
+        // CLÁUSULA (Título de Seção, cor PORTES)
         else if (linha.match(/^CLÁUSULA\s+(PRIMEIRA|SEGUNDA|TERCEIRA|QUARTA|QUINTA|SEXTA)[^:]*:/)) {
           doc.moveDown(espacamentoEntreParagrafos / 6);
           doc.fontSize(tamanhoFonteTitulo)
              .font(fonteNegrito)
+             .fillColor(LAYOUT_COLORS.primary[0], LAYOUT_COLORS.primary[1], LAYOUT_COLORS.primary[2])
              .text(linha, {
                align: 'left',
                lineGap: 6
              });
           doc.moveDown(0.5);
         }
-        // Seções numeradas (I –, II –, etc) - Subtítulo
+        // Seções numeradas (I –, II –, etc) - Subtítulo (cor secundária PORTES)
         else if (linha.match(/^(I{1,3}|IV|V|VI|VII|VIII|IX|X)\s*[–-]\s*(.+)$/)) {
           doc.moveDown(espacamentoEntreParagrafos / 6);
           doc.fontSize(tamanhoFonteSubtitulo)
              .font(fonteNegrito)
+             .fillColor(LAYOUT_COLORS.secondary[0], LAYOUT_COLORS.secondary[1], LAYOUT_COLORS.secondary[2])
              .text(linha, {
                align: 'left',
                lineGap: 6
@@ -202,6 +218,7 @@ async function gerarPDFTermoAssinado(dados) {
           doc.moveDown(espacamentoEntreParagrafos / 6);
           doc.fontSize(tamanhoFonteNormal)
              .font(fonteNormal)
+             .fillColor(LAYOUT_COLORS.text[0], LAYOUT_COLORS.text[1], LAYOUT_COLORS.text[2])
              .text(linha, {
                align: 'justify',
                indent: 20, // Recuo de primeira linha
@@ -214,17 +231,19 @@ async function gerarPDFTermoAssinado(dados) {
           doc.moveDown(espacamentoEntreParagrafos / 6);
           doc.fontSize(tamanhoFonteNormal)
              .font(fonteNegrito)
+             .fillColor(LAYOUT_COLORS.primary[0], LAYOUT_COLORS.primary[1], LAYOUT_COLORS.primary[2])
              .text(linha, {
                align: 'justify',
                lineGap: 6 * espacamentoLinhas
              });
           doc.moveDown(espacamentoEntreParagrafos / 6);
         }
-        // Itens numerados (III.1., IV.2., etc) - Negrito
+        // Itens numerados (III.1., IV.2., etc) - Negrito (cor secundária PORTES)
         else if (linha.match(/^[IVX]+\.\d+\./)) {
           doc.moveDown(espacamentoEntreParagrafos / 6);
           doc.fontSize(tamanhoFonteNormal)
              .font(fonteNegrito)
+             .fillColor(LAYOUT_COLORS.secondary[0], LAYOUT_COLORS.secondary[1], LAYOUT_COLORS.secondary[2])
              .text(linha, {
                align: 'justify',
                lineGap: 6 * espacamentoLinhas
@@ -236,6 +255,7 @@ async function gerarPDFTermoAssinado(dados) {
           doc.moveDown(espacamentoEntreParagrafos / 6);
           doc.fontSize(tamanhoFonteNormal)
              .font(fonteNormal)
+             .fillColor(LAYOUT_COLORS.text[0], LAYOUT_COLORS.text[1], LAYOUT_COLORS.text[2])
              .text(linha, {
                align: 'justify',
                indent: 20, // Recuo para lista
@@ -248,6 +268,7 @@ async function gerarPDFTermoAssinado(dados) {
           doc.moveDown(espacamentoEntreParagrafos / 6);
           doc.fontSize(tamanhoFonteNormal)
              .font(fonteNormal)
+             .fillColor(LAYOUT_COLORS.text[0], LAYOUT_COLORS.text[1], LAYOUT_COLORS.text[2])
              .text(linha, {
                align: 'justify',
                indent: 20, // Recuo para subitens
@@ -255,12 +276,13 @@ async function gerarPDFTermoAssinado(dados) {
              });
           doc.moveDown(espacamentoEntreParagrafos / 6);
         }
-        // ASSINADO POR (Centralizado)
+        // ASSINADO POR (Centralizado, cor PORTES)
         else if (linha === 'ASSINADO POR:' || linha.startsWith('ASSINADO POR:')) {
           doc.moveDown(1.5);
           checkNewPage(50);
           doc.fontSize(tamanhoFonteSubtitulo)
              .font(fonteNegrito)
+             .fillColor(LAYOUT_COLORS.primary[0], LAYOUT_COLORS.primary[1], LAYOUT_COLORS.primary[2])
              .text(linha, {
                align: 'center',
                lineGap: 6
@@ -271,49 +293,55 @@ async function gerarPDFTermoAssinado(dados) {
         else if (linha.startsWith('Data:') || linha.startsWith('Hora:')) {
           doc.fontSize(tamanhoFonteNormal)
              .font(fonteNormal)
+             .fillColor(LAYOUT_COLORS.text[0], LAYOUT_COLORS.text[1], LAYOUT_COLORS.text[2])
              .text(linha, {
                align: 'center',
                lineGap: 6
              });
           doc.moveDown(0.3);
         }
-        // Nome do assinante (linha após ASSINADO POR) - Centralizado e Negrito
+        // Nome do assinante (linha após ASSINADO POR) - Centralizado e Negrito (cor PORTES)
         else if (i > 0 && linhas[i-1].trim().startsWith('ASSINADO POR:')) {
           doc.fontSize(tamanhoFonteNormal)
              .font(fonteNegrito)
+             .fillColor(LAYOUT_COLORS.primary[0], LAYOUT_COLORS.primary[1], LAYOUT_COLORS.primary[2])
              .text(linha, {
                align: 'center',
                lineGap: 6
              });
           doc.moveDown(0.5);
         }
-        // ASSINATURAS ELETRÔNICAS (Título)
+        // ASSINATURAS ELETRÔNICAS (Título, cor PORTES)
         else if (linha === 'ASSINATURAS ELETRÔNICAS') {
           doc.moveDown(espacamentoEntreParagrafos / 6);
           doc.fontSize(tamanhoFonteTitulo)
              .font(fonteNegrito)
+             .fillColor(LAYOUT_COLORS.primary[0], LAYOUT_COLORS.primary[1], LAYOUT_COLORS.primary[2])
              .text(linha, {
                align: 'center',
                lineGap: 6
              });
           doc.moveDown(0.5);
         }
-        // Separador
+        // Separador (cor borda PORTES)
         else if (linha.match(/^[–-]{4,}$/)) {
           doc.moveDown(1);
           checkNewPage(30);
           // Linha separadora
           const currentY = doc.y;
-          doc.moveTo(margemEsquerda, currentY)
+          doc.strokeColor(`rgb(${LAYOUT_COLORS.border.join(',')})`)
+             .lineWidth(0.5)
+             .moveTo(margemEsquerda, currentY)
              .lineTo(doc.page.width - margemDireita, currentY)
              .stroke();
           doc.moveDown(1);
         }
-        // Parágrafo normal (Justificado, 12pt, espaçamento 1,5)
+        // Parágrafo normal (Justificado, 12pt, espaçamento 1,5, cor texto)
         else {
           doc.moveDown(espacamentoEntreParagrafos / 6);
           doc.fontSize(tamanhoFonteNormal)
              .font(fonteNormal)
+             .fillColor(LAYOUT_COLORS.text[0], LAYOUT_COLORS.text[1], LAYOUT_COLORS.text[2])
              .text(linha, {
                align: 'justify',
                lineGap: 6 * espacamentoLinhas
@@ -337,7 +365,7 @@ async function gerarPDFTermoAssinado(dados) {
               
               doc.fontSize(10)
                  .font('Times-Roman')
-                 .fillColor('black')
+                 .fillColor(LAYOUT_COLORS.lightGray[0], LAYOUT_COLORS.lightGray[1], LAYOUT_COLORS.lightGray[2])
                  .text(
                    `${pageNum}`,
                    margemEsquerda,

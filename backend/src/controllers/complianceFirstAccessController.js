@@ -1033,63 +1033,34 @@ exports.assinarSimples = async (req, res) => {
       const insertId = docResult?.insertId || (Array.isArray(docResult) && docResult[0]?.insertId) || null;
       console.log('✅ [ASSINATURA SIMPLES] Documento salvo no banco com ID:', insertId);
       
-      // Enviar email com PDF anexado
+      // Enviar email com PDF anexado (email simples)
       if (userEmail) {
         console.log('📧 [ASSINATURA SIMPLES] Enviando email para:', userEmail);
         
-        // Gerar conteúdo HTML do termo para o email
-        const termoConteudoHTML = formatarTermoParaEmail(dadosParaPDF.termoConteudo);
-        
         const assunto = `Termo de Confidencialidade Assinado - Compliance ${tipoCompliance.toUpperCase()}`;
         const corpo = `
-          <div style="font-family: Arial, sans-serif; line-height:1.6; color: #1f2937;">
-            <div style="background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%); padding: 30px; text-align: center; margin-bottom: 30px;">
-              <h1 style="color: #ffffff; margin: 0; font-size: 24px; font-weight: bold;">Termo de Confidencialidade Assinado</h1>
-              <p style="color: #e0e7ff; margin: 10px 0 0 0; font-size: 14px;">Compliance ${tipoCompliance.toUpperCase()}</p>
-            </div>
+          <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto;">
+            <p>Olá <strong>${userName}</strong>,</p>
             
-            <div style="max-width: 800px; margin: 0 auto; padding: 0 20px;">
-              <p style="font-size: 16px; margin-bottom: 20px;">Olá <strong>${userName}</strong>,</p>
-              
-              <p style="font-size: 16px; margin-bottom: 20px;">O Termo de Confidencialidade e Compliance foi assinado com sucesso.</p>
-              
-              <div style="background-color: #f8fafc; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #1e40af;">
-                <h3 style="color: #1e40af; margin-top: 0; margin-bottom: 15px; font-size: 18px;">📋 Detalhes da Assinatura:</h3>
-                <ul style="margin: 0; padding-left: 20px; list-style: none;">
-                  <li style="margin-bottom: 8px;"><strong>Assinado por:</strong> ${nomeAssinante}</li>
-                  <li style="margin-bottom: 8px;"><strong>Data:</strong> ${dataAssinaturaDate.toLocaleDateString('pt-BR')}</li>
-                  <li style="margin-bottom: 8px;"><strong>Hora:</strong> ${dataAssinaturaDate.toLocaleTimeString('pt-BR')}</li>
-                  <li style="margin-bottom: 8px;"><strong>Tipo de Compliance:</strong> ${tipoCompliance.toUpperCase()}</li>
-                </ul>
-              </div>
-              
-              <div style="background-color: #ffffff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 30px; margin: 30px 0;">
-                <h2 style="color: #1e40af; margin-top: 0; margin-bottom: 20px; font-size: 20px; text-align: center; border-bottom: 2px solid #1e40af; padding-bottom: 10px;">
-                  TERMO DE CONFIDENCIALIDADE
-                </h2>
-                
-                <div style="color: #374151; font-size: 14px; line-height: 1.8;">
-                  ${termoConteudoHTML}
-                </div>
-              </div>
-              
-              <div style="background-color: #eff6ff; padding: 20px; border-radius: 8px; margin: 30px 0; border-left: 4px solid #3b82f6;">
-                <p style="margin: 0; font-size: 14px; color: #1e40af;">
-                  <strong>📎 Anexo:</strong> Segue em anexo o PDF do termo assinado para seus registros.
-                </p>
-              </div>
-              
-              <p style="font-size: 14px; color: #6b7280; margin-top: 30px;">
-                Este email foi enviado automaticamente pelo sistema.
-              </p>
-              
-              <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 30px 0;">
-              
-              <p style="color: #6b7280; font-size: 12px; text-align: center;">
-                Sistema de Compliance Fiscal - PORTES<br>
-                Enviado em: ${new Date().toLocaleString('pt-BR')}
-              </p>
-            </div>
+            <p>O Termo de Confidencialidade e Compliance foi assinado com sucesso.</p>
+            
+            <p><strong>Detalhes da assinatura:</strong></p>
+            <ul>
+              <li>Assinado por: ${nomeAssinante}</li>
+              <li>Data: ${dataAssinaturaDate.toLocaleDateString('pt-BR')}</li>
+              <li>Hora: ${dataAssinaturaDate.toLocaleTimeString('pt-BR')}</li>
+              <li>Tipo de Compliance: ${tipoCompliance.toUpperCase()}</li>
+            </ul>
+            
+            <p>Segue em anexo o PDF do termo assinado formatado no padrão ABNT para seus registros.</p>
+            
+            <p>Atenciosamente,<br>
+            Sistema de Compliance Fiscal - PORTES</p>
+            
+            <hr style="border: none; border-top: 1px solid #ddd; margin: 20px 0;">
+            <p style="color: #666; font-size: 12px;">
+              Este email foi enviado automaticamente em ${new Date().toLocaleString('pt-BR')}
+            </p>
           </div>
         `;
         
