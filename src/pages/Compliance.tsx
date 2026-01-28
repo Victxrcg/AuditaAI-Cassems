@@ -46,7 +46,8 @@ import {
   Receipt,
   Wallet,
   Search,
-  RefreshCw
+  RefreshCw,
+  Loader2
 } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
@@ -78,6 +79,7 @@ import ComplianceSelection from '@/components/compliance/ComplianceSelection';
 import ICMSEqualizacaoSimplificado from '@/components/compliance/ICMSEqualizacaoSimplificado';
 import HistoricoAlteracoes from '@/components/compliance/HistoricoAlteracoes';
 import ComplianceItemSkeleton from '@/components/compliance/ComplianceItemSkeleton';
+import FirstAccessForm from '@/components/compliance/FirstAccessForm';
 import { 
   initializeComplianceItems, 
   canGenerateAIParecer, 
@@ -1086,6 +1088,10 @@ export default function Compliance({ tipoCompliance }: ComplianceProps) {
   // Estado para organização selecionada (para Portes criar compliance para outra organização)
   const [selectedOrganizacao, setSelectedOrganizacao] = useState<string>('');
   const [organizacoesDisponiveis, setOrganizacoesDisponiveis] = useState<string[]>([]);
+
+  // Estado para primeiro acesso
+  const [showFirstAccessForm, setShowFirstAccessForm] = useState(false);
+  const [checkingFirstAccess, setCheckingFirstAccess] = useState(true);
 
   // API base URL
   const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:4011';
@@ -2319,8 +2325,108 @@ export default function Compliance({ tipoCompliance }: ComplianceProps) {
 
   // Carregar dados do usuário na inicialização
   useEffect(() => {
-    loadCurrentUser();
+    const loadUser = async () => {
+      await loadCurrentUser();
+    };
+    loadUser();
   }, []);
+
+  // Verificar primeiro acesso quando usuário e tipoCompliance estiverem disponíveis
+  useEffect(() => {
+    const checkFirstAccess = async () => {
+      console.log('🔍 [FRONTEND] Verificando primeiro acesso...');
+      console.log('🔍 [FRONTEND] currentUser:', currentUser);
+      console.log('🔍 [FRONTEND] tipoCompliance:', tipoCompliance);
+      
+      // Se não tem usuário, tentar carregar do localStorage
+      let userId = currentUser?.id;
+      if (!userId) {
+        try {
+          const userFromStorage = localStorage.getItem('user');
+          if (userFromStorage) {
+            const parsedUser = JSON.parse(userFromStorage);
+            userId = parsedUser.id;
+            console.log('🔍 [FRONTEND] userId do localStorage:', userId);
+          }
+        } catch (error) {
+          console.error('❌ [FRONTEND] Erro ao ler localStorage:', error);
+        }
+      }
+      
+      if (!userId || !tipoCompliance) {
+        console.log('⏳ [FRONTEND] Aguardando userId ou tipoCompliance...', { userId, tipoCompliance });
+        setCheckingFirstAccess(true);
+        return;
+      }
+
+      // Não verificar primeiro acesso para ICMS e Equalização
+      if (tipoCompliance === 'icms-equalizacao') {
+        console.log('ℹ️ [FRONTEND] ICMS e Equalização - pulando verificação de primeiro acesso');
+        setCheckingFirstAccess(false);
+        setShowFirstAccessForm(false);
+        return;
+      }
+
+      try {
+        setCheckingFirstAccess(true);
+        // Construir URL corretamente - verificar se API_BASE já contém /api
+        let baseUrl = API_BASE;
+        if (baseUrl.endsWith('/api')) {
+          baseUrl = baseUrl.slice(0, -4); // Remove /api do final
+        }
+        const url = `${baseUrl}/api/compliance/first-access/${tipoCompliance}/check`;
+        const body = { userId: userId };
+        
+        console.log('🔍 [FRONTEND] Fazendo requisição para:', url);
+        console.log('🔍 [FRONTEND] API_BASE original:', API_BASE);
+        console.log('🔍 [FRONTEND] baseUrl ajustado:', baseUrl);
+        console.log('🔍 [FRONTEND] Body:', body);
+        
+        const response = await fetch(url, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(body),
+        });
+
+        console.log('🔍 [FRONTEND] Response status:', response.status);
+        console.log('🔍 [FRONTEND] Response ok:', response.ok);
+
+        const data = await response.json();
+        console.log('🔍 [FRONTEND] Response data:', data);
+        
+        if (data.success) {
+          // Mostrar formulário se:
+          // 1. É primeiro acesso (não tem registro), OU
+          // 2. Tem dados mas não está assinado (formulário incompleto)
+          const shouldShowForm = data.isFirstAccess || (data.hasData && !data.isFormCompleted);
+          console.log('🔍 [FRONTEND] isFirstAccess:', data.isFirstAccess);
+          console.log('🔍 [FRONTEND] hasData:', data.hasData);
+          console.log('🔍 [FRONTEND] isSigned:', data.isSigned);
+          console.log('🔍 [FRONTEND] isFormCompleted:', data.isFormCompleted);
+          console.log('🔍 [FRONTEND] data.data:', data.data);
+          console.log('🔍 [FRONTEND] shouldShowForm:', shouldShowForm);
+          setShowFirstAccessForm(shouldShowForm);
+        } else {
+          console.error('❌ [FRONTEND] Erro ao verificar primeiro acesso:', data.error);
+          // Em caso de erro, não bloquear o acesso
+          setShowFirstAccessForm(false);
+        }
+      } catch (error) {
+        console.error('❌ [FRONTEND] Erro ao verificar primeiro acesso:', error);
+        console.error('❌ [FRONTEND] Stack:', error.stack);
+        // Em caso de erro, não bloquear o acesso
+        setShowFirstAccessForm(false);
+      } finally {
+        setCheckingFirstAccess(false);
+        console.log('✅ [FRONTEND] Verificação de primeiro acesso concluída');
+      }
+    };
+
+    checkFirstAccess();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentUser, tipoCompliance]);
 
   // Carregar organizações quando usuário for Portes
   useEffect(() => {
@@ -2777,10 +2883,83 @@ export default function Compliance({ tipoCompliance }: ComplianceProps) {
   // Renderizar conteúdo baseado na view atual
   return (
     <>
-      {/* Conteúdo principal */}
-      {currentView === 'list' && renderListCompetencias()}
-      {currentView === 'create' && renderCreateCompetencia()}
-      {currentView === 'view' && renderViewCompetencia()}
+      {/* Formulário de primeiro acesso */}
+      {showFirstAccessForm && tipoCompliance && (() => {
+        // Obter userId do currentUser ou do localStorage
+        let userId = currentUser?.id;
+        if (!userId) {
+          try {
+            const userFromStorage = localStorage.getItem('user');
+            if (userFromStorage) {
+              const parsedUser = JSON.parse(userFromStorage);
+              userId = parsedUser.id;
+            }
+          } catch (error) {
+            console.error('Erro ao obter userId do localStorage:', error);
+          }
+        }
+        
+        if (!userId) return null;
+        
+        return (
+          <FirstAccessForm
+            tipoCompliance={tipoCompliance}
+            userId={userId}
+          onComplete={async () => {
+            setShowFirstAccessForm(false);
+            setCheckingFirstAccess(false);
+            // Recarregar competências após completar o cadastro
+            if (currentUser) {
+              loadCompetencias();
+            }
+            // Recarregar verificação de primeiro acesso para garantir que não mostra mais o formulário
+            // Isso é importante quando o usuário salva sem assinar
+            if (currentUser?.id && tipoCompliance) {
+              try {
+                let baseUrl = API_BASE;
+                if (baseUrl.endsWith('/api')) {
+                  baseUrl = baseUrl.slice(0, -4);
+                }
+                const response = await fetch(`${baseUrl}/api/compliance/first-access/${tipoCompliance}/check`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ userId: currentUser.id }),
+                });
+                const data = await response.json();
+                if (data.success) {
+                  setShowFirstAccessForm(data.isFirstAccess);
+                }
+              } catch (error) {
+                console.error('Erro ao recarregar verificação de primeiro acesso:', error);
+              }
+            }
+          }}
+          onCancel={() => {
+            // Se cancelar, redirecionar para a tela de seleção
+            navigate('/compliance');
+          }}
+        />
+        );
+      })()}
+
+      {/* Mostrar loading enquanto verifica primeiro acesso */}
+      {checkingFirstAccess && (
+        <div className="flex items-center justify-center min-h-[400px]">
+          <div className="text-center">
+            <Loader2 className="h-8 w-8 animate-spin text-blue-600 mx-auto mb-4" />
+            <p className="text-gray-600">Verificando acesso...</p>
+          </div>
+        </div>
+      )}
+
+      {/* Conteúdo principal - só mostrar se não estiver verificando ou mostrando formulário */}
+      {!checkingFirstAccess && !showFirstAccessForm && (
+        <>
+          {currentView === 'list' && renderListCompetencias()}
+          {currentView === 'create' && renderCreateCompetencia()}
+          {currentView === 'view' && renderViewCompetencia()}
+        </>
+      )}
       
       {/* Modal de confirmação de exclusão */}
       <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>

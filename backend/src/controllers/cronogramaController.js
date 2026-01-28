@@ -161,7 +161,8 @@ exports.criarCronograma = async (req, res) => {
       prioridade = 'media',
       observacoes,
       status = 'pendente',
-      motivo_atraso
+      motivo_atraso,
+      parte_responsavel_atraso
     } = req.body;
     const userIdHeader = req.headers['x-user-id'] || req.body.created_by;
     const createdByUserId = userIdHeader ? parseInt(userIdHeader, 10) : null;
@@ -187,8 +188,8 @@ exports.criarCronograma = async (req, res) => {
     const result = await executeQueryWithRetry(`
       INSERT INTO cronograma (
         titulo, descricao, organizacao, fase_atual, data_inicio, data_fim,
-        responsavel_id, prioridade, observacoes, status, motivo_atraso
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        responsavel_id, prioridade, observacoes, status, motivo_atraso, parte_responsavel_atraso
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `, [
       tituloLimpo,
       descricao,
@@ -200,7 +201,8 @@ exports.criarCronograma = async (req, res) => {
       prioridade,
       observacoes,
       status,
-      motivo_atraso || null
+      motivo_atraso || null,
+      parte_responsavel_atraso || null
     ]);
     
     // Buscar o cronograma criado
@@ -279,7 +281,8 @@ exports.atualizarCronograma = async (req, res) => {
       prioridade,
       status,
       observacoes,
-      motivo_atraso
+      motivo_atraso,
+      parte_responsavel_atraso
     } = req.body;
     
     
@@ -317,6 +320,10 @@ exports.atualizarCronograma = async (req, res) => {
     if (status !== undefined) { updates.push('status = ?'); params.push(status); }
     if (observacoes !== undefined) { updates.push('observacoes = ?'); params.push(observacoes); }
     if (motivo_atraso !== undefined) { updates.push('motivo_atraso = ?'); params.push(motivo_atraso); }
+    if (parte_responsavel_atraso !== undefined) { 
+      updates.push('parte_responsavel_atraso = ?'); 
+      params.push(parte_responsavel_atraso); 
+    }
     
     // Sempre atualizar data_ultima_atualizacao e updated_at
     updates.push('data_ultima_atualizacao = CURDATE()');
@@ -461,6 +468,8 @@ exports.estatisticasCronograma = async (req, res) => {
         SUM(CASE WHEN status = 'em_andamento' THEN 1 ELSE 0 END) as em_andamento,
         SUM(CASE WHEN status = 'concluido' THEN 1 ELSE 0 END) as concluidos,
         SUM(CASE WHEN status = 'atrasado' THEN 1 ELSE 0 END) as atrasados,
+        SUM(CASE WHEN status = 'atrasado' AND parte_responsavel_atraso = 'portes' THEN 1 ELSE 0 END) as atrasados_portes,
+        SUM(CASE WHEN status = 'atrasado' AND parte_responsavel_atraso = 'empresa' THEN 1 ELSE 0 END) as atrasados_empresa,
         COUNT(DISTINCT organizacao) as total_organizacoes
       FROM cronograma 
       ${whereClause}

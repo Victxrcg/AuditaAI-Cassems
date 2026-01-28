@@ -273,12 +273,33 @@ exports.checkFirstAccess = async (req, res) => {
     console.log('🔍 [FIRST ACCESS] Dados:', rows);
 
     const isFirstAccess = rows.length === 0;
+    
+    // Verificar se tem dados salvos (dados_cadastro não vazio)
+    let hasData = false;
+    if (rows.length > 0 && rows[0]?.dados_cadastro) {
+      try {
+        const dadosParsed = typeof rows[0].dados_cadastro === 'string' 
+          ? JSON.parse(rows[0].dados_cadastro) 
+          : rows[0].dados_cadastro;
+        hasData = dadosParsed && typeof dadosParsed === 'object' && Object.keys(dadosParsed).length > 0;
+      } catch (parseError) {
+        console.warn('⚠️ [FIRST ACCESS] Erro ao parsear dados_cadastro:', parseError);
+        hasData = false;
+      }
+    }
+    
+    const isSigned = rows.length > 0 && (rows[0]?.assinado_digital === true || rows[0]?.assinado_digital === 1);
+    const isFormCompleted = isSigned; // Formulário completo = assinado
+    
     console.log('🔍 [FIRST ACCESS] É primeiro acesso?', isFirstAccess);
-    console.log('🔍 [FIRST ACCESS] Tem dados salvos?', !isFirstAccess);
+    console.log('🔍 [FIRST ACCESS] Tem dados salvos?', hasData);
+    console.log('🔍 [FIRST ACCESS] Está assinado?', isSigned);
+    console.log('🔍 [FIRST ACCESS] Formulário completo?', isFormCompleted);
+    
     if (rows.length > 0) {
       console.log('🔍 [FIRST ACCESS] Dados do registro:', {
         id: rows[0]?.id,
-        temDadosCadastro: !!rows[0]?.dados_cadastro,
+        temDadosCadastro: hasData,
         assinadoDigital: rows[0]?.assinado_digital,
         aceiteTermo: rows[0]?.aceite_termo
       });
@@ -287,7 +308,9 @@ exports.checkFirstAccess = async (req, res) => {
     const response = {
       success: true,
       isFirstAccess,
-      hasData: !isFirstAccess,
+      hasData,
+      isSigned,
+      isFormCompleted, // Indica se o formulário foi completamente preenchido e assinado
       data: isFirstAccess ? null : {
         id: rows[0]?.id,
         dados_cadastro: rows[0]?.dados_cadastro,
@@ -1889,4 +1912,3 @@ exports.validarAssinaturaWebPKI = async (req, res) => {
     if (server) server.close();
   }
 };
-

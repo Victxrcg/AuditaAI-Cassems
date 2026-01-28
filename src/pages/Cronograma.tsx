@@ -1,4 +1,4 @@
-﻿import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 import {
@@ -95,6 +95,8 @@ interface CronogramaItem {
   responsavel_empresa?: string;
   observacoes?: string;
   motivo_atraso?: string;
+  // Parte com o atraso na demanda (quem está devendo ação)
+  parte_responsavel_atraso?: 'portes' | 'empresa' | null;
   data_ultima_atualizacao?: string;
   created_at: string;
   updated_at: string;
@@ -108,6 +110,8 @@ interface Estatisticas {
   atrasados: number;
   progresso_medio: number;
   total_organizacoes: number;
+  atrasados_portes?: number;
+  atrasados_empresa?: number;
 }
 
 interface CronogramaAlerta {
@@ -187,6 +191,7 @@ const Cronograma = () => {
     prioridade: 'media',
     observacoes: '',
     motivo_atraso: '',
+    parte_responsavel_atraso: null as 'portes' | 'empresa' | null,
     responsavel_id: null as number | null
   });
 
@@ -1905,22 +1910,11 @@ const Cronograma = () => {
         prioridade: editingCronograma.prioridade,
         observacoes: editingCronograma.observacoes || '',
         motivo_atraso: editingCronograma.motivo_atraso || '',
+        parte_responsavel_atraso: editingCronograma.parte_responsavel_atraso ?? null,
         responsavel_id: editingCronograma.responsavel_id || null
       });
     } else {
-      setFormData({
-        titulo: '',
-        descricao: '',
-        organizacao: currentUser?.organizacao || 'cassems',
-        fase_atual: 'inicio',
-        data_inicio: '',
-        data_fim: '',
-        status: 'pendente',
-        prioridade: 'media',
-        observacoes: '',
-        motivo_atraso: '',
-        responsavel_id: null
-      });
+      setFormData(initialFormData());
     }
   }, [editingCronograma, currentUser]);
 
@@ -2063,6 +2057,47 @@ const Cronograma = () => {
     const diffTime = hoje.getTime() - fim.getTime();
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
     return diffDays > 0 ? diffDays : 0;
+  };
+
+  // Formatar nome da organização para exibição (ex.: "rede_frota" -> "REDE FROTA")
+  const formatOrgLabel = (org?: string | null) => {
+    if (!org) return 'EMPRESA';
+    return org.replace(/_/g, ' ').toUpperCase();
+  };
+
+  // Cor da barra do cronograma considerando quem está com a bola
+  const getBarColorClass = (item: CronogramaItem) => {
+    if (item.status !== 'atrasado') {
+      // Mantém cores atuais para outros status (ajuste se já tiver lógica própria)
+      if (item.status === 'concluido') return 'bg-green-500';
+      if (item.status === 'em_andamento') return 'bg-blue-500';
+      if (item.status === 'pendente') return 'bg-gray-300';
+      return 'bg-gray-300';
+    }
+
+    if (item.parte_responsavel_atraso === 'empresa') {
+      // Atraso na ponta do cliente/fornecedor
+      return 'bg-orange-500';
+    }
+
+    // Atraso sob responsabilidade da Portes (ou não informado)
+    return 'bg-red-500';
+  };
+
+  // Determinar com quem está a "bola" (responsabilidade principal)
+  const getBolaComLabel = (cronograma: CronogramaItem) => {
+    // Se a empresa responsável explicitamente for Portes
+    if (cronograma.responsavel_empresa && cronograma.responsavel_empresa.toLowerCase().includes('portes')) {
+      return 'Portes';
+    }
+
+    // Se a organização do cronograma for Portes
+    if (cronograma.organizacao && cronograma.organizacao.toLowerCase().includes('portes')) {
+      return 'Portes';
+    }
+
+    // Caso contrário, considerar que a bola está com a empresa cliente
+    return 'Empresa';
   };
 
   const normalizeFileName = (name?: string | null) => {
@@ -2598,7 +2633,7 @@ const Cronograma = () => {
         <div className="relative flex-1 h-full">
           {dataInicio && dataFim && (
             <div
-              className={`absolute top-1/2 transform -translate-y-1/2 h-6 sm:h-7 lg:h-8 rounded-lg ${coresStatus[cronograma.status]} shadow-sm hover:shadow-md transition-all cursor-pointer border-2 border-white hover:scale-105 overflow-hidden`}
+              className={`absolute top-1/2 transform -translate-y-1/2 h-6 sm:h-7 lg:h-8 rounded-lg ${getBarColorClass(cronograma)} shadow-sm hover:shadow-md transition-all cursor-pointer border-2 border-white hover:scale-105 overflow-hidden`}
               style={{
                 left: posicao.inicio,
                 width: posicao.largura,
@@ -3006,7 +3041,30 @@ const Cronograma = () => {
                                         Aguardando ação
                                       </span>
                                     )}
+                                    
+                                    {cronograma.status === 'atrasado' && (
+                                      <span
+                                        className={`px-2 py-0.5 text-[10px] lg:text-xs font-semibold border rounded-full inline-flex items-center gap-1 ${
+                                          cronograma.parte_responsavel_atraso === 'portes'
+                                            ? 'bg-blue-100 text-blue-700 border-blue-300'
+                                            : 'bg-orange-100 text-orange-700 border-orange-300'
+                                        }`}
+                                      >
+                                        🏀{' '}
+                                        {cronograma.parte_responsavel_atraso === 'portes'
+                                          ? 'BOLA COM PORTES'
+                                          : `BOLA COM ${formatOrgLabel(cronograma.organizacao)}`}
+                                      </span>
+                                    )}
                                   </div>
+
+                                  {/* Resumo rápido do motivo do atraso */}
+                                  {cronograma.status === 'atrasado' && cronograma.motivo_atraso && (
+                                    <p className="mb-2 text-[11px] lg:text-xs text-red-700 line-clamp-1">
+                                      <span className="font-semibold">Motivo:</span>{' '}
+                                      {cronograma.motivo_atraso}
+                                    </p>
+                                  )}
 
                                   {/* Datas */}
                                   <div className="text-xs lg:text-sm text-gray-600">
@@ -3684,7 +3742,25 @@ const Cronograma = () => {
               <AlertCircle className="h-3 w-3 sm:h-4 sm:w-4 text-red-500 flex-shrink-0 ml-2" />
             </CardHeader>
             <CardContent className="p-4 sm:p-6 pt-0">
-              <div className="text-xl sm:text-2xl font-bold text-red-600 break-words">{estatisticas.atrasados}</div>
+              <div className="text-xl sm:text-2xl font-bold text-red-600 break-words">
+                {estatisticas.atrasados}
+              </div>
+              <div className="mt-2 space-y-1 text-xs sm:text-sm">
+                <p className="text-red-700 flex items-center gap-1">
+                  <span className="inline-block w-2 h-2 rounded-full bg-red-500" />
+                  Portes:{' '}
+                  <span className="font-semibold">
+                    {estatisticas.atrasados_portes ?? 0}
+                  </span>
+                </p>
+                <p className="text-orange-700 flex items-center gap-1">
+                  <span className="inline-block w-2 h-2 rounded-full bg-orange-400" />
+                  Cliente:{' '}
+                  <span className="font-semibold">
+                    {estatisticas.atrasados_empresa ?? 0}
+                  </span>
+                </p>
+              </div>
             </CardContent>
           </Card>
         </div>
@@ -4022,20 +4098,55 @@ const Cronograma = () => {
                 </div>
 
                 {formData.status === 'atrasado' && (
-                  <div className="lg:col-span-2">
-                    <Label htmlFor="motivo_atraso" className="text-xs sm:text-sm font-medium">Motivo do Atraso *</Label>
-                    <Textarea
-                      id="motivo_atraso"
-                      value={formData.motivo_atraso}
-                      onChange={(e) => setFormData({...formData, motivo_atraso: e.target.value})}
-                      placeholder="Explique o motivo do atraso (obrigatório quando status é 'atrasado')"
-                      rows={2}
-                      className="mt-1.5 text-xs sm:text-sm border-red-200 focus:border-red-500"
-                    />
-                    <p className="text-xs text-red-600 mt-1.5 break-words">
-                      Este campo é obrigatório quando o status é "Atrasado"
-                    </p>
-                  </div>
+                  <>
+                    <div className="lg:col-span-2">
+                      <Label htmlFor="motivo_atraso" className="text-xs sm:text-sm font-medium">Motivo do Atraso *</Label>
+                      <Textarea
+                        id="motivo_atraso"
+                        value={formData.motivo_atraso}
+                        onChange={(e) => setFormData({ ...formData, motivo_atraso: e.target.value })}
+                        placeholder="Explique o motivo do atraso (obrigatório quando status é 'atrasado')"
+                        rows={2}
+                        className="mt-1.5 text-xs sm:text-sm border-red-200 focus:border-red-500"
+                      />
+                      <p className="text-xs text-red-600 mt-1.5 break-words">
+                        Este campo é obrigatório quando o status é "Atrasado"
+                      </p>
+                    </div>
+
+                    <div className="lg:col-span-2">
+                      <Label className="text-xs sm:text-sm font-medium">Com qual parte está o atraso? *</Label>
+                      <div className="mt-1.5 flex flex-wrap gap-2 text-xs sm:text-sm">
+                        <Button
+                          type="button"
+                          variant={formData.parte_responsavel_atraso === 'empresa' ? 'default' : 'outline'}
+                          size="sm"
+                          className="h-8 px-3"
+                          onClick={() => setFormData({ ...formData, parte_responsavel_atraso: 'empresa' })}
+                        >
+                          <span className="inline-flex items-center gap-1">
+                            <span className="inline-block w-2 h-2 rounded-full bg-orange-400" />
+                            Empresa
+                          </span>
+                        </Button>
+                        <Button
+                          type="button"
+                          variant={formData.parte_responsavel_atraso === 'portes' ? 'default' : 'outline'}
+                          size="sm"
+                          className="h-8 px-3"
+                          onClick={() => setFormData({ ...formData, parte_responsavel_atraso: 'portes' })}
+                        >
+                          <span className="inline-flex items-center gap-1">
+                            <span className="inline-block w-2 h-2 rounded-full bg-blue-500" />
+                            Portes
+                          </span>
+                        </Button>
+                      </div>
+                      <p className="text-xs text-red-600 mt-1.5 break-words">
+                        Selecione com qual parte está o atraso (Empresa ou Portes).
+                      </p>
+                    </div>
+                  </>
                 )}
               </div>
             </div>
@@ -4058,7 +4169,7 @@ const Cronograma = () => {
                 onClick={salvarCronograma} 
                 disabled={
                   !formData.titulo.trim() || 
-                  (formData.status === 'atrasado' && !formData.motivo_atraso.trim())
+                  (formData.status === 'atrasado' && (!formData.motivo_atraso.trim() || !formData.parte_responsavel_atraso))
                 }
                 className="text-xs sm:text-sm w-full sm:w-auto"
               >
@@ -4084,6 +4195,41 @@ const Cronograma = () => {
           
           {viewingCronograma && (
             <>
+              {/* Destaque de atraso no topo */}
+              {viewingCronograma.status === 'atrasado' && (
+                <div className="px-3 sm:px-4 lg:px-6 pt-3 sm:pt-4">
+                  <Card className="border-l-4 border-red-500 bg-red-50">
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-red-700 flex items-center gap-2 text-sm sm:text-base">
+                        <AlertTriangle className="w-4 h-4 sm:w-5 sm:h-5" />
+                        Demanda Atrasada
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="pt-0 space-y-2 text-xs sm:text-sm">
+                      <p>
+                        <strong>🏀 Bola com:</strong>{' '}
+                        {viewingCronograma.parte_responsavel_atraso === 'portes'
+                          ? 'Portes'
+                          : formatOrgLabel(viewingCronograma.organizacao)}
+                      </p>
+
+                      {viewingCronograma.motivo_atraso && (
+                        <p>
+                          <strong>Motivo:</strong> {viewingCronograma.motivo_atraso}
+                        </p>
+                      )}
+
+                      <p className="text-[11px] text-gray-600">
+                        Última atualização:{' '}
+                        {viewingCronograma.updated_at
+                          ? new Date(viewingCronograma.updated_at).toLocaleString('pt-BR')
+                          : 'N/A'}
+                      </p>
+                    </CardContent>
+                  </Card>
+                </div>
+              )}
+
               <div className="flex-1 overflow-y-auto min-h-0 px-3 sm:px-4 lg:px-6 py-4 sm:py-5 lg:py-6">
                 <div className="flex flex-col lg:grid lg:grid-cols-2 gap-4 sm:gap-4 lg:gap-6">
                 {/* Grid 1: Informações da Demanda */}
