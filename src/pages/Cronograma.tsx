@@ -3043,17 +3043,8 @@ const Cronograma = () => {
                                     )}
                                     
                                     {cronograma.status === 'atrasado' && (
-                                      <span
-                                        className={`px-2 py-0.5 text-[10px] lg:text-xs font-semibold border rounded-full inline-flex items-center gap-1 ${
-                                          cronograma.parte_responsavel_atraso === 'portes'
-                                            ? 'bg-blue-100 text-blue-700 border-blue-300'
-                                            : 'bg-orange-100 text-orange-700 border-orange-300'
-                                        }`}
-                                      >
-                                        🏀{' '}
-                                        {cronograma.parte_responsavel_atraso === 'portes'
-                                          ? 'BOLA COM PORTES'
-                                          : `BOLA COM ${formatOrgLabel(cronograma.organizacao)}`}
+                                      <span className="px-2 lg:px-2.5 py-0.5 rounded-full text-[10px] lg:text-xs font-semibold bg-orange-100 text-orange-700 border border-orange-300 inline-flex items-center gap-1">
+                                        🏀 BOLA COM: MARAJÓ / REDE FROTA - Murilo e T.I
                                       </span>
                                     )}
                                   </div>
@@ -4098,55 +4089,20 @@ const Cronograma = () => {
                 </div>
 
                 {formData.status === 'atrasado' && (
-                  <>
-                    <div className="lg:col-span-2">
-                      <Label htmlFor="motivo_atraso" className="text-xs sm:text-sm font-medium">Motivo do Atraso *</Label>
-                      <Textarea
-                        id="motivo_atraso"
-                        value={formData.motivo_atraso}
-                        onChange={(e) => setFormData({ ...formData, motivo_atraso: e.target.value })}
-                        placeholder="Explique o motivo do atraso (obrigatório quando status é 'atrasado')"
-                        rows={2}
-                        className="mt-1.5 text-xs sm:text-sm border-red-200 focus:border-red-500"
-                      />
-                      <p className="text-xs text-red-600 mt-1.5 break-words">
-                        Este campo é obrigatório quando o status é "Atrasado"
-                      </p>
-                    </div>
-
-                    <div className="lg:col-span-2">
-                      <Label className="text-xs sm:text-sm font-medium">Com qual parte está o atraso? *</Label>
-                      <div className="mt-1.5 flex flex-wrap gap-2 text-xs sm:text-sm">
-                        <Button
-                          type="button"
-                          variant={formData.parte_responsavel_atraso === 'empresa' ? 'default' : 'outline'}
-                          size="sm"
-                          className="h-8 px-3"
-                          onClick={() => setFormData({ ...formData, parte_responsavel_atraso: 'empresa' })}
-                        >
-                          <span className="inline-flex items-center gap-1">
-                            <span className="inline-block w-2 h-2 rounded-full bg-orange-400" />
-                            Empresa
-                          </span>
-                        </Button>
-                        <Button
-                          type="button"
-                          variant={formData.parte_responsavel_atraso === 'portes' ? 'default' : 'outline'}
-                          size="sm"
-                          className="h-8 px-3"
-                          onClick={() => setFormData({ ...formData, parte_responsavel_atraso: 'portes' })}
-                        >
-                          <span className="inline-flex items-center gap-1">
-                            <span className="inline-block w-2 h-2 rounded-full bg-blue-500" />
-                            Portes
-                          </span>
-                        </Button>
-                      </div>
-                      <p className="text-xs text-red-600 mt-1.5 break-words">
-                        Selecione com qual parte está o atraso (Empresa ou Portes).
-                      </p>
-                    </div>
-                  </>
+                  <div className="lg:col-span-2">
+                    <Label htmlFor="motivo_atraso" className="text-xs sm:text-sm font-medium">Motivo do Atraso *</Label>
+                    <Textarea
+                      id="motivo_atraso"
+                      value={formData.motivo_atraso}
+                      onChange={(e) => setFormData({ ...formData, motivo_atraso: e.target.value })}
+                      placeholder="Explique o motivo do atraso (obrigatório quando status é 'atrasado')"
+                      rows={2}
+                      className="mt-1.5 text-xs sm:text-sm border-red-200 focus:border-red-500"
+                    />
+                    <p className="text-xs text-red-600 mt-1.5 break-words">
+                      Este campo é obrigatório quando o status é "Atrasado"
+                    </p>
+                  </div>
                 )}
               </div>
             </div>
@@ -4185,7 +4141,7 @@ const Cronograma = () => {
         <DialogContent className="max-w-7xl w-[95vw] max-h-[95vh] overflow-hidden flex flex-col p-0">
           <DialogHeader className="relative flex-shrink-0 px-3 sm:px-4 lg:px-6 pt-3 sm:pt-4 lg:pt-6 pb-3 sm:pb-4 border-b">
             <DialogTitle className="flex items-center gap-2 text-base sm:text-lg lg:text-xl break-words flex-1 min-w-0">
-              <div className="w-2 h-2 sm:w-3 sm:h-3 rounded-full bg-blue-500 flex-shrink-0"></div>
+                    <div className="w-2 h-2 sm:w-3 sm:h-3 rounded-full bg-blue-500 flex-shrink-0"></div>
               <span className="break-words">{viewingCronograma?.titulo}</span>
             </DialogTitle>
             <DialogDescription className="text-xs sm:text-sm break-words mt-2">
@@ -4207,10 +4163,7 @@ const Cronograma = () => {
                     </CardHeader>
                     <CardContent className="pt-0 space-y-2 text-xs sm:text-sm">
                       <p>
-                        <strong>🏀 Bola com:</strong>{' '}
-                        {viewingCronograma.parte_responsavel_atraso === 'portes'
-                          ? 'Portes'
-                          : formatOrgLabel(viewingCronograma.organizacao)}
+                        <strong>🏀 Bola com:</strong> MARAJÓ / REDE FROTA - Murilo e T.I
                       </p>
 
                       {viewingCronograma.motivo_atraso && (
