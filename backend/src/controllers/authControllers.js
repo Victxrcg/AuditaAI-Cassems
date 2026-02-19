@@ -1,5 +1,6 @@
 // backend/src/controllers/authControllers.js
 const { getDbPoolWithTunnel } = require('../lib/db');
+const { normalizeOrganizationCode } = require('../utils/normalizeOrganization');
 const nodemailer = require('nodemailer');
 
 // In-memory store for verification codes (email => { code, expiresAt })
@@ -200,10 +201,7 @@ exports.registrar = async (req, res) => {
     
     // Se tiver código de organização fornecido (link direto), usar ele
     if (orgCodigoFromQuery) {
-      organizacao = orgCodigoFromQuery.toLowerCase()
-        .replace(/[^a-z0-9\s_-]/g, '') // Remove caracteres especiais, mantém underscore e hífen
-        .replace(/\s+/g, '_') // Substitui espaços por underscore
-        .substring(0, 100); // Limita tamanho
+      organizacao = normalizeOrganizationCode(orgCodigoFromQuery);
       
       // Buscar organização na tabela para pegar cor e nome
       try {

@@ -1,4 +1,4 @@
-﻿import { Toaster } from "@/components/ui/toaster";
+import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -11,6 +11,7 @@ import Register from "./pages/Register";
 import Users from "./pages/Users";
 import Cronograma from "./pages/Cronograma";
 import Documentos from "./pages/Documentos";
+import NotasFiscais from "./pages/NotasFiscais";
 import Ajuda from "./pages/Ajuda";
 import Manutencao from "./pages/Manutencao";
 import AcessoNegado from "./pages/AcessoNegado";
@@ -93,6 +94,14 @@ const AppContent = () => {
           element={
             <ProtectedRoute requiredPermission="documentos">
               <Layout><Documentos /></Layout>
+            </ProtectedRoute>
+          } 
+        />
+        <Route 
+          path="/notas-fiscais" 
+          element={
+            <ProtectedRoute requiredPermission="notas-fiscais">
+              <Layout><NotasFiscais /></Layout>
             </ProtectedRoute>
           } 
         />

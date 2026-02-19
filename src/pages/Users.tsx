@@ -18,7 +18,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Plus, RefreshCw, User, Users as UsersIcon, Mail, Shield, CheckCircle, XCircle, Key, Calendar, Clock, Building, Edit, Save, X, Trash2, Filter, FileText, HelpCircle, LayoutDashboard, Lock, Upload, Image as ImageIcon, Copy, Link as LinkIcon } from 'lucide-react';
+import { Plus, RefreshCw, User, Users as UsersIcon, Mail, Shield, CheckCircle, XCircle, Key, Calendar, Clock, Building, Edit, Save, X, Trash2, Filter, FileText, HelpCircle, LayoutDashboard, Lock, Upload, Image as ImageIcon, Copy, Link as LinkIcon, ReceiptText } from 'lucide-react';
 import { toast } from '@/components/ui/use-toast';
 
 interface UserRow {
@@ -79,6 +79,7 @@ const Users = () => {
     { id: 'cronograma', nome: 'Cronograma', descricao: 'Acesso ao cronograma de demandas', icon: Calendar, cor: '#3B82F6' },
     { id: 'compliance', nome: 'Compliance', descricao: 'Acesso à página de compliance fiscal', icon: Shield, cor: '#10B981' },
     { id: 'documentos', nome: 'Documentos', descricao: 'Acesso à gestão de documentos', icon: FileText, cor: '#8B5CF6' },
+    { id: 'notas-fiscais', nome: 'Notas fiscais', descricao: 'Anexar notas fiscais para compliance e transparência', icon: ReceiptText, cor: '#0D9488' },
     { id: 'usuarios', nome: 'Usuários', descricao: 'Acesso à gestão de usuários (apenas Portes)', icon: UsersIcon, cor: '#F59E0B' },
     { id: 'ajuda', nome: 'Ajuda', descricao: 'Acesso à página de ajuda', icon: HelpCircle, cor: '#6366F1' }
   ];

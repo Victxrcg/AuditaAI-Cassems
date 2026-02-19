@@ -1,5 +1,6 @@
 // backend/src/controllers/organizacoesController.js
 const { getDbPoolWithTunnel, executeQueryWithRetry } = require('../lib/db');
+const { normalizeOrganizationCode } = require('../utils/normalizeOrganization');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
@@ -213,12 +214,14 @@ const migrarOrganizacoesExistentes = async (pool) => {
     const mapeamentoNomes = {
       'cassems': { nome: 'CASSEMS', cor: '#3B82F6' },
       'portes': { nome: 'PORTES ADVOGADOS', cor: '#10B981' },
-      'rede_frota': { nome: 'MARAJÓ / REDE FROTA', cor: '#8B5CF6' }
+      'rede_frota': { nome: 'MARAJÓ / REDE FROTA', cor: '#8B5CF6' },
+      'marajó / rede frota': { nome: 'MARAJÓ / REDE FROTA', cor: '#8B5CF6' }
     };
 
     let inseridas = 0;
     for (const org of orgsArray) {
-      const codigo = org.organizacao.toLowerCase().trim();
+      const codigoOriginal = org.organizacao;
+      const codigo = normalizeOrganizationCode(codigoOriginal);
       
       // Verificar se já existe
       const existentesResult = await pool.query(
@@ -243,6 +246,15 @@ const migrarOrganizacoesExistentes = async (pool) => {
 
         inseridas++;
         console.log(`✅ Organização migrada: ${config.nome} (${codigo})`);
+      }
+
+      // Atualizar usuários com codigo variante para usar o canônico
+      if (codigoOriginal !== codigo) {
+        await pool.query(
+          'UPDATE usuarios_cassems SET organizacao = ? WHERE organizacao = ?',
+          [codigo, codigoOriginal]
+        );
+        console.log(`✅ Usuários atualizados: ${codigoOriginal} -> ${codigo}`);
       }
     }
 
@@ -325,7 +337,32 @@ exports.listarOrganizacoes = async (req, res) => {
     console.log('🔍 Organizações processadas:', rowsArray.length);
 
     // Converter BigInt para Number (necessário porque JSON.stringify não suporta BigInt)
-    const processedData = convertBigIntToNumber(rowsArray);
+    let processedData = convertBigIntToNumber(rowsArray);
+
+    // Remover duplicatas - preferir org "marajó / rede frota" (id 8 com logo)
+    const mapeamentoNomesResposta = {
+      'marajó / rede frota': 'MARAJÓ / REDE FROTA',
+      rede_frota: 'MARAJÓ / REDE FROTA',
+      cassems: 'CASSEMS',
+      portes: 'PORTES ADVOGADOS'
+    };
+    // Ordenar para manter a org cujo codigo já é o canônico (ex: "marajó / rede frota" com logo)
+    processedData.sort((a, b) => {
+      const canonA = normalizeOrganizationCode(a.codigo);
+      const canonB = normalizeOrganizationCode(b.codigo);
+      const matchA = a.codigo === canonA ? 1 : 0;
+      const matchB = b.codigo === canonB ? 1 : 0;
+      return matchB - matchA;
+    });
+    const codigosCanonicos = new Set();
+    processedData = processedData.filter((org) => {
+      const canonico = normalizeOrganizationCode(org.codigo);
+      if (codigosCanonicos.has(canonico)) return false;
+      codigosCanonicos.add(canonico);
+      org.codigo = canonico;
+      if (mapeamentoNomesResposta[canonico]) org.nome = mapeamentoNomesResposta[canonico];
+      return true;
+    });
 
     res.json({
       success: true,

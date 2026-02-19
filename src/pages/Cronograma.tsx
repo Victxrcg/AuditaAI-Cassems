@@ -32,6 +32,15 @@ import {
   updateChecklistItem,
   type ChecklistItem
 } from '@/services/checklistService';
+import {
+  listarDocumentos,
+  listarPastas,
+  criarPasta,
+  uploadDocumento,
+  downloadDocumento,
+  removerDocumento,
+  type Documento
+} from '@/services/documentosService';
 import Checklist from '@/components/Checklist';
 import {
   DndContext,
@@ -75,9 +84,14 @@ import {
   GripVertical,
   CheckSquare,
   Download,
-  ArrowLeft
+  ArrowLeft,
+  Mic,
+  Paperclip,
+  FileText,
+  Eye
 } from 'lucide-react';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import FileUploadArea, { FileUploadState } from '@/components/FileUploadArea';
 
 interface CronogramaItem {
   id: number;
@@ -180,6 +194,22 @@ const Cronograma = () => {
   const [ackAllLoading, setAckAllLoading] = useState(false);
   const [paginaAlertas, setPaginaAlertas] = useState(1);
   const ALERTAS_POR_PAGINA = 3;
+  // Plaud: importar demandas a partir de reunião gravada
+  const [isPlaudModalOpen, setIsPlaudModalOpen] = useState(false);
+  const [plaudWorkflowId, setPlaudWorkflowId] = useState('');
+  const [plaudOrganizacao, setPlaudOrganizacao] = useState('');
+  const [plaudDemandasPreview, setPlaudDemandasPreview] = useState<Array<{ titulo: string; descricao?: string | null; data_inicio?: string | null; data_fim?: string | null }>>([]);
+  const [plaudLoading, setPlaudLoading] = useState(false);
+  const [plaudCreating, setPlaudCreating] = useState(false);
+  const [plaudConfigEnabled, setPlaudConfigEnabled] = useState(false);
+  // Documentos anexados à demanda (no dialog de visualização)
+  const [documentosDemanda, setDocumentosDemanda] = useState<Documento[]>([]);
+  const [pastaDemandaId, setPastaDemandaId] = useState<number | null>(null);
+  const [docsDemandaLoading, setDocsDemandaLoading] = useState(false);
+  const [uploadDocState, setUploadDocState] = useState<FileUploadState>({ file: null, status: 'idle', progress: 0 });
+  const [deletingDocDemanda, setDeletingDocDemanda] = useState<Documento | null>(null);
+  const [pdfDocDemanda, setPdfDocDemanda] = useState<Documento | null>(null);
+  const [showUploadDoc, setShowUploadDoc] = useState(false);
   const initialFormData = () => ({
     titulo: '',
     descricao: '',
@@ -1559,6 +1589,76 @@ const Cronograma = () => {
     setTipoOverview('geral');
   };
 
+  const PASTA_DEMANDAS = 'Documentos das Demandas';
+  const PASTA_CRONO_PREFIX = 'Cronograma #';
+
+  // Obter ou criar pasta pai "Documentos das Demandas" por organização
+  const getOrCreatePastaDemandas = async (org: string): Promise<number | null> => {
+    try {
+      const pastas = await listarPastas(org);
+      const pastaExistente = (pastas || []).find(
+        (p: { titulo?: string; pasta_pai_id?: number | null }) => p.titulo === PASTA_DEMANDAS && !p.pasta_pai_id
+      );
+      if (pastaExistente) return pastaExistente.id;
+      const novaPasta = await criarPasta(
+        PASTA_DEMANDAS,
+        'Documentos anexados às demandas do cronograma',
+        currentUser?.id,
+        org,
+        null
+      );
+      return novaPasta?.id ?? null;
+    } catch (e) {
+      console.error('Erro ao obter/criar pasta Documentos das Demandas:', e);
+      return null;
+    }
+  };
+
+  // Obter ou criar pasta da demanda (subpasta de "Documentos das Demandas")
+  const getOrCreatePastaDemanda = async (cronograma: CronogramaItem): Promise<number | null> => {
+    const org = cronograma.organizacao || currentUser?.organizacao || 'cassems';
+    const tituloPasta = `${PASTA_CRONO_PREFIX}${cronograma.id}`;
+    try {
+      const pastas = await listarPastas(org);
+      // Primeiro: usar pasta existente (raiz ou já sob Documentos das Demandas)
+      const pastaExistente = (pastas || []).find(
+        (p: { titulo?: string; organizacao?: string }) =>
+          p.titulo === tituloPasta && (p.organizacao || '').toLowerCase() === org.toLowerCase()
+      );
+      if (pastaExistente) return pastaExistente.id;
+
+      // Nova pasta: criar sob "Documentos das Demandas"
+      const pastaPaiId = await getOrCreatePastaDemandas(org);
+      if (!pastaPaiId) return null;
+
+      const novaPasta = await criarPasta(tituloPasta, cronograma.titulo, currentUser?.id, org, pastaPaiId);
+      return novaPasta?.id ?? null;
+    } catch (e) {
+      console.error('Erro ao obter/criar pasta da demanda:', e);
+      return null;
+    }
+  };
+
+  // Carregar documentos anexados à demanda
+  const loadDocumentosDemanda = async (cronograma: CronogramaItem) => {
+    setDocsDemandaLoading(true);
+    setDocumentosDemanda([]);
+    setPastaDemandaId(null);
+    try {
+      const pastaId = await getOrCreatePastaDemanda(cronograma);
+      setPastaDemandaId(pastaId);
+      if (!pastaId) return;
+      const docs = await listarDocumentos(cronograma.organizacao || currentUser?.organizacao);
+      const filtrados = (docs || []).filter((d: Documento) => d.pasta_id === pastaId);
+      setDocumentosDemanda(filtrados);
+    } catch (e) {
+      console.error('Erro ao carregar documentos da demanda:', e);
+      toast({ title: 'Erro', description: 'Erro ao carregar documentos', variant: 'destructive' });
+    } finally {
+      setDocsDemandaLoading(false);
+    }
+  };
+
   // Função para carregar itens do checklist
   const loadChecklistItems = async (cronogramaId: number) => {
     try {
@@ -1749,10 +1849,13 @@ const Cronograma = () => {
     }
   }, [isOrganizationModalOpen, isStatusModalOpen]);
 
-  // Carregar checklist quando o modal de visualização abrir
+  // Carregar checklist e documentos quando o modal de visualização abrir
   useEffect(() => {
     if (isViewDialogOpen && viewingCronograma) {
       loadChecklistItems(viewingCronograma.id);
+      loadDocumentosDemanda(viewingCronograma);
+      setShowUploadDoc(false);
+      setUploadDocState({ file: null, status: 'idle', progress: 0 });
       // Resetar página de alertas quando abrir um novo cronograma
       setPaginaAlertas(1);
       // Expandir automaticamente o campo "Motivo do Atraso" se a demanda estiver em atraso
@@ -2262,6 +2365,75 @@ const Cronograma = () => {
         description: `Erro ao salvar cronograma: ${error.message}`,
         variant: "destructive",
       });
+    }
+  };
+
+  // Plaud: verificar se integração está ativa ao abrir o modal
+  useEffect(() => {
+    if (!isPlaudModalOpen) return;
+    const baseUrl = API_BASE.endsWith('/api') ? API_BASE : `${API_BASE}/api`;
+    fetch(`${baseUrl}/plaud/config`)
+      .then((r) => r.json())
+      .then((data) => setPlaudConfigEnabled(!!data.enabled))
+      .catch(() => setPlaudConfigEnabled(false));
+  }, [isPlaudModalOpen, API_BASE]);
+
+  const fetchPlaudResult = async () => {
+    if (!plaudWorkflowId.trim()) {
+      toast({ title: 'Campo obrigatório', description: 'Informe o ID do workflow do Plaud.', variant: 'destructive' });
+      return;
+    }
+    setPlaudLoading(true);
+    setPlaudDemandasPreview([]);
+    try {
+      const baseUrl = API_BASE.endsWith('/api') ? API_BASE : `${API_BASE}/api`;
+      const res = await fetch(`${baseUrl}/plaud/workflow/${encodeURIComponent(plaudWorkflowId.trim())}/result`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Workflow não encontrado ou ainda em processamento');
+      setPlaudDemandasPreview(data.demandas || []);
+      if (!(data.demandas || []).length) {
+        toast({ title: 'Nenhuma demanda', description: 'Nenhuma demanda foi extraída deste workflow. Verifique o ID ou o resultado no Plaud.' });
+      }
+    } catch (e) {
+      toast({ title: 'Erro', description: e instanceof Error ? e.message : 'Erro ao buscar resultado do Plaud.', variant: 'destructive' });
+    } finally {
+      setPlaudLoading(false);
+    }
+  };
+
+  const createFromPlaudWorkflow = async () => {
+    if (!plaudWorkflowId.trim() || !plaudOrganizacao.trim()) {
+      toast({ title: 'Campos obrigatórios', description: 'Informe o ID do workflow e a organização.', variant: 'destructive' });
+      return;
+    }
+    setPlaudCreating(true);
+    try {
+      const baseUrl = API_BASE.endsWith('/api') ? API_BASE : `${API_BASE}/api`;
+      const res = await fetch(`${baseUrl}/plaud/create-from-workflow`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-user-id': currentUser?.id?.toString() || '',
+          'x-user-organization': currentUser?.organizacao || '',
+        },
+        body: JSON.stringify({
+          workflowId: plaudWorkflowId.trim(),
+          organizacao: plaudOrganizacao.trim(),
+          created_by: currentUser?.id,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Erro ao criar demandas');
+      toast({ title: 'Sucesso', description: data.message || `${data.created?.length ?? 0} demanda(s) criada(s).` });
+      setIsPlaudModalOpen(false);
+      setPlaudWorkflowId('');
+      setPlaudDemandasPreview([]);
+      fetchCronogramas();
+      fetchEstatisticas();
+    } catch (e) {
+      toast({ title: 'Erro', description: e instanceof Error ? e.message : 'Erro ao criar demandas.', variant: 'destructive' });
+    } finally {
+      setPlaudCreating(false);
     }
   };
 
@@ -4311,6 +4483,82 @@ const Cronograma = () => {
                     </div>
                   )}
 
+                  {/* Documentos anexados à demanda */}
+                  <div className="w-full">
+                    <div className="flex items-center justify-between mb-2">
+                      <h3 className="text-xs sm:text-sm font-medium text-gray-600 break-words">Documentos anexados</h3>
+                      {pastaDemandaId && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setShowUploadDoc(!showUploadDoc)}
+                          className="text-xs h-7"
+                        >
+                          <Paperclip className="h-3 w-3 sm:h-3.5 sm:w-3.5 mr-1" />
+                          {showUploadDoc ? 'Ocultar' : 'Anexar'}
+                        </Button>
+                      )}
+                    </div>
+                    {showUploadDoc && pastaDemandaId && viewingCronograma && (
+                      <div className="mb-3 p-2 rounded-lg border border-dashed bg-gray-50/50">
+                        <FileUploadArea
+                          onFileSelect={(f) => setUploadDocState({ file: f, status: 'selected', progress: 0 })}
+                          onFileUpload={async (file) => {
+                            const org = viewingCronograma.organizacao || currentUser?.organizacao;
+                            await uploadDocumento(file, currentUser?.id, org, pastaDemandaId);
+                            await loadDocumentosDemanda(viewingCronograma);
+                            setUploadDocState({ file: null, status: 'idle', progress: 0 });
+                            toast({ title: 'Sucesso', description: 'Documento anexado com sucesso' });
+                          }}
+                          onFileRemove={() => setUploadDocState({ file: null, status: 'idle', progress: 0 })}
+                          accept=".pdf,application/pdf,image/*,.doc,.docx"
+                          maxSize={25 * 1024 * 1024}
+                          uploadState={uploadDocState}
+                          setUploadState={setUploadDocState}
+                        />
+                      </div>
+                    )}
+                    {docsDemandaLoading ? (
+                      <div className="flex justify-center py-2">
+                        <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-600"></div>
+                      </div>
+                    ) : documentosDemanda.length === 0 ? (
+                      <p className="text-xs text-gray-500 py-2">Nenhum documento anexado</p>
+                    ) : (
+                      <div className="space-y-1.5">
+                        {documentosDemanda.map((d) => (
+                          <div
+                            key={d.id}
+                            className="flex items-center justify-between gap-2 p-2 rounded border bg-white hover:bg-gray-50 text-xs"
+                          >
+                            <div className="flex items-center gap-2 min-w-0 flex-1">
+                              <FileText className="h-3.5 w-3.5 text-gray-500 flex-shrink-0" />
+                              <span className="truncate" title={d.nome_arquivo}>{d.nome_arquivo}</span>
+                              <Badge variant="secondary" className="text-[10px] flex-shrink-0">
+                                {Math.round((d.tamanho || 0) / 1024)} KB
+                              </Badge>
+                            </div>
+                            <div className="flex gap-1 flex-shrink-0">
+                              {d.mimetype === 'application/pdf' && (
+                                <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => setPdfDocDemanda(d)}>
+                                  <Eye className="h-3 w-3" />
+                                </Button>
+                              )}
+                              <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => downloadDocumento(d.id)}>
+                                <Download className="h-3 w-3" />
+                              </Button>
+                              {currentUser?.organizacao === 'portes' && (
+                                <Button variant="ghost" size="sm" className="h-6 w-6 p-0 text-red-600" onClick={() => setDeletingDocDemanda(d)}>
+                                  <Trash2 className="h-3 w-3" />
+                                </Button>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
                   </div>
                 </div>
 
@@ -4433,6 +4681,145 @@ const Cronograma = () => {
               </div>
             </>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal PDF documento da demanda */}
+      {pdfDocDemanda && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-[100] p-4">
+          <Card className="w-full max-w-4xl max-h-[90vh] flex flex-col">
+            <CardHeader className="flex-shrink-0 flex flex-row items-center justify-between gap-2 p-3">
+              <CardTitle className="text-sm truncate">{pdfDocDemanda.nome_arquivo}</CardTitle>
+              <Button variant="ghost" size="sm" onClick={() => setPdfDocDemanda(null)}>Fechar</Button>
+            </CardHeader>
+            <CardContent className="flex-1 min-h-0 overflow-hidden p-3">
+              <iframe
+                title="PDF"
+                className="w-full h-[70vh] rounded border"
+                src={`${(import.meta as any).env?.VITE_API_URL || 'http://localhost:3001'}/documentos/${pdfDocDemanda.id}/stream#toolbar=1`}
+              />
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* Modal confirmar exclusão de documento da demanda */}
+      {deletingDocDemanda && (
+        <Dialog open={!!deletingDocDemanda} onOpenChange={() => setDeletingDocDemanda(null)}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle className="text-red-800">Excluir documento</DialogTitle>
+              <DialogDescription>
+                Deseja remover &quot;{deletingDocDemanda.nome_arquivo}&quot;? Esta ação não pode ser desfeita.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="flex gap-2 justify-end">
+              <Button variant="outline" onClick={() => setDeletingDocDemanda(null)}>Cancelar</Button>
+              <Button
+                variant="destructive"
+                onClick={async () => {
+                  if (!deletingDocDemanda || !viewingCronograma) return;
+                  try {
+                    await removerDocumento(deletingDocDemanda.id);
+                    setDeletingDocDemanda(null);
+                    await loadDocumentosDemanda(viewingCronograma);
+                    toast({ title: 'Sucesso', description: 'Documento removido' });
+                  } catch (e) {
+                    toast({ title: 'Erro', description: 'Erro ao remover documento', variant: 'destructive' });
+                  }
+                }}
+              >
+                Excluir
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
+
+      {/* Modal Importar da reunião (Plaud) */}
+      <Dialog open={isPlaudModalOpen} onOpenChange={setIsPlaudModalOpen}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Mic className="h-5 w-5" />
+              Importar da reunião (Plaud)
+            </DialogTitle>
+            <DialogDescription>
+              Informe o ID do workflow da reunião gravada no Plaud e a organização (cliente). As demandas extraídas serão criadas no cronograma.
+            </DialogDescription>
+          </DialogHeader>
+          {!plaudConfigEnabled && (
+            <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+              A integração Plaud não está configurada. Configure PLAUD_CLIENT_ID e PLAUD_SECRET_KEY no backend.
+            </div>
+          )}
+          <div className="space-y-4 pt-2">
+            <div>
+              <Label htmlFor="plaud-workflow-id">ID do workflow (Plaud)</Label>
+              <Input
+                id="plaud-workflow-id"
+                value={plaudWorkflowId}
+                onChange={(e) => setPlaudWorkflowId(e.target.value)}
+                placeholder="Ex: abc123-def456"
+                className="mt-1.5"
+              />
+            </div>
+            <div>
+              <Label>Organização (cliente)</Label>
+              <Select value={plaudOrganizacao} onValueChange={setPlaudOrganizacao}>
+                <SelectTrigger className="mt-1.5">
+                  <SelectValue placeholder="Selecione a organização" />
+                </SelectTrigger>
+                <SelectContent>
+                  {currentUser?.organizacao === 'portes' && organizacoes?.length > 0
+                    ? organizacoes.map((org) => (
+                        <SelectItem key={org.id || org.nome} value={org.organizacao || org.nome || org.id}>
+                          {(org.nome || org.organizacao || '').replace(/_/g, ' ').toUpperCase()}
+                        </SelectItem>
+                      ))
+                    : (
+                      <SelectItem value={currentUser?.organizacao || 'cassems'}>
+                        {(currentUser?.organizacao || 'cassems').replace(/_/g, ' ').toUpperCase()}
+                      </SelectItem>
+                    )}
+                </SelectContent>
+              </Select>
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={fetchPlaudResult}
+              disabled={plaudLoading || !plaudConfigEnabled}
+              className="w-full"
+            >
+              {plaudLoading ? 'Buscando...' : 'Buscar resultado e pré-visualizar'}
+            </Button>
+            {plaudDemandasPreview.length > 0 && (
+              <>
+                <div className="rounded-lg border bg-gray-50 p-3">
+                  <p className="text-sm font-medium text-gray-700 mb-2">
+                    {plaudDemandasPreview.length} demanda(s) extraída(s):
+                  </p>
+                  <ul className="max-h-40 overflow-y-auto space-y-1 text-sm text-gray-600">
+                    {plaudDemandasPreview.map((d, i) => (
+                      <li key={i} className="flex items-start gap-2">
+                        <span className="text-gray-400">{i + 1}.</span>
+                        <span>{d.titulo}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+                <Button
+                  type="button"
+                  onClick={createFromPlaudWorkflow}
+                  disabled={plaudCreating || !plaudOrganizacao}
+                  className="w-full bg-blue-600 hover:bg-blue-700"
+                >
+                  {plaudCreating ? 'Criando...' : 'Criar demandas no cronograma'}
+                </Button>
+              </>
+            )}
+          </div>
         </DialogContent>
       </Dialog>
 
@@ -4783,7 +5170,7 @@ const Cronograma = () => {
                   ) : usarIA ? (
                     <>
                       <TrendingUp className="h-4 w-4 mr-1.5 sm:mr-2 flex-shrink-0" />
-                      <span className="truncate">Baixar Overview com IA</span>
+                      <span className="truncate">Gerar Overview com IA</span>
                     </>
                   ) : (
                     <>
@@ -4881,17 +5268,6 @@ const Cronograma = () => {
 
           <div className="flex flex-col sm:flex-row justify-end gap-2 sm:gap-4 pt-3 sm:pt-4 border-t flex-shrink-0 mt-auto">
             <Button 
-              variant="outline" 
-              onClick={() => {
-                setIsStatusModalOpen(false);
-                setUsarIA(false);
-              }}
-              className="w-full sm:w-auto text-xs sm:text-sm"
-              disabled={loadingIA}
-            >
-              Cancelar
-            </Button>
-            <Button 
               onClick={confirmarDownloadPDFNonPortes}
               className={`w-full sm:w-auto text-xs sm:text-sm ${usarIA ? "bg-purple-600 hover:bg-purple-700" : "bg-blue-600 hover:bg-blue-700"}`}
               disabled={loadingIA}
@@ -4907,8 +5283,8 @@ const Cronograma = () => {
                   {usarIA ? (
                     <>
                       <TrendingUp className="h-3 w-3 sm:h-4 sm:w-4 sm:mr-2 flex-shrink-0" />
-                      <span className="hidden sm:inline">Baixar Overview com Inteligência Artificial</span>
-                      <span className="sm:hidden">Baixar com IA</span>
+                      <span className="hidden sm:inline">Gerar Overview com IA</span>
+                      <span className="sm:hidden">Gerar com IA</span>
                     </>
                   ) : (
                     <>

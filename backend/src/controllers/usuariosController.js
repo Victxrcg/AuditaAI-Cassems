@@ -1,5 +1,6 @@
 // backend/src/controllers/usuariosController.js
 const { getDbPoolWithTunnel } = require('../lib/db');
+const { normalizeOrganizationCode } = require('../utils/normalizeOrganization');
 
 // Função para migrar enum de perfil para aceitar apenas 'admin' e 'usuario'
 const migrarEnumPerfil = async (pool) => {
@@ -263,6 +264,9 @@ exports.atualizarUsuario = async (req, res) => {
       permissoesJSON = null;
     }
 
+    // Normalizar código da organização para evitar duplicatas (ex: "marajó / rede frota" -> "rede_frota")
+    const organizacaoNormalizada = organizacao != null ? normalizeOrganizationCode(organizacao) : null;
+
     await pool.query(`
       UPDATE usuarios_cassems 
       SET nome = COALESCE(?, nome),
@@ -273,7 +277,7 @@ exports.atualizarUsuario = async (req, res) => {
           permissoes = COALESCE(?, permissoes),
           updated_at = NOW()
       WHERE id = ?
-    `, [nome, email, perfil, ativo, organizacao, permissoesJSON, id]);
+    `, [nome, email, perfil, ativo, organizacao != null ? organizacaoNormalizada : organizacao, permissoesJSON, id]);
     
     // Buscar o usuário atualizado com nome da organização
     const [updatedUser] = await pool.query(`

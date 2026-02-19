@@ -63,12 +63,16 @@ const Layout = ({ children }: LayoutProps) => {
     switch (location.pathname) {
       case '/cronograma':
         return 'Cronograma';
+      case '/documentos':
+        return 'Documentos';
+      case '/notas-fiscais':
+        return 'Notas fiscais';
+      case '/usuarios':
+        return 'Usuários';
+      case '/ajuda':
+        return 'Ajuda';
       case '/audios':
         return 'Áudios';
-      case '/auditoria':
-        return 'Auditoria';
-      case '/auditoria':
-        return 'Auditoria';
       case '/auditoria':
         return 'Auditoria';
       case '/acesso-negado':

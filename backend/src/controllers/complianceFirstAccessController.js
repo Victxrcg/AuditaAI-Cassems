@@ -1855,9 +1855,7 @@ exports.validarAssinaturaWebPKI = async (req, res) => {
     const existing = await executeQueryWithRetry(`
       SELECT id FROM compliance_first_access
       WHERE user_id = ? AND tipo_compliance = ?
-    `, [userId, tipoCompliance]);
-
-    if (existing.length > 0) {
+    `, [userId, tipoCompliance]);    if (existing.length > 0) {
       await executeQueryWithRetry(`
         UPDATE compliance_first_access
         SET dados_cadastro = ?,

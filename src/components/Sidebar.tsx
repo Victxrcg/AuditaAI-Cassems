@@ -21,7 +21,8 @@ import {
   XCircle,
   AlertCircleIcon,
   ClipboardList,
-  Menu
+  Menu,
+  Receipt
 } from "lucide-react";
 
 interface SidebarProps {
@@ -157,6 +158,13 @@ const Sidebar = ({ isOpen, onOpenChange }: SidebarProps) => {
       icon: FileText,
       path: "/documentos",
       id: "documentos",
+      badge: null
+    },
+    {
+      name: "Notas fiscais",
+      icon: Receipt,
+      path: "/notas-fiscais",
+      id: "notas-fiscais",
       badge: null
     },
     {

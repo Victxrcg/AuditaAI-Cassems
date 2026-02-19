@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -50,6 +50,11 @@ export default function Documentos() {
   const [playingDoc, setPlayingDoc] = useState<Documento | null>(null);
   const [pdfDoc, setPdfDoc] = useState<Documento | null>(null);
   const [docxDoc, setDocxDoc] = useState<Documento | null>(null);
+  const [txtDoc, setTxtDoc] = useState<Documento | null>(null);
+  const [txtContent, setTxtContent] = useState<string | null>(null);
+  const [txtLoading, setTxtLoading] = useState(false);
+
+  const API_BASE = (import.meta as any).env.VITE_API_URL || 'http://localhost:3001';
   // undefined = nenhuma pasta selecionada ainda; null = filtro "Sem pasta"
   const [selectedPasta, setSelectedPasta] = useState<number | null | undefined>(undefined);
   const [showCreatePasta, setShowCreatePasta] = useState(false);
@@ -82,6 +87,9 @@ export default function Documentos() {
   const [pastaPaiId, setPastaPaiId] = useState<number | null | undefined>(undefined);
   const [organizacoesDisponiveis, setOrganizacoesDisponiveis] = useState<string[]>([]);
   const [expandedPastas, setExpandedPastas] = useState<Set<number>>(new Set());
+  // Para Portes: filtro por organização e seções de org expandidas
+  const [filtroOrgDocumentos, setFiltroOrgDocumentos] = useState<string>('todas');
+  const [expandedOrgs, setExpandedOrgs] = useState<Set<string>>(new Set());
 
   // Corrige nomes com acentos que vieram em mojibake (ex.: "Ã§" -> "ç")
   const normalizeFileName = (name: string) => {
@@ -122,6 +130,50 @@ export default function Documentos() {
   };
 
   useEffect(() => { if (currentUser) load(); }, [currentUser]);
+
+  // Carregar conteúdo TXT ao abrir o modal (para tornar links clicáveis)
+  useEffect(() => {
+    if (!txtDoc) {
+      setTxtContent(null);
+      return;
+    }
+    setTxtLoading(true);
+    const org = currentUser?.organizacao || 'cassems';
+    fetch(`${API_BASE}/documentos/${txtDoc.id}/stream`, {
+      credentials: 'include',
+      headers: { 'x-user-organization': org }
+    })
+      .then(res => {
+        if (!res.ok) throw new Error('Erro ao carregar arquivo');
+        return res.text();
+      })
+      .then(text => setTxtContent(text))
+      .catch(() => setTxtContent(null))
+      .finally(() => setTxtLoading(false));
+  }, [txtDoc?.id, currentUser?.organizacao]);
+
+  // Renderizar texto com links clicáveis
+  const renderTxtComLinks = (text: string) => {
+    const urlRegex = /(https?:\/\/[^\s<>"']+)/g;
+    const parts = text.split(urlRegex);
+    return parts.map((part, i) => {
+      if (part.match(/^https?:\/\//)) {
+        const href = part.replace(/[.,;:!?)\]]+$/, '');
+        return (
+          <a
+            key={i}
+            href={href}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-blue-600 hover:text-blue-800 hover:underline break-all"
+          >
+            {part}
+          </a>
+        );
+      }
+      return <span key={i}>{part}</span>;
+    });
+  };
 
   // Função para formatar código de organização para exibição
   const formatarNomeOrganizacao = (codigo: string) => {
@@ -281,6 +333,15 @@ export default function Documentos() {
     return pastasRaiz.map(ordenarRecursivo);
   };
 
+  const toggleExpandOrg = (org: string) => {
+    setExpandedOrgs((prev) => {
+      const next = new Set(prev);
+      if (next.has(org)) next.delete(org);
+      else next.add(org);
+      return next;
+    });
+  };
+
   // Toggle expandir/colapsar pasta
   const toggleExpandPasta = (pastaId: number) => {
     setExpandedPastas(prev => {
@@ -375,11 +436,6 @@ export default function Documentos() {
     }
   };
 
-  // Filtrar documentos por pasta selecionada
-  const filteredDocs = selectedPasta === undefined
-    ? []
-    : docs.filter(doc => doc.pasta_id === selectedPasta);
-
   const startEditPasta = (pasta: Pasta) => {
     setEditingPasta(pasta);
     setPastaTitulo(pasta.titulo);
@@ -395,31 +451,106 @@ export default function Documentos() {
     setShowCreatePasta(false);
   };
 
+  // Renderizar linha de documento (para uso inline na pasta)
+  const renderDocRow = (d: Documento, indentPx: number) => (
+    <div
+      key={d.id}
+      className="flex flex-col sm:flex-row items-start sm:items-center justify-between py-2.5 px-3 rounded border-l-2 border-blue-200 bg-gray-50/80 hover:bg-gray-100/80 transition-colors gap-2 sm:gap-0"
+      style={{ marginLeft: indentPx }}
+    >
+      <div className="flex items-center gap-3 min-w-0 flex-1 w-full sm:w-auto">
+        <FileText className="w-4 h-4 sm:w-5 sm:h-5 text-gray-600 flex-shrink-0" />
+        <div className="min-w-0 flex-1">
+          <div
+            className="font-medium text-sm truncate"
+            title={normalizeFileName(d.nome_arquivo)}
+          >
+            <span
+              className="hover:underline cursor-pointer"
+              onMouseEnter={(e) => showPreview(d, e)}
+              onMouseLeave={hidePreview}
+              onMouseMove={(e) => updatePosition(e)}
+            >
+              {normalizeFileName(d.nome_arquivo)}
+            </span>
+          </div>
+          <div className="text-xs text-gray-500">{new Date(d.created_at).toLocaleString('pt-BR')}</div>
+        </div>
+      </div>
+      <div className="flex gap-1 sm:gap-2 flex-shrink-0 flex-wrap">
+        {(d.mimetype === 'text/plain' || /\.txt$/i.test(d.nome_arquivo)) && (
+          <Button variant="default" size="sm" onClick={(e) => { e.stopPropagation(); setTxtDoc(d); }} title="Visualizar TXT" className="text-xs h-8">
+            <Eye className="w-3 h-3 sm:w-4 sm:h-4 sm:mr-1" />
+            <span className="hidden sm:inline">Ver</span>
+          </Button>
+        )}
+        {d.mimetype === 'application/pdf' && (
+          <Button variant="default" size="sm" onClick={(e) => { e.stopPropagation(); setPdfDoc(d); }} title="Visualizar PDF" className="text-xs h-8">
+            <Eye className="w-3 h-3 sm:w-4 sm:h-4 sm:mr-1" />
+            <span className="hidden sm:inline">Ver</span>
+          </Button>
+        )}
+        {(d.mimetype?.includes('word') || d.mimetype?.includes('officedocument.wordprocessingml.document') || /\.docx$/i.test(d.nome_arquivo)) && (
+          <Button variant="default" size="sm" onClick={(e) => { e.stopPropagation(); setDocxDoc(d); }} title="Visualizar DOCX" className="text-xs h-8">
+            <Eye className="w-3 h-3 sm:w-4 sm:h-4 sm:mr-1" />
+            <span className="hidden sm:inline">Ver</span>
+          </Button>
+        )}
+        {d.mimetype?.startsWith('video/') && (
+          <Button variant="default" size="sm" onClick={(e) => { e.stopPropagation(); setPlayingDoc(d); }} title="Assistir vídeo" className="text-xs h-8">
+            <Play className="w-3 h-3 sm:w-4 sm:h-4 sm:mr-1" />
+            <span className="hidden sm:inline">Assistir</span>
+          </Button>
+        )}
+        <Button variant="outline" size="sm" onClick={() => setMovingDoc(d)} title="Mover" className="h-8 w-8 p-0">
+          <Move className="w-3 h-3" />
+        </Button>
+        <Button variant="outline" size="sm" onClick={() => downloadDocumento(d.id)} className="h-8 w-8 p-0">
+          <Download className="w-3 h-3" />
+        </Button>
+        <Button variant="outline" size="sm" onClick={() => handleDeleteDocument(d)} className="h-8 w-8 p-0 text-red-600 hover:bg-red-50">
+          <Trash2 className="w-3 h-3" />
+        </Button>
+      </div>
+    </div>
+  );
+
   // Renderizar pasta com subpastas (recursivo)
   const renderPasta = (pasta: Pasta, nivel: number = 0) => {
     const temSubpastas = pasta.subpastas && pasta.subpastas.length > 0;
     const isExpanded = expandedPastas.has(pasta.id);
+    const isSelected = selectedPasta === pasta.id;
+    const mostraConteudo = temSubpastas ? isExpanded : isSelected;
+    const docsNaPasta = docs.filter(d => d.pasta_id === pasta.id);
     const indent = nivel * 24;
 
     return (
       <div key={pasta.id}>
         <div 
           className={`flex items-center justify-between p-3 rounded-lg cursor-pointer transition-colors ${
-            selectedPasta === pasta.id 
-              ? 'bg-blue-50 border-2 border-blue-500' 
-              : 'hover:bg-gray-50 border-2 border-transparent'
+            isSelected ? 'bg-blue-50 border-2 border-blue-500' : 'hover:bg-gray-50 border-2 border-transparent'
           }`}
-          onClick={() => setSelectedPasta(pasta.id)}
+          onClick={() => {
+            if (temSubpastas) {
+              toggleExpandPasta(pasta.id);
+              if (!isExpanded) setSelectedPasta(pasta.id);
+            } else {
+              const fechar = selectedPasta === pasta.id;
+              setSelectedPasta(fechar ? undefined : pasta.id);
+            }
+          }}
           style={{ paddingLeft: `${12 + indent}px` }}
         >
           <div className="flex items-center gap-2 min-w-0 flex-1">
-            {temSubpastas && (
+            {temSubpastas ? (
               <button
                 onClick={(e) => {
                   e.stopPropagation();
                   toggleExpandPasta(pasta.id);
+                  if (!isExpanded) setSelectedPasta(pasta.id);
                 }}
-                className="p-1 hover:bg-gray-200 rounded"
+                className="p-1 hover:bg-gray-200 rounded flex-shrink-0"
+                title={isExpanded ? 'Aberta (clique para fechar)' : 'Fechada (clique para abrir)'}
               >
                 {isExpanded ? (
                   <ChevronDown className="w-4 h-4 text-gray-600" />
@@ -427,8 +558,15 @@ export default function Documentos() {
                   <ChevronRight className="w-4 h-4 text-gray-600" />
                 )}
               </button>
+            ) : (
+              <div className="w-6 flex items-center justify-center flex-shrink-0" title={mostraConteudo ? 'Aberta' : 'Fechada'}>
+                {mostraConteudo ? (
+                  <ChevronDown className="w-4 h-4 text-gray-500" />
+                ) : (
+                  <ChevronRight className="w-4 h-4 text-gray-500" />
+                )}
+              </div>
             )}
-            {!temSubpastas && <div className="w-6" />}
             {isExpanded ? (
               <FolderOpen className="w-5 h-5 text-blue-500 flex-shrink-0" />
             ) : (
@@ -490,35 +628,140 @@ export default function Documentos() {
             {pasta.subpastas!.map(subpasta => renderPasta(subpasta, nivel + 1))}
           </div>
         )}
+        {mostraConteudo && docsNaPasta.length > 0 && (
+          <div className="space-y-1 mt-2 pb-2" style={{ paddingLeft: `${12 + indent}px` }}>
+            <p className="text-xs font-medium text-gray-500 uppercase tracking-wide px-3 py-1.5">Arquivos nesta pasta</p>
+            {docsNaPasta.map(d => renderDocRow(d, 12))}
+          </div>
+        )}
+        {mostraConteudo && docsNaPasta.length === 0 && !temSubpastas && (
+          <div className="text-sm text-gray-500 py-3 px-4 border-l-2 border-gray-200" style={{ marginLeft: `${12 + indent}px` }}>
+            Nenhum documento nesta pasta.
+          </div>
+        )}
       </div>
     );
   };
 
   const pastasHierarquia = organizarPastasHierarquia(pastas);
 
+  // Agrupar pastas por organização (para Portes)
+  const pastasAgrupadasPorOrg = useMemo(() => {
+    if (currentUser?.organizacao !== 'portes') return null;
+    const grupos: Record<string, Pasta[]> = {};
+    pastasHierarquia.forEach((pasta) => {
+      const orgKey = (pasta.organizacao || 'outros').toLowerCase().trim();
+      if (!grupos[orgKey]) grupos[orgKey] = [];
+      grupos[orgKey].push(pasta);
+    });
+    // Ordenar orgs: portes primeiro, depois alfabético
+    return Object.entries(grupos).sort(([a], [b]) => {
+      if (a === 'portes') return -1;
+      if (b === 'portes') return 1;
+      return a.localeCompare(b);
+    });
+  }, [pastasHierarquia, currentUser?.organizacao]);
+
+  // Expandir todas as orgs na primeira carga (para Portes)
+  useEffect(() => {
+    if (currentUser?.organizacao === 'portes' && pastasAgrupadasPorOrg && pastasAgrupadasPorOrg.length > 0) {
+      setExpandedOrgs((prev) => {
+        const next = new Set(prev);
+        pastasAgrupadasPorOrg.forEach(([org]) => next.add(org));
+        return next;
+      });
+    }
+  }, [currentUser?.organizacao, pastasAgrupadasPorOrg?.length]);
+
   return (
     <div className="space-y-6">
       {/* Seção de Pastas */}
       <Card>
         <CardHeader>
-          <div className="flex justify-between items-center">
+          <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3">
             <div>
               <CardTitle>Pastas</CardTitle>
               <CardDescription>Organize seus documentos em pastas temáticas</CardDescription>
             </div>
-            <Button onClick={() => setShowCreatePasta(true)}>
-              <Plus className="w-4 h-4 mr-2" /> Nova Pasta
-            </Button>
+            <div className="flex flex-col sm:flex-row gap-2">
+              {currentUser?.organizacao === 'portes' && (pastasAgrupadasPorOrg?.length ?? 0) > 0 && (
+                <Select value={filtroOrgDocumentos} onValueChange={setFiltroOrgDocumentos}>
+                  <SelectTrigger className="w-full sm:w-52">
+                    <SelectValue placeholder="Filtrar por organização" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="todas">Todas as organizações</SelectItem>
+                    {pastasAgrupadasPorOrg?.map(([org]) => (
+                      <SelectItem key={org} value={org}>
+                        {formatarNomeOrganizacao(org)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+              <Button onClick={() => setShowCreatePasta(true)}>
+                <Plus className="w-4 h-4 mr-2" /> Nova Pasta
+              </Button>
+            </div>
           </div>
         </CardHeader>
         <CardContent>
           <div className="space-y-2">
-            {/* Pastas organizadas em hierarquia */}
-            {pastasHierarquia.map((pasta) => renderPasta(pasta))}
-            {pastasHierarquia.length === 0 && (
-              <p className="text-sm text-gray-500 text-center py-4">
-                Nenhuma pasta criada. Clique em "Nova Pasta" para começar.
-              </p>
+            {/* Para Portes: pastas agrupadas por organização */}
+            {currentUser?.organizacao === 'portes' && pastasAgrupadasPorOrg && pastasAgrupadasPorOrg.length > 0 ? (
+              (() => {
+                const filtradas = pastasAgrupadasPorOrg.filter(
+                  ([org]) => filtroOrgDocumentos === 'todas' || org === filtroOrgDocumentos
+                );
+                if (filtradas.length === 0) {
+                  return (
+                    <p className="text-sm text-gray-500 text-center py-4">
+                      Nenhuma pasta para a organização selecionada.
+                    </p>
+                  );
+                }
+                return filtradas.map(([org, pastasOrg]) => {
+                  const isOrgExpanded = expandedOrgs.has(org);
+                  const totalDocs = pastasOrg.reduce((acc, p) => acc + (p.total_documentos || 0), 0);
+                  return (
+                    <div key={org} className="border rounded-lg overflow-hidden">
+                      <button
+                        type="button"
+                        onClick={() => toggleExpandOrg(org)}
+                        className="w-full flex items-center justify-between px-3 py-2.5 bg-gray-50 hover:bg-gray-100 border-b transition-colors text-left"
+                      >
+                        <div className="flex items-center gap-2">
+                          {isOrgExpanded ? (
+                            <ChevronDown className="w-4 h-4 text-gray-600" />
+                          ) : (
+                            <ChevronRight className="w-4 h-4 text-gray-600" />
+                          )}
+                          <Building className="w-4 h-4 text-gray-600" />
+                          <span className="font-medium text-gray-800">{formatarNomeOrganizacao(org)}</span>
+                          <Badge variant="secondary" className="text-xs">
+                            {pastasOrg.length} pasta(s) · {totalDocs} docs
+                          </Badge>
+                        </div>
+                      </button>
+                      {isOrgExpanded && (
+                        <div className="p-2 space-y-2 bg-white">
+                          {pastasOrg.map((pasta) => renderPasta(pasta))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                });
+              })()
+            ) : (
+              <>
+                {/* Lista plana para não-Portes ou quando não há agrupamento */}
+                {pastasHierarquia.map((pasta) => renderPasta(pasta))}
+                {pastasHierarquia.length === 0 && (
+                  <p className="text-sm text-gray-500 text-center py-4">
+                    Nenhuma pasta criada. Clique em &quot;Nova Pasta&quot; para começar.
+                  </p>
+                )}
+              </>
             )}
           </div>
         </CardContent>
@@ -653,114 +896,6 @@ export default function Documentos() {
         </CardContent>
       </Card>
 
-      {/* Lista de Documentos */}
-      <Card>
-        <CardHeader>
-          <CardTitle>
-              {selectedPasta === undefined
-              ? 'Selecione uma pasta para visualizar documentos'
-              : `Documentos em "${pastas.find(p => p.id === selectedPasta)?.titulo || 'Pasta selecionada'}"`}
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-3">
-            {filteredDocs.map((d) => (
-              <div 
-                key={d.id} 
-                className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-3 rounded border hover:bg-gray-50 transition-colors cursor-pointer gap-2 sm:gap-0"
-              >
-                <div className="flex items-center gap-3 min-w-0 flex-1 w-full sm:w-auto">
-                  <FileText className="w-4 h-4 sm:w-5 sm:h-5 text-gray-600 flex-shrink-0" />
-                  <div className="min-w-0 flex-1">
-                    <div 
-                      className="font-medium text-sm sm:text-base truncate"
-                      title={normalizeFileName(d.nome_arquivo)}
-                    >
-                      <span 
-                        className="hover:underline"
-                        onMouseEnter={(e) => showPreview(d, e)}
-                        onMouseLeave={hidePreview}
-                        onMouseMove={(e) => updatePosition(e)}
-                      >
-                        {normalizeFileName(d.nome_arquivo)}
-                      </span>
-                    </div>
-                    <div className="text-xs text-gray-500">{new Date(d.created_at).toLocaleString('pt-BR')}</div>
-                  </div>
-                  <div className="flex items-center gap-1 sm:gap-2 flex-shrink-0">
-                    <Badge className="text-xs">{Math.round((d.tamanho || 0) / 1024)} KB</Badge>
-                    <Badge variant="secondary" className="text-xs flex items-center gap-1">
-                      <Building className="w-3 h-3" />{(d.organizacao || '').toUpperCase()}
-                    </Badge>
-                  </div>
-                </div>
-                <div className="flex gap-1 sm:gap-2 flex-shrink-0 flex-wrap">
-                  {d.mimetype === 'application/pdf' && (
-                    <Button 
-                      variant="default" 
-                      size="sm" 
-                      onClick={(e) => { e.stopPropagation(); setPdfDoc(d); }}
-                      title="Visualizar PDF"
-                      className="text-xs"
-                    >
-                      <Eye className="w-3 h-3 sm:w-4 sm:h-4 sm:mr-1" /> 
-                      <span className="hidden sm:inline">Visualizar</span>
-                    </Button>
-                  )}
-                  {(d.mimetype?.includes('word') || d.mimetype?.includes('officedocument.wordprocessingml.document') || /\.docx$/i.test(d.nome_arquivo)) && (
-                    <Button 
-                      variant="default" 
-                      size="sm" 
-                      onClick={(e) => { e.stopPropagation(); setDocxDoc(d); }}
-                      title="Visualizar DOCX"
-                      className="text-xs"
-                    >
-                      <Eye className="w-3 h-3 sm:w-4 sm:h-4 sm:mr-1" /> 
-                      <span className="hidden sm:inline">Visualizar</span>
-                    </Button>
-                  )}
-                  {d.mimetype && d.mimetype.startsWith('video/') && (
-                    <Button 
-                      variant="default" 
-                      size="sm" 
-                      onClick={(e) => { e.stopPropagation(); setPlayingDoc(d); }}
-                      title="Assistir vídeo"
-                      className="text-xs"
-                    >
-                      <Play className="w-3 h-3 sm:w-4 sm:h-4 sm:mr-1" /> 
-                      <span className="hidden sm:inline">Assistir</span>
-                    </Button>
-                  )}
-                  <Button 
-                    variant="outline" 
-                    size="sm" 
-                    onClick={() => setMovingDoc(d)}
-                    title="Mover para outra pasta"
-                    className="h-8 w-8 sm:h-auto sm:w-auto p-0 sm:px-3"
-                  >
-                    <Move className="w-3 h-3 sm:w-4 sm:h-4" />
-                  </Button>
-                  <Button variant="outline" size="sm" onClick={() => downloadDocumento(d.id)} className="h-8 w-8 sm:h-auto sm:w-auto p-0 sm:px-3">
-                    <Download className="w-3 h-3 sm:w-4 sm:h-4" />
-                  </Button>
-                  <Button variant="outline" size="sm" onClick={() => handleDeleteDocument(d)} className="h-8 w-8 sm:h-auto sm:w-auto p-0 sm:px-3">
-                    <Trash2 className="w-3 h-3 sm:w-4 sm:h-4" />
-                  </Button>
-                </div>
-              </div>
-            ))}
-            {filteredDocs.length === 0 && (
-              <div className="text-sm text-gray-500">
-                {selectedPasta === null 
-                  ? 'Nenhum documento sem pasta.'
-                  : 'Nenhum documento nesta pasta.'
-                }
-              </div>
-            )}
-          </div>
-        </CardContent>
-      </Card>
-
       {/* Modal para mover documento */}
       {movingDoc && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
@@ -852,6 +987,38 @@ export default function Documentos() {
                   className="w-full h-full"
                   src={`${(import.meta as any).env.VITE_API_URL || 'http://localhost:3001'}/documentos/${pdfDoc.id}/stream#toolbar=1&navpanes=0`}
                 />
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* Modal do Visualizador de TXT */}
+      {txtDoc && (
+        <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50 p-2 sm:p-4">
+          <Card className="w-full h-full sm:h-[90vh] sm:max-w-4xl flex flex-col">
+            <CardHeader className="p-3 sm:p-6 flex-shrink-0">
+              <div className="flex justify-between items-center gap-2">
+                <CardTitle className="text-sm sm:text-lg truncate">Visualizar TXT</CardTitle>
+                <Button variant="ghost" size="sm" onClick={() => setTxtDoc(null)} className="h-8 w-8 p-0 flex-shrink-0">
+                  <X className="w-4 h-4" />
+                </Button>
+              </div>
+              <CardDescription className="truncate text-xs sm:text-sm" title={normalizeFileName(txtDoc.nome_arquivo)}>
+                {normalizeFileName(txtDoc.nome_arquivo)}
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="p-2 sm:p-6 flex-1 min-h-0 h-[calc(100%-120px)] sm:h-[calc(90vh-120px)]">
+              <div className="w-full h-full bg-white rounded overflow-hidden border overflow-y-auto p-4">
+                {txtLoading ? (
+                  <p className="text-sm text-gray-500">Carregando...</p>
+                ) : txtContent !== null ? (
+                  <pre className="whitespace-pre-wrap font-sans text-sm text-gray-800 break-words">
+                    {renderTxtComLinks(txtContent)}
+                  </pre>
+                ) : (
+                  <p className="text-sm text-red-500">Não foi possível carregar o conteúdo do arquivo.</p>
+                )}
               </div>
             </CardContent>
           </Card>

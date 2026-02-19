@@ -1321,7 +1321,7 @@ export default function FirstAccessForm({ tipoCompliance, userId, onComplete, on
   // Renderizar etapa de aceite do termo
   if (etapaAtual === 'dados') {
     return (
-      <Dialog open={true} onOpenChange={() => {}}>
+      <Dialog open={true} onOpenChange={(open) => { if (!open && onCancel) onCancel(); }}>
         <DialogContent className="max-w-3xl max-h-[90vh] overflow-hidden flex flex-col">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
@@ -1375,11 +1375,6 @@ export default function FirstAccessForm({ tipoCompliance, userId, onComplete, on
                 </Label>
               </div>
               <div className="mt-6 flex gap-2 justify-end">
-                {onCancel && (
-                  <Button variant="outline" onClick={onCancel}>
-                    Cancelar
-                  </Button>
-                )}
                 <Button
                   onClick={async () => {
                     if (!aceiteTermo) {
@@ -1411,7 +1406,7 @@ export default function FirstAccessForm({ tipoCompliance, userId, onComplete, on
   }
 
   return (
-    <Dialog open={true} onOpenChange={() => {}}>
+    <Dialog open={true} onOpenChange={(open) => { if (!open && onCancel) onCancel(); }}>
       <DialogContent className="max-w-[95vw] max-h-[95vh] overflow-hidden flex flex-col p-0">
         <DialogHeader className="px-6 pt-6 pb-4 border-b">
           <DialogTitle className="flex items-center gap-2">
@@ -1697,20 +1692,8 @@ export default function FirstAccessForm({ tipoCompliance, userId, onComplete, on
 
         {/* Botões de Ação */}
         <div className="flex gap-4 justify-end pt-4 border-t px-6 pb-6">
-          {onCancel && (
-            <Button variant="outline" onClick={onCancel} disabled={loading || assinandoDigital}>
-              Cancelar
-            </Button>
-          )}
           {etapaAtual === 'termo' && (
             <>
-              <Button
-                variant="outline"
-                onClick={() => setEtapaAtual('dados')}
-                disabled={loading || assinandoDigital}
-              >
-                Voltar
-              </Button>
               <Button
                 onClick={() => setEtapaAtual('assinatura')}
                 disabled={loading || assinandoDigital || !isFormValid}
@@ -1723,13 +1706,6 @@ export default function FirstAccessForm({ tipoCompliance, userId, onComplete, on
           )}
           {etapaAtual === 'assinatura' && (
             <>
-              <Button
-                variant="outline"
-                onClick={() => setEtapaAtual('termo')}
-                disabled={loading || assinandoDigital}
-              >
-                Voltar
-              </Button>
               <Button
                 variant="outline"
                 onClick={handleSalvarSemAssinatura}
