@@ -1483,9 +1483,10 @@ exports.listarHistoricoResumos = async (req, res) => {
       throw tableErr;
     }
     const firstCount = countResult && countResult[0];
-    const total = firstCount ? (firstCount.total ?? firstCount.TOTAL ?? 0) : 0;
+    const totalVal = firstCount ? (firstCount.total ?? firstCount.TOTAL ?? 0) : 0;
+    const total = typeof totalVal === 'bigint' ? Number(totalVal) : totalVal;
     const data = Array.isArray(rows) ? rows.map(r => ({
-      id: r.id,
+      id: typeof r.id === 'bigint' ? Number(r.id) : r.id,
       titulo: r.titulo,
       organizacaoFiltro: r.organizacao_filtro,
       statusFiltro: r.status_filtro,
@@ -1529,10 +1530,11 @@ exports.obterResumoPorId = async (req, res) => {
       return res.status(404).json({ success: false, error: 'Resumo não encontrado' });
     }
     const r = rows[0];
+    const safeId = typeof r.id === 'bigint' ? Number(r.id) : r.id;
     res.json({
       success: true,
       data: {
-        id: r.id,
+        id: safeId,
         titulo: r.titulo,
         organizacaoFiltro: r.organizacao_filtro,
         statusFiltro: r.status_filtro,
