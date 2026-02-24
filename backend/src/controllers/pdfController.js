@@ -1459,32 +1459,41 @@ exports.listarHistoricoResumos = async (req, res) => {
     const offset = Number(req.query.offset) || 0;
     ({ pool, server } = await getDbPoolWithTunnel());
     await ensureOverviewResumosTable(pool);
-    const rows = await pool.query(
-      `SELECT id, titulo, organizacao_filtro, status_filtro, periodo_inicio, periodo_fim, created_at
-       FROM overview_resumos
-       WHERE user_org = ?
-       ORDER BY created_at DESC
-       LIMIT ? OFFSET ?`,
-      [userOrg, limit, offset]
-    );
-    const countResult = await pool.query(
-      `SELECT COUNT(*) as total FROM overview_resumos WHERE user_org = ?`,
-      [userOrg]
-    );
-    const total = (countResult && countResult[0]) ? countResult[0].total : 0;
-    res.json({
-      success: true,
-      data: rows.map(r => ({
-        id: r.id,
-        titulo: r.titulo,
-        organizacaoFiltro: r.organizacao_filtro,
-        statusFiltro: r.status_filtro,
-        periodoInicio: r.periodo_inicio,
-        periodoFim: r.periodo_fim,
-        createdAt: r.created_at
-      })),
-      total
-    });
+    let rows;
+    let countResult;
+    try {
+      rows = await pool.query(
+        `SELECT id, titulo, organizacao_filtro, status_filtro, periodo_inicio, periodo_fim, created_at
+         FROM overview_resumos
+         WHERE user_org = ?
+         ORDER BY created_at DESC
+         LIMIT ? OFFSET ?`,
+        [userOrg, limit, offset]
+      );
+      countResult = await pool.query(
+        `SELECT COUNT(*) as total FROM overview_resumos WHERE user_org = ?`,
+        [userOrg]
+      );
+    } catch (tableErr) {
+      const msg = (tableErr.message || '').toLowerCase();
+      if (msg.includes("doesn't exist") || msg.includes('unknown table') || msg.includes('exist')) {
+        console.warn('⚠️ Tabela overview_resumos não existe. Execute: backend/scripts/criar-tabela-overview-resumos.sql');
+        return res.json({ success: true, data: [], total: 0 });
+      }
+      throw tableErr;
+    }
+    const firstCount = countResult && countResult[0];
+    const total = firstCount ? (firstCount.total ?? firstCount.TOTAL ?? 0) : 0;
+    const data = Array.isArray(rows) ? rows.map(r => ({
+      id: r.id,
+      titulo: r.titulo,
+      organizacaoFiltro: r.organizacao_filtro,
+      statusFiltro: r.status_filtro,
+      periodoInicio: r.periodo_inicio,
+      periodoFim: r.periodo_fim,
+      createdAt: r.created_at
+    })) : [];
+    res.json({ success: true, data, total });
   } catch (error) {
     console.error('❌ listarHistoricoResumos:', error);
     res.status(500).json({ success: false, error: error.message });
@@ -1501,11 +1510,21 @@ exports.obterResumoPorId = async (req, res) => {
     if (!id) return res.status(400).json({ success: false, error: 'ID inválido' });
     const userOrg = req.headers['x-user-organization'] || 'cassems';
     ({ pool, server } = await getDbPoolWithTunnel());
-    const rows = await pool.query(
-      `SELECT id, titulo, organizacao_filtro, status_filtro, periodo_inicio, periodo_fim, overview_text, created_at
-       FROM overview_resumos WHERE id = ? AND user_org = ?`,
-      [id, userOrg]
-    );
+    await ensureOverviewResumosTable(pool);
+    let rows;
+    try {
+      rows = await pool.query(
+        `SELECT id, titulo, organizacao_filtro, status_filtro, periodo_inicio, periodo_fim, overview_text, created_at
+         FROM overview_resumos WHERE id = ? AND user_org = ?`,
+        [id, userOrg]
+      );
+    } catch (tableErr) {
+      const msg = (tableErr.message || '').toLowerCase();
+      if (msg.includes("doesn't exist") || msg.includes('unknown table')) {
+        return res.status(404).json({ success: false, error: 'Resumo não encontrado' });
+      }
+      throw tableErr;
+    }
     if (!rows || rows.length === 0) {
       return res.status(404).json({ success: false, error: 'Resumo não encontrado' });
     }
