@@ -1007,6 +1007,29 @@ const Cronograma = () => {
     }
   };
 
+  const abrirResumoNoModal = async (id: number) => {
+    try {
+      const baseUrl = API_BASE.endsWith('/api') ? API_BASE : `${API_BASE}/api`;
+      const res = await fetch(`${baseUrl}/pdf/resumo/${id}`, {
+        headers: { 'x-user-organization': currentUser?.organizacao || 'cassems' }
+      });
+      if (!res.ok) throw new Error('Resumo não encontrado');
+      const json = await res.json();
+      if (!json.success || !json.data) throw new Error('Dados inválidos');
+      const d = json.data;
+      setOverviewText(d.overviewText || '');
+      setOverviewMetadata({
+        periodo: d.periodo ? { inicioFormatado: d.periodo.inicioFormatado, fimFormatado: d.periodo.fimFormatado } : undefined,
+        metadata: d.metadata
+      });
+      setIsGeneratingOverview(false);
+      setIsHistoricoResumosOpen(false);
+      setIsOverviewModalOpen(true);
+    } catch (e) {
+      toast({ title: 'Erro', description: e instanceof Error ? e.message : 'Erro ao abrir resumo', variant: 'destructive' });
+    }
+  };
+
   const baixarPDFDeResumoId = async (id: number) => {
     try {
       const baseUrl = API_BASE.endsWith('/api') ? API_BASE : `${API_BASE}/api`;
@@ -5468,21 +5491,35 @@ const Cronograma = () => {
               <ul className="space-y-2">
                 {historicoResumos.map((r) => (
                   <li key={r.id} className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-3 rounded-lg border bg-card hover:bg-muted/50">
-                    <div className="min-w-0 flex-1">
+                    <button
+                      type="button"
+                      onClick={() => abrirResumoNoModal(r.id)}
+                      className="min-w-0 flex-1 text-left cursor-pointer rounded focus:outline-none focus:ring-2 focus:ring-primary/20"
+                    >
                       <p className="text-sm font-medium truncate">{r.titulo}</p>
                       <p className="text-xs text-muted-foreground">
                         {r.createdAt ? new Date(r.createdAt).toLocaleString('pt-BR') : ''}
                       </p>
+                    </button>
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      <Button
+                        size="sm"
+                        variant="default"
+                        onClick={() => abrirResumoNoModal(r.id)}
+                        className="bg-blue-600 hover:bg-blue-700"
+                      >
+                        <Eye className="h-4 w-4 mr-1" />
+                        Ver
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={(ev) => { ev.stopPropagation(); baixarPDFDeResumoId(r.id); }}
+                      >
+                        <Download className="h-4 w-4 mr-1" />
+                        PDF
+                      </Button>
                     </div>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => baixarPDFDeResumoId(r.id)}
-                      className="flex-shrink-0"
-                    >
-                      <Download className="h-4 w-4 mr-1" />
-                      Baixar PDF
-                    </Button>
                   </li>
                 ))}
               </ul>
