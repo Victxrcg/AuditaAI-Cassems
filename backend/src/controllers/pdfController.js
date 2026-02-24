@@ -1,6 +1,32 @@
 // backend/src/controllers/pdfController.js
 const { getDbPoolWithTunnel } = require('../lib/db');
 
+// Garantir tabela de histórico de resumos (overview)
+async function ensureOverviewResumosTable(pool) {
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS overview_resumos (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        user_id VARCHAR(100) NULL,
+        user_org VARCHAR(100) NOT NULL,
+        organizacao_filtro VARCHAR(100) NOT NULL DEFAULT 'todas',
+        status_filtro VARCHAR(50) NOT NULL DEFAULT 'todos',
+        periodo_inicio DATE NULL,
+        periodo_fim DATE NULL,
+        titulo VARCHAR(255) NOT NULL,
+        overview_text LONGTEXT NOT NULL,
+        created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        INDEX idx_user_org (user_org),
+        INDEX idx_created_at (created_at)
+      )
+    `);
+    console.log('✅ Tabela overview_resumos verificada/criada');
+  } catch (e) {
+    console.error('❌ Erro ao criar tabela overview_resumos:', e.message);
+    console.error('   Execute manualmente: backend/scripts/criar-tabela-overview-resumos.sql');
+  }
+}
+
 // Configurar OpenAI (opcional)
 let openai = null;
 try {
@@ -16,25 +42,6 @@ try {
   }
 } catch (error) {
   console.log('⚠️ Erro ao configurar OpenAI:', error.message);
-}
-
-// Cliente Thesys C1 (Generative UI) - opcional
-let thesysClient = null;
-try {
-  const thesysKey = process.env.THESYS_API_KEY && process.env.THESYS_API_KEY.trim();
-  if (thesysKey) {
-    const OpenAI = require('openai');
-    thesysClient = new OpenAI({
-      apiKey: thesysKey,
-      baseURL: 'https://api.thesys.dev/v1/embed'
-    });
-    console.log('✅ Thesys C1 configurado no pdfController (THESYS_API_KEY presente)');
-  } else {
-    const hasKey = !!(process.env.THESYS_API_KEY);
-    console.log('⚠️ Thesys C1 NÃO configurado - THESYS_API_KEY', hasKey ? 'vazia ou só espaços' : 'não definida no .env carregado');
-  }
-} catch (error) {
-  console.log('⚠️ Erro ao configurar Thesys:', error.message);
 }
 
 // Função para limpar títulos removendo símbolos estranhos e normalizando caracteres
@@ -997,6 +1004,7 @@ exports.gerarOverviewStream = async (req, res) => {
     
     const { organizacao, status } = req.body;
     const userOrg = req.headers['x-user-organization'] || 'cassems';
+    const userId = req.headers['x-user-id'] || null;
     
     console.log('🤖 Iniciando geração de overview com streaming - Organização:', organizacao || 'todas');
     console.log('🤖 Status solicitado:', status || 'todos');
@@ -1380,6 +1388,30 @@ REGRAS IMPORTANTES:
           geradoEm: new Date().toISOString()
         }
       });
+
+      // Salvar no histórico de resumos
+      try {
+        await ensureOverviewResumosTable(pool);
+        const orgLabel = organizacao && organizacao !== 'todos' ? organizacao : 'todas';
+        const statusLabel = status && status !== 'todos' ? status : 'todos';
+        const titulo = `Overview ${orgLabel} - ${statusLabel} - ${primeiraData.toLocaleDateString('pt-BR')}`;
+        await pool.query(
+          `INSERT INTO overview_resumos (user_id, user_org, organizacao_filtro, status_filtro, periodo_inicio, periodo_fim, titulo, overview_text) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+          [
+            userId,
+            userOrg,
+            organizacao || 'todas',
+            status || 'todos',
+            primeiraData.toISOString().split('T')[0],
+            ultimaData.toISOString().split('T')[0],
+            titulo,
+            fullText
+          ]
+        );
+        console.log('📁 Resumo salvo no histórico');
+      } catch (saveErr) {
+        console.warn('⚠️ Erro ao salvar resumo no histórico:', saveErr.message);
+      }
       
       res.end();
       
@@ -1418,220 +1450,92 @@ REGRAS IMPORTANTES:
   }
 };
 
-// Endpoint para gerar overview com UI gerativa (Thesys C1)
-exports.gerarOverviewThesysStream = async (req, res) => {
+// Listar histórico de resumos (overview) do usuário/organização
+exports.listarHistoricoResumos = async (req, res) => {
   let pool, server;
   try {
-    if (!thesysClient) {
-      return res.status(503).json({
-        success: false,
-        error: 'Serviço de UI gerativa (Thesys) indisponível',
-        details: 'THESYS_API_KEY não configurada. Configure no .env do backend.'
-      });
-    }
+    const userOrg = req.headers['x-user-organization'] || req.query.user_org || 'cassems';
+    const limit = Math.min(Number(req.query.limit) || 50, 100);
+    const offset = Number(req.query.offset) || 0;
+    ({ pool, server } = await getDbPoolWithTunnel());
+    await ensureOverviewResumosTable(pool);
+    const rows = await pool.query(
+      `SELECT id, titulo, organizacao_filtro, status_filtro, periodo_inicio, periodo_fim, created_at
+       FROM overview_resumos
+       WHERE user_org = ?
+       ORDER BY created_at DESC
+       LIMIT ? OFFSET ?`,
+      [userOrg, limit, offset]
+    );
+    const countResult = await pool.query(
+      `SELECT COUNT(*) as total FROM overview_resumos WHERE user_org = ?`,
+      [userOrg]
+    );
+    const total = (countResult && countResult[0]) ? countResult[0].total : 0;
+    res.json({
+      success: true,
+      data: rows.map(r => ({
+        id: r.id,
+        titulo: r.titulo,
+        organizacaoFiltro: r.organizacao_filtro,
+        statusFiltro: r.status_filtro,
+        periodoInicio: r.periodo_inicio,
+        periodoFim: r.periodo_fim,
+        createdAt: r.created_at
+      })),
+      total
+    });
+  } catch (error) {
+    console.error('❌ listarHistoricoResumos:', error);
+    res.status(500).json({ success: false, error: error.message });
+  } finally {
+    if (server) try { server.close(); } catch (e) {}
+  }
+};
 
-    const { organizacao, status } = req.body;
+// Obter um resumo por ID (para exibir ou gerar PDF no frontend)
+exports.obterResumoPorId = async (req, res) => {
+  let pool, server;
+  try {
+    const id = Number(req.params.id);
+    if (!id) return res.status(400).json({ success: false, error: 'ID inválido' });
     const userOrg = req.headers['x-user-organization'] || 'cassems';
-
-    res.setHeader('Content-Type', 'text/event-stream');
-    res.setHeader('Cache-Control', 'no-cache');
-    res.setHeader('Connection', 'keep-alive');
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, x-user-organization, x-user-id');
-    res.setHeader('X-Accel-Buffering', 'no');
-    res.flushHeaders();
-
-    const sendEvent = (event, data) => {
-      const eventData = `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
-      res.write(eventData);
-      if (typeof res.flush === 'function') res.flush();
-    };
-
-    try {
-      ({ pool, server } = await getDbPoolWithTunnel());
-      sendEvent('status', { message: 'Buscando dados do cronograma...' });
-
-      let query = `
-        SELECT c.*, u.nome as responsavel_nome, u.email as responsavel_email
-        FROM cronograma c
-        LEFT JOIN usuarios_cassems u ON c.responsavel_id = u.id
-        WHERE 1=1
-      `;
-      const params = [];
-      if (userOrg === 'portes') {
-        if (organizacao && organizacao !== 'todos') {
-          query += ` AND c.organizacao = ?`;
-          params.push(organizacao);
-        }
-      } else {
-        query += ` AND c.organizacao = ?`;
-        params.push(userOrg);
-      }
-      if (status && status !== 'todos') {
-        query += ` AND c.status = ?`;
-        params.push(status);
-      }
-      query += ` ORDER BY c.prioridade DESC, c.data_inicio ASC, c.created_at DESC`;
-
-      const cronogramas = await pool.query(query, params);
-      if (cronogramas.length === 0) {
-        sendEvent('error', { message: 'Nenhum cronograma encontrado para análise' });
-        res.end();
-        return;
-      }
-
-      sendEvent('status', { message: `Processando ${cronogramas.length} demandas...` });
-
-      const cronogramasFormatados = cronogramas.map(c => ({
-        titulo: limparTitulo(c.titulo),
-        status: c.status,
-        prioridade: c.prioridade || 'media',
-        responsavel_nome: c.parte_responsavel_demanda === 'portes' ? 'Portes' : c.parte_responsavel_demanda === 'organizacao' ? 'Organização' : (c.responsavel_nome || 'Não definido'),
-        data_inicio: c.data_inicio,
-        data_fim: c.data_fim,
-        organizacao: c.organizacao
-      }));
-
-      let primeiraData = null;
-      let ultimaData = null;
-      cronogramasFormatados.forEach(c => {
-        if (c.data_inicio) {
-          const d = new Date(c.data_inicio);
-          if (!primeiraData || d < primeiraData) primeiraData = d;
-        }
-        if (c.data_fim) {
-          const d = new Date(c.data_fim);
-          if (!ultimaData || d > ultimaData) ultimaData = d;
-        }
-      });
-      if (!primeiraData || !ultimaData) {
-        sendEvent('error', { message: 'Não foi possível identificar o período' });
-        res.end();
-        return;
-      }
-
-      const totalDemandas = cronogramasFormatados.length;
-      const demandasConcluidas = cronogramasFormatados.filter(d => d.status === 'concluido').length;
-      const demandasEmAndamento = cronogramasFormatados.filter(d => d.status === 'em_andamento').length;
-      const demandasPendentes = cronogramasFormatados.filter(d => d.status === 'pendente').length;
-      const demandasAtrasadas = cronogramasFormatados.filter(d => d.status === 'atrasado').length;
-      const percentualConclusao = totalDemandas > 0 ? Math.round((demandasConcluidas / totalDemandas) * 100) : 0;
-
-      const organizacoesList = [...new Set(cronogramasFormatados.map(d => d.organizacao))];
-      const isComparativo = userOrg === 'portes' && (organizacao === 'todos' || !organizacao);
-
-      const payload = {
+    ({ pool, server } = await getDbPoolWithTunnel());
+    const rows = await pool.query(
+      `SELECT id, titulo, organizacao_filtro, status_filtro, periodo_inicio, periodo_fim, overview_text, created_at
+       FROM overview_resumos WHERE id = ? AND user_org = ?`,
+      [id, userOrg]
+    );
+    if (!rows || rows.length === 0) {
+      return res.status(404).json({ success: false, error: 'Resumo não encontrado' });
+    }
+    const r = rows[0];
+    res.json({
+      success: true,
+      data: {
+        id: r.id,
+        titulo: r.titulo,
+        organizacaoFiltro: r.organizacao_filtro,
+        statusFiltro: r.status_filtro,
+        periodoInicio: r.periodo_inicio,
+        periodoFim: r.periodo_fim,
+        overviewText: r.overview_text,
         periodo: {
-          inicio: primeiraData.toLocaleDateString('pt-BR'),
-          fim: ultimaData.toLocaleDateString('pt-BR')
-        },
-        organizacoes: organizacoesList,
-        isComparativo,
-        estatisticas: {
-          total: totalDemandas,
-          concluidas: demandasConcluidas,
-          emAndamento: demandasEmAndamento,
-          pendentes: demandasPendentes,
-          atrasadas: demandasAtrasadas,
-          percentualConclusao
-        },
-        demandas: cronogramasFormatados.slice(0, 50).map(d => ({
-          titulo: d.titulo,
-          status: d.status,
-          prioridade: d.prioridade,
-          responsavel: d.responsavel_nome,
-          dataFim: d.data_fim ? new Date(d.data_fim).toLocaleDateString('pt-BR') : null
-        }))
-      };
-
-      sendEvent('status', { message: 'Gerando overview com UI gerativa...' });
-
-      const systemPrompt = `Você gera interfaces C1 (Generative UI) em português do Brasil. Sua resposta DEVE ser apenas o output C1 (componentes de UI): use cards para resumos e estatísticas, tabelas ou listas para demandas. Não inclua texto explicativo fora dos componentes. Foco em dashboard de cronograma: período, totais, status e lista de demandas.`;
-
-      const userPrompt = `Gere um dashboard de overview do cronograma com os dados abaixo. Use cards para as estatísticas (total, concluídas, em andamento, atrasadas) e uma tabela ou lista para as demandas. Período: ${payload.periodo.inicio} até ${payload.periodo.fim}. Organizações: ${payload.organizacoes.join(', ')}.\n\nDados:\n${JSON.stringify(payload, null, 2)}`;
-
-      let stream;
-      try {
-        stream = await thesysClient.chat.completions.create({
-          model: 'gpt-4o-mini',
-          messages: [
-            { role: 'system', content: systemPrompt },
-            { role: 'user', content: userPrompt }
-          ],
-          stream: true,
-          max_tokens: 8000,
-          temperature: 0.2
-        });
-      } catch (apiErr) {
-        const status = apiErr.status || apiErr.statusCode;
-        const code = apiErr.code || apiErr.error?.code;
-        const msg = apiErr.message || apiErr.error?.message || 'Erro na API Thesys';
-        console.error('❌ Thesys API erro:', status, code, msg);
-        if (status === 401 || code === 'invalid_api_key') {
-          sendEvent('error', { message: 'Chave Thesys (THESYS_API_KEY) inválida ou expirada. Verifique no .env do servidor.' });
-        } else {
-          sendEvent('error', { message: msg });
-        }
-        res.end();
-        return;
-      }
-
-      let fullText = '';
-      let accumulatedChunk = '';
-      let chunkCount = 0;
-      for await (const chunk of stream) {
-        const content = chunk.choices[0]?.delta?.content || '';
-        if (content) {
-          fullText += content;
-          accumulatedChunk += content;
-          chunkCount++;
-          if (accumulatedChunk.length >= 3 || /[\s.,;:!?<>]/.test(content)) {
-            sendEvent('chunk', { text: accumulatedChunk });
-            accumulatedChunk = '';
-            await new Promise(r => setTimeout(r, 30));
-          }
-        }
-      }
-      if (accumulatedChunk) sendEvent('chunk', { text: accumulatedChunk });
-
-      if (!fullText.trim()) {
-        console.warn('⚠️ Thesys retornou resposta vazia');
-        fullText = '<content>Nenhum conteúdo retornado pela API Thesys. Tente o overview em modo texto.</content>';
-      }
-      console.log('✅ Thesys overview: ' + chunkCount + ' chunks, ' + fullText.length + ' caracteres');
-
-      sendEvent('complete', {
-        fullText,
-        periodo: {
-          inicio: primeiraData.toISOString(),
-          fim: ultimaData.toISOString(),
-          inicioFormatado: primeiraData.toLocaleDateString('pt-BR'),
-          fimFormatado: ultimaData.toLocaleDateString('pt-BR')
+          inicioFormatado: r.periodo_inicio ? new Date(r.periodo_inicio).toLocaleDateString('pt-BR') : null,
+          fimFormatado: r.periodo_fim ? new Date(r.periodo_fim).toLocaleDateString('pt-BR') : null
         },
         metadata: {
-          totalDemandas,
-          organizacaoFiltro: organizacao || 'todas',
-          usuarioOrganizacao: userOrg,
-          geradoEm: new Date().toISOString()
-        }
-      });
-      res.end();
-    } catch (err) {
-      console.error('❌ Erro gerarOverviewThesysStream:', err);
-      sendEvent('error', { message: err.message || 'Erro ao gerar overview com Thesys' });
-      res.end();
-    } finally {
-      if (server) {
-        try { server.close(); } catch (e) { console.error(e); }
+          organizacaoFiltro: r.organizacao_filtro,
+          usuarioOrganizacao: userOrg
+        },
+        createdAt: r.created_at
       }
-    }
-  } catch (error) {
-    console.error('❌ Erro gerarOverviewThesysStream:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Erro ao gerar overview com UI gerativa',
-      details: error.message
     });
+  } catch (error) {
+    console.error('❌ obterResumoPorId:', error);
+    res.status(500).json({ success: false, error: error.message });
+  } finally {
+    if (server) try { server.close(); } catch (e) {}
   }
 };
 

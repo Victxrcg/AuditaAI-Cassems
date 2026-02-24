@@ -89,7 +89,8 @@ import {
   Mic,
   Paperclip,
   FileText,
-  Eye
+  Eye,
+  History
 } from 'lucide-react';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import FileUploadArea, { FileUploadState } from '@/components/FileUploadArea';
@@ -150,39 +151,6 @@ interface CronogramaAlerta {
   acknowledged_at?: string | null;
 }
 
-// Exibe a resposta C1 (Thesys) em formato legível, sem depender do SDK (evita deps quebradas: @crayonai/react-core, zustand, etc.)
-function OverviewC1Renderer({ c1Response, isStreaming }: { c1Response: string; isStreaming: boolean }) {
-  // Extrai conteúdo de texto de tags <content> ou <artifact> para exibição simples
-  const extractReadable = (raw: string) => {
-    const contentMatch = raw.match(/<content[^>]*>([\s\S]*?)<\/content>/i);
-    const artifactMatch = raw.match(/<artifact[^>]*>([\s\S]*?)<\/artifact>/i);
-    if (contentMatch?.[1]?.trim()) return contentMatch[1].trim();
-    if (artifactMatch?.[1]?.trim()) return artifactMatch[1].trim();
-    return raw.replace(/<thinking>[\s\S]*?<\/thinking>/gi, '').trim() || raw;
-  };
-
-  const readable = extractReadable(c1Response);
-  const isXml = /<(\w+)[^>]*>/.test(c1Response);
-
-  return (
-    <div className="overflow-y-auto max-h-[60vh] rounded-lg border border-slate-200 bg-slate-50 p-4">
-      <p className="text-xs text-slate-500 mb-2">Overview com UI gerativa (Thesys C1)</p>
-      {isStreaming && (
-        <div className="flex items-center gap-2 mb-2 text-blue-600">
-          <RefreshCw className="h-4 w-4 animate-spin" />
-          <span className="text-sm">Gerando...</span>
-        </div>
-      )}
-      <div className="text-sm leading-relaxed whitespace-pre-wrap font-sans text-slate-800 bg-white rounded p-3 border border-slate-100 min-h-[120px]">
-        {readable || (isStreaming ? 'Aguardando resposta...' : '—')}
-      </div>
-      {isXml && readable === c1Response && (
-        <p className="text-xs text-slate-400 mt-2">Resposta em formato C1. Para renderização com cards/tabelas, use o SDK Thesys quando as dependências estiverem disponíveis.</p>
-      )}
-    </div>
-  );
-}
-
 const Cronograma = () => {
   const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:4011';
   const [cronogramas, setCronogramas] = useState<CronogramaItem[]>([]);
@@ -215,8 +183,9 @@ const Cronograma = () => {
   const [overviewStatus, setOverviewStatus] = useState('');
   const [isGeneratingOverview, setIsGeneratingOverview] = useState(false);
   const [overviewMetadata, setOverviewMetadata] = useState<any>(null);
-  const [usarThesys, setUsarThesys] = useState(false);
-  const [overviewC1Response, setOverviewC1Response] = useState<string | null>(null);
+  const [historicoResumos, setHistoricoResumos] = useState<Array<{ id: number; titulo: string; createdAt: string; periodoInicio?: string; periodoFim?: string }>>([]);
+  const [historicoLoading, setHistoricoLoading] = useState(false);
+  const [isHistoricoResumosOpen, setIsHistoricoResumosOpen] = useState(false);
   const overviewTextRef = useRef<HTMLDivElement>(null);
   const alertasBuscadosRef = useRef<boolean>(false);
   const [organizacoes, setOrganizacoes] = useState<any[]>([]);
@@ -973,220 +942,90 @@ const Cronograma = () => {
     }
   };
 
-  // Gerar overview com UI gerativa (Thesys C1)
-  const gerarOverviewThesysStream = async (organizacaoParam?: string, statusParam?: string) => {
-    try {
-      setIsOverviewModalOpen(true);
-      setOverviewText('');
-      setOverviewC1Response(null);
-      setOverviewStatus('Preparando...');
-      setIsGeneratingOverview(true);
-      setOverviewMetadata(null);
-
-      const baseUrl = API_BASE.endsWith('/api') ? API_BASE : `${API_BASE}/api`;
-      const response = await fetch(`${baseUrl}/pdf/gerar-overview-thesys-stream`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-user-organization': currentUser?.organizacao || 'cassems',
-          'x-user-id': currentUser?.id || '',
-        },
-        body: JSON.stringify({
-          organizacao: organizacaoParam || filtroOrganizacao,
-          status: statusParam || 'todos',
-        }),
-      });
-
-      if (!response.ok) {
-        const errData = await response.json().catch(() => ({}));
-        const msg = errData.error || errData.details || 'Erro ao iniciar overview com UI gerativa';
-        if (response.status === 503) {
-          setIsGeneratingOverview(false);
-          toast({
-            title: 'Thesys não configurado',
-            description: msg + ' Gerando overview em modo texto.',
-            variant: 'default',
-          });
-          gerarOverviewStream(organizacaoParam, statusParam);
-          return;
-        }
-        throw new Error(msg);
-      }
-
-      const reader = response.body?.getReader();
-      const decoder = new TextDecoder();
-      if (!reader) throw new Error('Não foi possível ler a resposta');
-
-      let buffer = '';
-      let currentEvent = '';
-      let fullC1 = '';
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) {
-          if (buffer.trim()) {
-            const lines = buffer.split('\n');
-            for (const line of lines) {
-              if (line.startsWith('event: ')) currentEvent = line.substring(7).trim();
-              else if (line.startsWith('data: ')) {
-                try {
-                  const data = JSON.parse(line.substring(6));
-                  if (currentEvent === 'chunk' && data.text) fullC1 += data.text;
-                  if (currentEvent === 'complete' && data.fullText) fullC1 = data.fullText;
-                } catch (_) {}
-              }
-            }
-          }
-          break;
-        }
-        buffer += decoder.decode(value, { stream: true });
-        let newlineIndex;
-        while ((newlineIndex = buffer.indexOf('\n')) !== -1) {
-          const line = buffer.substring(0, newlineIndex);
-          buffer = buffer.substring(newlineIndex + 1);
-          if (line.trim() === '') { currentEvent = ''; continue; }
-          if (line.startsWith('event: ')) { currentEvent = line.substring(7).trim(); continue; }
-          if (line.startsWith('data: ')) {
-            try {
-              const data = JSON.parse(line.substring(6));
-              if (currentEvent === 'status' && data.message) setOverviewStatus(data.message);
-              if (currentEvent === 'chunk' && data.text) {
-                fullC1 += data.text;
-                setOverviewC1Response(fullC1);
-              }
-              if (currentEvent === 'complete') {
-                if (data.fullText) {
-                  setOverviewC1Response(data.fullText);
-                }
-                if (data.periodo || data.metadata) setOverviewMetadata(data);
-                setOverviewStatus('Concluído!');
-                setIsGeneratingOverview(false);
-              }
-              if (currentEvent === 'error') throw new Error(data.message || 'Erro Thesys');
-            } catch (e) {
-              if (e instanceof Error && e.message === 'Erro Thesys') throw e;
-            }
-          }
-        }
-      }
-
-      // Garantir saída do loading e exibir conteúdo ao terminar o stream
-      setIsGeneratingOverview(false);
-      if (fullC1) setOverviewC1Response(fullC1);
-    } catch (error) {
-      console.error('Erro ao gerar overview Thesys:', error);
-      setOverviewStatus('Erro ao gerar overview com UI gerativa');
-      setIsGeneratingOverview(false);
-      toast({
-        title: 'Erro',
-        description: error instanceof Error ? error.message : 'Erro ao gerar overview com Thesys',
-        variant: 'destructive',
-      });
-    }
-  };
-
-  // Função para baixar o overview gerado como PDF
-  const baixarOverviewGerado = () => {
-    if (!overviewText) return;
-
-    const pdf = new jsPDF({
-      orientation: 'p',
-      unit: 'mm',
-      format: 'a4',
-      compress: true
-    });
-
+  // Gera e baixa PDF a partir de texto e metadata (usado no overview atual e no histórico)
+  const gerarPDFFromOverviewText = (texto: string, metadata: { periodo?: { inicioFormatado?: string; fimFormatado?: string }; metadata?: { organizacaoFiltro?: string } } | null, fileNameOverride?: string) => {
+    const pdf = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4', compress: true });
     pdf.setFont('helvetica');
-
-    // Adicionar background
     try {
       pdf.addImage('/layout-background.png', 'PNG', 0, 0, pdf.internal.pageSize.getWidth(), pdf.internal.pageSize.getHeight(), undefined, 'FAST');
     } catch (error) {
       console.warn('Erro ao carregar background:', error);
     }
-
     let yPosition = addHeader(pdf);
     yPosition = addSectionTitle(pdf, 'OVERVIEW DO CRONOGRAMA - RESUMO GERADO POR IA', yPosition, 1);
-
-    if (overviewMetadata?.periodo) {
-      yPosition = addBodyText(pdf, 
-        `Período: ${overviewMetadata.periodo.inicioFormatado} até ${overviewMetadata.periodo.fimFormatado}`, 
-        yPosition, {
-        fontSize: 11,
-        color: LAYOUT_COLORS.lightGray
-      });
+    if (metadata?.periodo?.inicioFormatado) {
+      yPosition = addBodyText(pdf, `Período: ${metadata.periodo.inicioFormatado} até ${metadata.periodo.fimFormatado || ''}`, yPosition, { fontSize: 11, color: LAYOUT_COLORS.lightGray });
     }
-
     yPosition = addDivider(pdf, yPosition);
-
-    // Converter markdown para texto simples e adicionar ao PDF
-    const lines = overviewText.split('\n');
+    const lines = texto.split('\n');
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i];
-      if (line.trim() === '') {
-        // Linha vazia - adicionar pequeno espaçamento
-        yPosition += 2;
-        continue;
-      }
-      
-      if (line.startsWith('## ')) {
-        // Título de seção
-        yPosition = addSectionTitle(pdf, line.substring(3), yPosition, 2);
-      } else if (line.startsWith('### ')) {
-        // Título com ### (caso ainda apareça)
-        yPosition = addSectionTitle(pdf, line.substring(4), yPosition, 3);
-      } else if (line.includes(' - ') && 
-                 !line.startsWith('#') && 
-                 !line.startsWith('*') && 
-                 !line.includes('Status:') && 
-                 !line.includes('Prioridade:') &&
-                 !line.match(/^[✅🔄⚠️⏳]/)) {
-        // Título de demanda: linha que contém " - " (nome - responsável)
-        // e não começa com #, *, não contém Status/Prioridade, não começa com emoji
+      if (line.trim() === '') { yPosition += 2; continue; }
+      if (line.startsWith('## ')) { yPosition = addSectionTitle(pdf, line.substring(3), yPosition, 2); }
+      else if (line.startsWith('### ')) { yPosition = addSectionTitle(pdf, line.substring(4), yPosition, 3); }
+      else if (line.includes(' - ') && !line.startsWith('#') && !line.startsWith('*') && !line.includes('Status:') && !line.includes('Prioridade:') && !line.match(/^[✅🔄⚠️⏳]/)) {
         const isNextLineStatus = i + 1 < lines.length && lines[i + 1].includes('Status:');
-        if (isNextLineStatus || line.trim().length > 10) {
-          // Destacar título da demanda
-          yPosition = addSectionTitle(pdf, line.trim(), yPosition, 3);
-        } else {
-          yPosition = addBodyText(pdf, line.trim(), yPosition, {
-            fontSize: 11,
-            isBold: true
-          });
-        }
+        yPosition = (isNextLineStatus || line.trim().length > 10) ? addSectionTitle(pdf, line.trim(), yPosition, 3) : addBodyText(pdf, line.trim(), yPosition, { fontSize: 11, isBold: true });
       } else if (line.startsWith('**') && line.endsWith('**')) {
-        // Texto em negrito
-        yPosition = addBodyText(pdf, line.replace(/\*\*/g, ''), yPosition, {
-          fontSize: 11,
-          isBold: true
-        });
+        yPosition = addBodyText(pdf, line.replace(/\*\*/g, ''), yPosition, { fontSize: 11, isBold: true });
       } else {
-        // Texto normal
         const cleanLine = line.replace(/[✅🔄⚠️⏳]/g, '').trim();
-        if (cleanLine) {
-          yPosition = addBodyText(pdf, cleanLine, yPosition, {
-            fontSize: 10
-          });
-        }
+        if (cleanLine) yPosition = addBodyText(pdf, cleanLine, yPosition, { fontSize: 10 });
       }
     }
-
-    // Rodapé
     const totalPages = pdf.internal.pages.length - 1;
     for (let i = 1; i <= totalPages; i++) {
       pdf.setPage(i);
       addFooter(pdf, i, totalPages);
     }
-
-    const escopoNome = overviewMetadata?.metadata?.organizacaoFiltro === 'todos' 
-      ? 'todas-organizacoes' 
-      : (overviewMetadata?.metadata?.organizacaoFiltro || 'organizacao').toLowerCase().replace(/\s+/g, '-');
-    const fileName = `overview-cronograma-ia-${escopoNome}-${new Date().toISOString().split('T')[0]}.pdf`;
+    const escopoNome = metadata?.metadata?.organizacaoFiltro === 'todos' ? 'todas-organizacoes' : (metadata?.metadata?.organizacaoFiltro || 'organizacao').toLowerCase().replace(/\s+/g, '-');
+    const fileName = fileNameOverride || `overview-cronograma-${escopoNome}-${new Date().toISOString().split('T')[0]}.pdf`;
     pdf.save(fileName);
+  };
 
-    toast({
-      title: "Download concluído",
-      description: "O overview foi baixado com sucesso.",
-    });
+  const baixarOverviewGerado = () => {
+    if (!overviewText) return;
+    gerarPDFFromOverviewText(overviewText, overviewMetadata);
+    toast({ title: "Download concluído", description: "O overview foi baixado com sucesso." });
+  };
+
+  const fetchHistoricoResumos = async () => {
+    setHistoricoLoading(true);
+    try {
+      const baseUrl = API_BASE.endsWith('/api') ? API_BASE : `${API_BASE}/api`;
+      const res = await fetch(`${baseUrl}/pdf/historico-resumos`, {
+        headers: { 'x-user-organization': currentUser?.organizacao || 'cassems' }
+      });
+      if (!res.ok) throw new Error('Erro ao carregar histórico');
+      const json = await res.json();
+      if (json.success && json.data) setHistoricoResumos(json.data);
+    } catch (e) {
+      console.error(e);
+      toast({ title: 'Erro', description: 'Não foi possível carregar o histórico de resumos.', variant: 'destructive' });
+    } finally {
+      setHistoricoLoading(false);
+    }
+  };
+
+  const baixarPDFDeResumoId = async (id: number) => {
+    try {
+      const baseUrl = API_BASE.endsWith('/api') ? API_BASE : `${API_BASE}/api`;
+      const res = await fetch(`${baseUrl}/pdf/resumo/${id}`, {
+        headers: { 'x-user-organization': currentUser?.organizacao || 'cassems' }
+      });
+      if (!res.ok) throw new Error('Resumo não encontrado');
+      const json = await res.json();
+      if (!json.success || !json.data) throw new Error('Dados inválidos');
+      const d = json.data;
+      const metadata = {
+        periodo: d.periodo ? { inicioFormatado: d.periodo.inicioFormatado, fimFormatado: d.periodo.fimFormatado } : undefined,
+        metadata: d.metadata
+      };
+      gerarPDFFromOverviewText(d.overviewText, metadata, `overview-${id}-${(d.createdAt || '').slice(0, 10)}.pdf`);
+      toast({ title: 'Download concluído', description: 'PDF baixado do histórico.' });
+    } catch (e) {
+      toast({ title: 'Erro', description: e instanceof Error ? e.message : 'Erro ao baixar PDF', variant: 'destructive' });
+    }
   };
 
   // Função para gerar PDF com análise de IA
@@ -1510,12 +1349,7 @@ const Cronograma = () => {
   // Função para confirmar e baixar PDF para usuários não-Portes (apenas status)
   const confirmarDownloadPDFNonPortes = () => {
     setIsStatusModalOpen(false);
-    if (usarThesys) {
-      gerarOverviewThesysStream(undefined, selectedStatusForNonPortesPDF);
-      setUsarThesys(false);
-    } else {
-      gerarOverviewStream(undefined, selectedStatusForNonPortesPDF);
-    }
+    gerarOverviewStream(undefined, selectedStatusForNonPortesPDF);
     setUsarIA(false);
   };
 
@@ -1754,13 +1588,10 @@ const Cronograma = () => {
         return;
       }
       gerarOverviewPorMesPDF(orgParaUsar, selectedAno, selectedMes);
-    } else if (usarThesys) {
-      gerarOverviewThesysStream(orgParaUsar, selectedStatusForPDF);
     } else {
       gerarOverviewStream(orgParaUsar, selectedStatusForPDF);
     }
     setUsarIA(false);
-    setUsarThesys(false);
     setTipoOverview('geral');
   };
 
@@ -4055,6 +3886,14 @@ const Cronograma = () => {
               <BarChart3 className="h-4 w-4 lg:h-5 lg:w-5 mr-1.5 lg:mr-2" />
               Gerar Overview
             </Button>
+            <Button
+              variant="outline"
+              onClick={() => { setIsHistoricoResumosOpen(true); fetchHistoricoResumos(); }}
+              className="text-xs lg:text-sm font-medium border-gray-300 hover:bg-gray-50 hover:border-gray-400"
+            >
+              <History className="h-4 w-4 lg:h-5 lg:w-5 mr-1.5 lg:mr-2" />
+              Histórico
+            </Button>
             <Button 
               onClick={() => {
                 setEditingCronograma(null);
@@ -5338,24 +5177,6 @@ const Cronograma = () => {
                   </div>
                 </div>
 
-                {/* Opção UI gerativa (Thesys C1) */}
-                <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 sm:p-4">
-                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm sm:text-base font-medium text-slate-800">
-                        Overview com UI gerativa (Thesys)
-                      </p>
-                      <p className="text-xs sm:text-sm text-slate-600 mt-1">
-                        Exibe o resumo com cards, tabelas e gráficos gerados pela API Thesys C1.
-                      </p>
-                    </div>
-                    <Switch
-                      checked={usarThesys}
-                      onCheckedChange={setUsarThesys}
-                      className="flex-shrink-0"
-                    />
-                  </div>
-                </div>
               </>
             )}
             </div>
@@ -5488,24 +5309,6 @@ const Cronograma = () => {
                 </div>
               </div>
 
-              {/* Opção UI gerativa (Thesys) */}
-              <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 sm:p-4">
-                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                  <div className="flex-1 min-w-0">
-                    <p className="text-xs sm:text-sm font-medium text-slate-800 break-words">
-                      Overview com UI gerativa (Thesys)
-                    </p>
-                    <p className="text-xs sm:text-sm text-slate-600 mt-1 break-words">
-                      Cards, tabelas e gráficos no navegador.
-                    </p>
-                  </div>
-                  <Switch
-                    checked={usarThesys}
-                    onCheckedChange={setUsarThesys}
-                    className="flex-shrink-0"
-                  />
-                </div>
-              </div>
             </div>
           </div>
 
@@ -5566,12 +5369,7 @@ const Cronograma = () => {
               </div>
             )}
             
-            {overviewC1Response ? (
-              <OverviewC1Renderer
-                c1Response={overviewC1Response}
-                isStreaming={isGeneratingOverview}
-              />
-            ) : overviewText ? (
+            {overviewText ? (
               <div 
                 ref={overviewTextRef}
                 className="prose prose-sm max-w-none overflow-y-auto max-h-[60vh]"
@@ -5627,7 +5425,6 @@ const Cronograma = () => {
               onClick={() => {
                 setIsOverviewModalOpen(false);
                 setOverviewText('');
-                setOverviewC1Response(null);
                 setOverviewStatus('');
                 setOverviewMetadata(null);
               }}
@@ -5645,6 +5442,52 @@ const Cronograma = () => {
               </Button>
             )}
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal Histórico de resumos */}
+      <Dialog open={isHistoricoResumosOpen} onOpenChange={setIsHistoricoResumosOpen}>
+        <DialogContent className="w-[95vw] max-w-2xl max-h-[85vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <History className="h-5 w-5" />
+              Histórico de resumos
+            </DialogTitle>
+            <DialogDescription>
+              Resumos gerados anteriormente. Clique em &quot;Baixar PDF&quot; para obter o arquivo.
+            </DialogDescription>
+          </DialogHeader>
+          <ScrollArea className="flex-1 min-h-[200px] pr-4">
+            {historicoLoading ? (
+              <div className="flex items-center justify-center py-12">
+                <RefreshCw className="h-8 w-8 animate-spin text-muted-foreground" />
+              </div>
+            ) : historicoResumos.length === 0 ? (
+              <p className="text-sm text-muted-foreground py-8 text-center">Nenhum resumo gerado ainda. Gere um overview para ver o histórico aqui.</p>
+            ) : (
+              <ul className="space-y-2">
+                {historicoResumos.map((r) => (
+                  <li key={r.id} className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-3 rounded-lg border bg-card hover:bg-muted/50">
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium truncate">{r.titulo}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {r.createdAt ? new Date(r.createdAt).toLocaleString('pt-BR') : ''}
+                      </p>
+                    </div>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => baixarPDFDeResumoId(r.id)}
+                      className="flex-shrink-0"
+                    >
+                      <Download className="h-4 w-4 mr-1" />
+                      Baixar PDF
+                    </Button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </ScrollArea>
         </DialogContent>
       </Dialog>
 

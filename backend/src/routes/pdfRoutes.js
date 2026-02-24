@@ -12,8 +12,9 @@ router.post('/analisar-cronograma-ia', pdfController.analisarCronogramaIA);
 // Rota para gerar overview com streaming
 router.post('/gerar-overview-stream', pdfController.gerarOverviewStream);
 
-// Rota para gerar overview com UI gerativa (Thesys C1)
-router.post('/gerar-overview-thesys-stream', pdfController.gerarOverviewThesysStream);
+// Histórico de resumos gerados
+router.get('/historico-resumos', pdfController.listarHistoricoResumos);
+router.get('/resumo/:id', pdfController.obterResumoPorId);
 
 // Rota para analisar cronograma por mês específico com IA
 router.post('/analisar-cronograma-por-mes-ia', pdfController.analisarCronogramaPorMesIA);
