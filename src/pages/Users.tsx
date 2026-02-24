@@ -1089,7 +1089,7 @@ const Users = () => {
                                   size="sm"
                                   onClick={() => copiarLinkCadastro(org.codigo, org.nome)}
                                   className="text-green-600 border-green-300 hover:bg-green-50 text-xs sm:text-sm"
-                                  title="Copiar link de cadastro direto"
+                                  title="Envie o link: a pessoa se cadastra e já acessa o cronograma"
                                 >
                                   <LinkIcon className="h-3 w-3 sm:h-4 sm:w-4 mr-1" />
                                   Copiar Link

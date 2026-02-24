@@ -1,4 +1,7 @@
-require('dotenv').config();
+const path = require('path');
+// Carregar .env da raiz do projeto (para OPENAI_API_KEY etc.) ou do backend
+require('dotenv').config({ path: path.resolve(__dirname, '../../.env') });
+require('dotenv').config(); // fallback: .env dentro de backend/
 const express = require('express');
 const cors = require('cors');
 const complianceRoutes = require('./routes/complianceRoutes');

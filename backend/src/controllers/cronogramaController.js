@@ -2,6 +2,24 @@
 const { getDbPoolWithTunnel, executeQueryWithRetry } = require('../lib/db');
 const { ensureTables: ensureCronogramaAlertTables, registrarAlerta } = require('../utils/cronogramaAlerts');
 
+// Garantir coluna parte_responsavel_demanda ('portes' | 'organizacao') para indicar quem é responsável pela demanda
+async function ensureParteResponsavelDemandaColumn() {
+  try {
+    const cols = await executeQueryWithRetry(`
+      SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS
+      WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'cronograma' AND COLUMN_NAME = 'parte_responsavel_demanda'
+    `, []);
+    if (cols.length === 0) {
+      await executeQueryWithRetry(`
+        ALTER TABLE cronograma ADD COLUMN parte_responsavel_demanda VARCHAR(20) NULL
+      `, []);
+      console.log('✅ Coluna parte_responsavel_demanda adicionada à tabela cronograma');
+    }
+  } catch (e) {
+    console.log('⚠️ Erro ao verificar/criar coluna parte_responsavel_demanda:', e.message);
+  }
+}
+
 // Normaliza o nome da organização para um código canônico usado no banco
 const normalizeOrganization = (org) => {
   if (!org) return '';
@@ -32,6 +50,7 @@ const limparTitulo = (titulo) => {
 // Listar cronogramas filtrados por organização
 exports.listarCronogramas = async (req, res) => {
   try {
+    await ensureParteResponsavelDemandaColumn();
     // Obter organização do usuário logado
     const userOrganization = req.headers['x-user-organization'] || req.query.organizacao;
     
@@ -150,6 +169,7 @@ exports.listarCronogramas = async (req, res) => {
 // Criar novo cronograma
 exports.criarCronograma = async (req, res) => {
   try {
+    await ensureParteResponsavelDemandaColumn();
     const {
       titulo,
       descricao,
@@ -162,7 +182,8 @@ exports.criarCronograma = async (req, res) => {
       observacoes,
       status = 'pendente',
       motivo_atraso,
-      parte_responsavel_atraso
+      parte_responsavel_atraso,
+      parte_responsavel_demanda
     } = req.body;
     const userIdHeader = req.headers['x-user-id'] || req.body.created_by;
     const createdByUserId = userIdHeader ? parseInt(userIdHeader, 10) : null;
@@ -188,8 +209,8 @@ exports.criarCronograma = async (req, res) => {
     const result = await executeQueryWithRetry(`
       INSERT INTO cronograma (
         titulo, descricao, organizacao, fase_atual, data_inicio, data_fim,
-        responsavel_id, prioridade, observacoes, status, motivo_atraso, parte_responsavel_atraso
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        responsavel_id, prioridade, observacoes, status, motivo_atraso, parte_responsavel_atraso, parte_responsavel_demanda
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `, [
       tituloLimpo,
       descricao,
@@ -197,12 +218,13 @@ exports.criarCronograma = async (req, res) => {
       fase_atual,
       dataInicio,
       dataFim,
-      responsavel_id,
+      responsavel_id || null,
       prioridade,
       observacoes,
       status,
       motivo_atraso || null,
-      parte_responsavel_atraso || null
+      parte_responsavel_atraso || null,
+      (parte_responsavel_demanda === 'portes' || parte_responsavel_demanda === 'organizacao') ? parte_responsavel_demanda : null
     ]);
     
     // Buscar o cronograma criado
@@ -282,7 +304,8 @@ exports.atualizarCronograma = async (req, res) => {
       status,
       observacoes,
       motivo_atraso,
-      parte_responsavel_atraso
+      parte_responsavel_atraso,
+      parte_responsavel_demanda
     } = req.body;
     
     
@@ -323,6 +346,11 @@ exports.atualizarCronograma = async (req, res) => {
     if (parte_responsavel_atraso !== undefined) { 
       updates.push('parte_responsavel_atraso = ?'); 
       params.push(parte_responsavel_atraso); 
+    }
+    if (parte_responsavel_demanda !== undefined) { 
+      const val = (parte_responsavel_demanda === 'portes' || parte_responsavel_demanda === 'organizacao') ? parte_responsavel_demanda : null;
+      updates.push('parte_responsavel_demanda = ?'); 
+      params.push(val); 
     }
     
     // Sempre atualizar data_ultima_atualizacao e updated_at
@@ -449,17 +477,25 @@ exports.deletarCronograma = async (req, res) => {
 // Estatísticas do cronograma
 exports.estatisticasCronograma = async (req, res) => {
   try {
+    await ensureParteResponsavelDemandaColumn();
     const userOrganization = req.headers['x-user-organization'] || req.query.organizacao;
+    const orgFiltro = req.query.organizacao;
     
     let whereClause = '';
     let params = [];
     
-    // Portes vê estatísticas de TODAS as organizações
+    // Se não for Portes, filtrar pela organização do usuário
     if (userOrganization && userOrganization !== 'portes') {
       whereClause = 'WHERE organizacao = ?';
       params.push(userOrganization);
+    } else if (userOrganization === 'portes') {
+      // Portes: se vier organizacao na query e não for "todos", filtrar por essa organização
+      if (orgFiltro && orgFiltro !== 'todos') {
+        whereClause = 'WHERE organizacao = ?';
+        params.push(orgFiltro);
+      }
+      // Senão: estatísticas gerais (todas as organizações)
     }
-    // Se for Portes, não aplica filtro - vê estatísticas gerais
     
     const stats = await executeQueryWithRetry(`
       SELECT 
@@ -470,6 +506,8 @@ exports.estatisticasCronograma = async (req, res) => {
         SUM(CASE WHEN status = 'atrasado' THEN 1 ELSE 0 END) as atrasados,
         SUM(CASE WHEN status = 'atrasado' AND parte_responsavel_atraso = 'portes' THEN 1 ELSE 0 END) as atrasados_portes,
         SUM(CASE WHEN status = 'atrasado' AND parte_responsavel_atraso = 'empresa' THEN 1 ELSE 0 END) as atrasados_empresa,
+        SUM(CASE WHEN status = 'atrasado' AND parte_responsavel_demanda = 'portes' THEN 1 ELSE 0 END) as atrasados_com_portes,
+        SUM(CASE WHEN status = 'atrasado' AND parte_responsavel_demanda = 'organizacao' THEN 1 ELSE 0 END) as atrasados_com_organizacao,
         COUNT(DISTINCT organizacao) as total_organizacoes
       FROM cronograma 
       ${whereClause}

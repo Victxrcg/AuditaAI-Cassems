@@ -79,8 +79,12 @@ export default function Manutencao() {
         {/* Card principal */}
         <Card className="shadow-xl border-0">
           <CardHeader className="text-center pb-4">
-            <div className="mx-auto w-16 h-16 bg-orange-100 rounded-full flex items-center justify-center mb-4">
-              <Wrench className="w-8 h-8 text-orange-600" />
+            <div className="mx-auto mb-4 flex justify-center">
+              <img 
+                src="/robo.svg" 
+                alt="Robô em manutenção" 
+                className="w-32 h-32 object-contain animate-bounce"
+              />
             </div>
             <CardTitle className="text-2xl text-gray-900 mb-2">
               Sistema em Manutenção

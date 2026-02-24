@@ -206,9 +206,9 @@ const Register = () => {
       if (res.ok && data.success) {
         toast({ 
           title: 'Email verificado!', 
-          description: 'Sua conta foi ativada. Você já pode fazer login.' 
+          description: 'Sua conta foi ativada. Faça login para acessar o cronograma de demandas.' 
         });
-        // Redirecionar para login após 2 segundos
+        // Redirecionar para login (após login o usuário cai no cronograma)
         setTimeout(() => {
           navigate('/login');
         }, 2000);
@@ -340,7 +340,7 @@ const Register = () => {
       <Card className="w-full max-w-md bg-white/90 shadow-2xl border border-gray-200 rounded-2xl backdrop-blur-sm">
         <CardHeader className="text-center">
           <CardTitle className="text-2xl">Criar conta</CardTitle>
-          <CardDescription>Cadastre-se para acessar o sistema</CardDescription>
+          <CardDescription>Cadastre-se para acessar o cronograma e o sistema</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="flex items-center justify-between mb-4">

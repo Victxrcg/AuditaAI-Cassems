@@ -26,6 +26,7 @@ import { Switch } from '@/components/ui/switch';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useToast } from '@/hooks/use-toast';
 import ErrorBoundary from '@/components/ErrorBoundary';
+import { useSearchParams } from 'react-router-dom';
 import { 
   listChecklistItems, 
   toggleChecklistItem,
@@ -107,6 +108,8 @@ interface CronogramaItem {
   responsavel_nome?: string;
   responsavel_email?: string;
   responsavel_empresa?: string;
+  // Quem é responsável pela demanda: Portes ou Organização
+  parte_responsavel_demanda?: 'portes' | 'organizacao' | null;
   observacoes?: string;
   motivo_atraso?: string;
   // Parte com o atraso na demanda (quem está devendo ação)
@@ -126,6 +129,10 @@ interface Estatisticas {
   total_organizacoes: number;
   atrasados_portes?: number;
   atrasados_empresa?: number;
+  /** Demandas atrasadas que estão com a Portes (parte_responsavel_demanda = portes) */
+  atrasados_com_portes?: number;
+  /** Demandas atrasadas que estão com a organização (parte_responsavel_demanda = organizacao) */
+  atrasados_com_organizacao?: number;
 }
 
 interface CronogramaAlerta {
@@ -141,6 +148,39 @@ interface CronogramaAlerta {
   created_by_nome?: string | null;
   acknowledged: boolean;
   acknowledged_at?: string | null;
+}
+
+// Exibe a resposta C1 (Thesys) em formato legível, sem depender do SDK (evita deps quebradas: @crayonai/react-core, zustand, etc.)
+function OverviewC1Renderer({ c1Response, isStreaming }: { c1Response: string; isStreaming: boolean }) {
+  // Extrai conteúdo de texto de tags <content> ou <artifact> para exibição simples
+  const extractReadable = (raw: string) => {
+    const contentMatch = raw.match(/<content[^>]*>([\s\S]*?)<\/content>/i);
+    const artifactMatch = raw.match(/<artifact[^>]*>([\s\S]*?)<\/artifact>/i);
+    if (contentMatch?.[1]?.trim()) return contentMatch[1].trim();
+    if (artifactMatch?.[1]?.trim()) return artifactMatch[1].trim();
+    return raw.replace(/<thinking>[\s\S]*?<\/thinking>/gi, '').trim() || raw;
+  };
+
+  const readable = extractReadable(c1Response);
+  const isXml = /<(\w+)[^>]*>/.test(c1Response);
+
+  return (
+    <div className="overflow-y-auto max-h-[60vh] rounded-lg border border-slate-200 bg-slate-50 p-4">
+      <p className="text-xs text-slate-500 mb-2">Overview com UI gerativa (Thesys C1)</p>
+      {isStreaming && (
+        <div className="flex items-center gap-2 mb-2 text-blue-600">
+          <RefreshCw className="h-4 w-4 animate-spin" />
+          <span className="text-sm">Gerando...</span>
+        </div>
+      )}
+      <div className="text-sm leading-relaxed whitespace-pre-wrap font-sans text-slate-800 bg-white rounded p-3 border border-slate-100 min-h-[120px]">
+        {readable || (isStreaming ? 'Aguardando resposta...' : '—')}
+      </div>
+      {isXml && readable === c1Response && (
+        <p className="text-xs text-slate-400 mt-2">Resposta em formato C1. Para renderização com cards/tabelas, use o SDK Thesys quando as dependências estiverem disponíveis.</p>
+      )}
+    </div>
+  );
 }
 
 const Cronograma = () => {
@@ -175,6 +215,8 @@ const Cronograma = () => {
   const [overviewStatus, setOverviewStatus] = useState('');
   const [isGeneratingOverview, setIsGeneratingOverview] = useState(false);
   const [overviewMetadata, setOverviewMetadata] = useState<any>(null);
+  const [usarThesys, setUsarThesys] = useState(false);
+  const [overviewC1Response, setOverviewC1Response] = useState<string | null>(null);
   const overviewTextRef = useRef<HTMLDivElement>(null);
   const alertasBuscadosRef = useRef<boolean>(false);
   const [organizacoes, setOrganizacoes] = useState<any[]>([]);
@@ -213,7 +255,9 @@ const Cronograma = () => {
   const initialFormData = () => ({
     titulo: '',
     descricao: '',
-    organizacao: currentUser?.organizacao || 'cassems',
+    organizacao: (organizacaoSelecionada && organizacaoSelecionada !== 'todos')
+      ? organizacaoSelecionada
+      : (currentUser?.organizacao || 'cassems'),
     fase_atual: 'inicio',
     data_inicio: '',
     data_fim: '',
@@ -222,7 +266,7 @@ const Cronograma = () => {
     observacoes: '',
     motivo_atraso: '',
     parte_responsavel_atraso: null as 'portes' | 'empresa' | null,
-    responsavel_id: null as number | null
+    parte_responsavel_demanda: null as 'portes' | 'organizacao' | null
   });
 
   const [formData, setFormData] = useState(initialFormData());
@@ -231,44 +275,45 @@ const Cronograma = () => {
   const [filtroOrganizacao, setFiltroOrganizacao] = useState<string>('todos');
   const [filtrosExpanded, setFiltrosExpanded] = useState<boolean>(true);
   const { toast } = useToast();
+  const [searchParams, setSearchParams] = useSearchParams();
 
-  // Carregar usuário atual
+  // Carregar usuário atual e organização (incluindo ?org= na URL para acesso rápido)
   useEffect(() => {
     const user = JSON.parse(localStorage.getItem('user') || '{}');
     setCurrentUser(user);
+    const orgFromUrl = searchParams.get('org');
     
     // Se for usuário Portes, verificar se houve novo login
     if (user?.organizacao === 'portes') {
-      const ultimoLoginTimestamp = localStorage.getItem('ultimo_login_timestamp');
-      const ultimoAcessoTimestamp = localStorage.getItem('ultimo_acesso_cronograma_timestamp');
-      
-      // Verificar se houve novo login (timestamp de login é mais recente que último acesso)
-      const houveNovoLogin = ultimoLoginTimestamp && 
-        (!ultimoAcessoTimestamp || parseInt(ultimoLoginTimestamp) > parseInt(ultimoAcessoTimestamp));
-      
-      if (houveNovoLogin) {
-        // Novo login: sempre mostrar cards primeiro
-        setMostrarSelecaoEmpresa(true);
-        setOrganizacaoSelecionada(null);
-        // Limpar seleção salva ao relogar
-        localStorage.removeItem('cronograma-empresa-selecionada');
+      // URL com ?org= abre direto o cronograma daquela organização (ex.: /cronograma?org=cagece)
+      if (orgFromUrl && orgFromUrl.trim()) {
+        setOrganizacaoSelecionada(orgFromUrl.trim());
+        setMostrarSelecaoEmpresa(false);
+        localStorage.setItem('cronograma-empresa-selecionada', orgFromUrl.trim());
+        setSearchParams({}, { replace: true }); // Limpar ?org= da URL após usar
       } else {
-        // Navegação normal: carregar empresa selecionada salva
-        const empresaSalva = localStorage.getItem('cronograma-empresa-selecionada');
-        if (empresaSalva) {
-          setOrganizacaoSelecionada(empresaSalva);
-          setMostrarSelecaoEmpresa(false);
-        } else {
-          // Se não tem empresa salva, mostrar cards
+        const ultimoLoginTimestamp = localStorage.getItem('ultimo_login_timestamp');
+        const ultimoAcessoTimestamp = localStorage.getItem('ultimo_acesso_cronograma_timestamp');
+        const houveNovoLogin = ultimoLoginTimestamp && 
+          (!ultimoAcessoTimestamp || parseInt(ultimoLoginTimestamp) > parseInt(ultimoAcessoTimestamp));
+        
+        if (houveNovoLogin) {
           setMostrarSelecaoEmpresa(true);
           setOrganizacaoSelecionada(null);
+          localStorage.removeItem('cronograma-empresa-selecionada');
+        } else {
+          const empresaSalva = localStorage.getItem('cronograma-empresa-selecionada');
+          if (empresaSalva) {
+            setOrganizacaoSelecionada(empresaSalva);
+            setMostrarSelecaoEmpresa(false);
+          } else {
+            setMostrarSelecaoEmpresa(true);
+            setOrganizacaoSelecionada(null);
+          }
         }
       }
-      
-      // Salvar timestamp do acesso atual
       localStorage.setItem('ultimo_acesso_cronograma_timestamp', Date.now().toString());
     } else {
-      // Usuários não-Portes vão direto para o cronograma da sua organização
       setOrganizacaoSelecionada(user?.organizacao || 'cassems');
       setMostrarSelecaoEmpresa(false);
     }
@@ -428,12 +473,15 @@ const Cronograma = () => {
     }
   };
 
-  // Carregar estatísticas
+  // Carregar estatísticas (quando Portes tem organização selecionada, filtrar por ela)
   const fetchEstatisticas = async () => {
     try {
       const userOrg = currentUser?.organizacao || 'cassems';
+      const orgParaEstatisticas = (currentUser?.organizacao === 'portes' && organizacaoSelecionada && organizacaoSelecionada !== 'todos')
+        ? organizacaoSelecionada
+        : userOrg;
       
-      const res = await fetch(`${API_BASE}/cronograma/estatisticas?organizacao=${userOrg}`, {
+      const res = await fetch(`${API_BASE}/cronograma/estatisticas?organizacao=${encodeURIComponent(orgParaEstatisticas)}`, {
         headers: {
           'x-user-organization': userOrg
         }
@@ -725,7 +773,7 @@ const Cronograma = () => {
                                   demanda.prioridade === 'media' ? '🟡' : '🟢';
           
           let itemText = `${statusLabel} ${prioridadeLabel} ${index + 1}. ${demanda.titulo}`;
-          itemText += ` | ${demanda.responsavel_nome || 'Sem responsável'}`;
+          itemText += ` | ${getResponsavelLabel(demanda)}`;
           if (demanda.data_fim) {
             const prazo = new Date(demanda.data_fim).toLocaleDateString('pt-BR');
             itemText += ` | Prazo: ${prazo}`;
@@ -912,6 +960,105 @@ const Cronograma = () => {
         title: "Erro",
         description: error instanceof Error ? error.message : 'Erro ao gerar overview',
         variant: "destructive"
+      });
+    }
+  };
+
+  // Gerar overview com UI gerativa (Thesys C1)
+  const gerarOverviewThesysStream = async (organizacaoParam?: string, statusParam?: string) => {
+    try {
+      setIsOverviewModalOpen(true);
+      setOverviewText('');
+      setOverviewC1Response(null);
+      setOverviewStatus('Preparando...');
+      setIsGeneratingOverview(true);
+      setOverviewMetadata(null);
+
+      const baseUrl = API_BASE.endsWith('/api') ? API_BASE : `${API_BASE}/api`;
+      const response = await fetch(`${baseUrl}/pdf/gerar-overview-thesys-stream`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-user-organization': currentUser?.organizacao || 'cassems',
+          'x-user-id': currentUser?.id || '',
+        },
+        body: JSON.stringify({
+          organizacao: organizacaoParam || filtroOrganizacao,
+          status: statusParam || 'todos',
+        }),
+      });
+
+      if (!response.ok) {
+        const errData = await response.json().catch(() => ({}));
+        throw new Error(errData.error || errData.details || 'Erro ao iniciar overview com UI gerativa');
+      }
+
+      const reader = response.body?.getReader();
+      const decoder = new TextDecoder();
+      if (!reader) throw new Error('Não foi possível ler a resposta');
+
+      let buffer = '';
+      let currentEvent = '';
+      let fullC1 = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) {
+          if (buffer.trim()) {
+            const lines = buffer.split('\n');
+            for (const line of lines) {
+              if (line.startsWith('event: ')) currentEvent = line.substring(7).trim();
+              else if (line.startsWith('data: ')) {
+                try {
+                  const data = JSON.parse(line.substring(6));
+                  if (currentEvent === 'chunk' && data.text) fullC1 += data.text;
+                  if (currentEvent === 'complete' && data.fullText) fullC1 = data.fullText;
+                } catch (_) {}
+              }
+            }
+          }
+          break;
+        }
+        buffer += decoder.decode(value, { stream: true });
+        let newlineIndex;
+        while ((newlineIndex = buffer.indexOf('\n')) !== -1) {
+          const line = buffer.substring(0, newlineIndex);
+          buffer = buffer.substring(newlineIndex + 1);
+          if (line.trim() === '') { currentEvent = ''; continue; }
+          if (line.startsWith('event: ')) { currentEvent = line.substring(7).trim(); continue; }
+          if (line.startsWith('data: ')) {
+            try {
+              const data = JSON.parse(line.substring(6));
+              if (currentEvent === 'status' && data.message) setOverviewStatus(data.message);
+              if (currentEvent === 'chunk' && data.text) {
+                fullC1 += data.text;
+                setOverviewC1Response(fullC1);
+              }
+              if (currentEvent === 'complete') {
+                if (data.fullText) {
+                  setOverviewC1Response(data.fullText);
+                }
+                if (data.periodo || data.metadata) setOverviewMetadata(data);
+                setOverviewStatus('Concluído!');
+                setIsGeneratingOverview(false);
+              }
+              if (currentEvent === 'error') throw new Error(data.message || 'Erro');
+            } catch (e) {
+              if (e instanceof Error && e.message === 'Erro') throw e;
+            }
+          }
+        }
+      }
+
+      if (!overviewMetadata && fullC1) setIsGeneratingOverview(false);
+    } catch (error) {
+      console.error('Erro ao gerar overview Thesys:', error);
+      setOverviewStatus('Erro ao gerar overview com UI gerativa');
+      setIsGeneratingOverview(false);
+      toast({
+        title: 'Erro',
+        description: error instanceof Error ? error.message : 'Erro ao gerar overview com Thesys',
+        variant: 'destructive',
       });
     }
   };
@@ -1341,8 +1488,12 @@ const Cronograma = () => {
   // Função para confirmar e baixar PDF para usuários não-Portes (apenas status)
   const confirmarDownloadPDFNonPortes = () => {
     setIsStatusModalOpen(false);
-    // Sempre usar streaming para gerar overview
-    gerarOverviewStream(undefined, selectedStatusForNonPortesPDF);
+    if (usarThesys) {
+      gerarOverviewThesysStream(undefined, selectedStatusForNonPortesPDF);
+      setUsarThesys(false);
+    } else {
+      gerarOverviewStream(undefined, selectedStatusForNonPortesPDF);
+    }
     setUsarIA(false);
   };
 
@@ -1581,11 +1732,13 @@ const Cronograma = () => {
         return;
       }
       gerarOverviewPorMesPDF(orgParaUsar, selectedAno, selectedMes);
+    } else if (usarThesys) {
+      gerarOverviewThesysStream(orgParaUsar, selectedStatusForPDF);
     } else {
-      // Sempre usar streaming para overview geral
       gerarOverviewStream(orgParaUsar, selectedStatusForPDF);
     }
     setUsarIA(false);
+    setUsarThesys(false);
     setTipoOverview('geral');
   };
 
@@ -1834,6 +1987,13 @@ const Cronograma = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentUser?.id, currentUser?.organizacao, organizacaoSelecionada]);
 
+  // Manter filtro de organização alinhado à empresa selecionada (só dados dessa org)
+  useEffect(() => {
+    if (currentUser?.organizacao === 'portes' && organizacaoSelecionada && organizacaoSelecionada !== 'todos') {
+      setFiltroOrganizacao(organizacaoSelecionada);
+    }
+  }, [currentUser?.organizacao, organizacaoSelecionada]);
+
   // Expandir automaticamente meses com demandas quando os dados ou filtros mudarem
   useEffect(() => {
     if (cronogramas.length > 0) {
@@ -2014,12 +2174,12 @@ const Cronograma = () => {
         observacoes: editingCronograma.observacoes || '',
         motivo_atraso: editingCronograma.motivo_atraso || '',
         parte_responsavel_atraso: editingCronograma.parte_responsavel_atraso ?? null,
-        responsavel_id: editingCronograma.responsavel_id || null
+        parte_responsavel_demanda: editingCronograma.parte_responsavel_demanda ?? null
       });
     } else {
       setFormData(initialFormData());
     }
-  }, [editingCronograma, currentUser]);
+  }, [editingCronograma, currentUser, organizacaoSelecionada]);
 
   // Limpar motivo_atraso quando status não for "atrasado"
   useEffect(() => {
@@ -2100,6 +2260,12 @@ const Cronograma = () => {
     return variants[status as keyof typeof variants] || { variant: 'status-pendente', text: 'PENDENTE' };
   };
 
+  const getResponsavelLabel = (c: CronogramaItem) => {
+    if (c.parte_responsavel_demanda === 'portes') return 'Portes';
+    if (c.parte_responsavel_demanda === 'organizacao') return getOrgDisplayName(c.organizacao) || 'Organização';
+    return c.responsavel_nome || 'Sem responsável';
+  };
+
   const getPrioridadeBadge = (prioridade: string) => {
     const variants = {
       baixa: { variant: 'priority-baixa', text: 'BAIXA' },
@@ -2166,6 +2332,17 @@ const Cronograma = () => {
   const formatOrgLabel = (org?: string | null) => {
     if (!org) return 'EMPRESA';
     return org.replace(/_/g, ' ').toUpperCase();
+  };
+
+  // Nome de exibição da organização (lista de orgs tem nome; senão usa formatOrgLabel)
+  const getOrgDisplayName = (orgCode?: string | null) => {
+    if (!orgCode) return null;
+    const code = String(orgCode).trim().toLowerCase();
+    const found = organizacoes.find((o: any) => {
+      const c = (o.codigo || o.organizacao || '').toString().trim().toLowerCase();
+      return c === code || c.replace(/_/g, '') === code.replace(/_/g, '');
+    });
+    return found?.nome || formatOrgLabel(orgCode);
   };
 
   // Cor da barra do cronograma considerando quem está com a bola
@@ -2793,9 +2970,9 @@ const Cronograma = () => {
                 {getStatusBadgeInfo(cronograma.status).text}
               </Badge>
             </div>
-            {cronograma.responsavel_nome && (
+            {getResponsavelLabel(cronograma) !== 'Sem responsável' && (
               <div className="text-[10px] sm:text-xs text-gray-500 truncate">
-                {cronograma.responsavel_nome}
+                {getResponsavelLabel(cronograma)}
               </div>
             )}
           </div>
@@ -2818,7 +2995,7 @@ const Cronograma = () => {
               title={`${cronograma.titulo}
              Status: ${getStatusBadgeInfo(cronograma.status).text}
              Período: ${dataInicio.toLocaleDateString('pt-BR')} a ${dataFim.toLocaleDateString('pt-BR')}
-            ${cronograma.responsavel_nome ? `Responsável: ${cronograma.responsavel_nome}` : 'Sem responsável'}
+            ${`Responsável: ${getResponsavelLabel(cronograma)}`}
             ${cronograma.motivo_atraso ? `Atraso: ${cronograma.motivo_atraso}` : ''}
              Clique para editar`}
             >
@@ -2884,9 +3061,9 @@ const Cronograma = () => {
                 {getStatusBadgeInfo(cronograma.status).text}
               </Badge>
             </div>
-            {cronograma.responsavel_nome && (
+            {getResponsavelLabel(cronograma) !== 'Sem responsável' && (
               <div className="text-[10px] sm:text-xs text-gray-500 truncate">
-                {cronograma.responsavel_nome}
+                {getResponsavelLabel(cronograma)}
               </div>
             )}
           </div>
@@ -2981,8 +3158,9 @@ const Cronograma = () => {
       const statusMatch = filtroStatus === 'todos' || cronograma.status === filtroStatus;
       const prioridadeMatch = filtroPrioridade === 'todos' || cronograma.prioridade === filtroPrioridade;
       const organizacaoMatch = filtroOrganizacao === 'todos' || cronograma.organizacao === filtroOrganizacao;
+      const responsavelLabel = getResponsavelLabel(cronograma);
       const buscaMatch = !busca || cronograma.titulo.toLowerCase().includes(busca.toLowerCase()) ||
-                        (cronograma.responsavel_nome && cronograma.responsavel_nome.toLowerCase().includes(busca.toLowerCase()));
+                        responsavelLabel.toLowerCase().includes(busca.toLowerCase());
       return statusMatch && prioridadeMatch && organizacaoMatch && buscaMatch;
     });
     
@@ -2997,8 +3175,9 @@ const Cronograma = () => {
       const statusMatch = filtroStatus === 'todos' || cronograma.status === filtroStatus;
       const prioridadeMatch = filtroPrioridade === 'todos' || cronograma.prioridade === filtroPrioridade;
       const organizacaoMatch = filtroOrganizacao === 'todos' || cronograma.organizacao === filtroOrganizacao;
+      const responsavelLabel = getResponsavelLabel(cronograma);
       const buscaMatch = !busca || cronograma.titulo.toLowerCase().includes(busca.toLowerCase()) ||
-                        (cronograma.responsavel_nome && cronograma.responsavel_nome.toLowerCase().includes(busca.toLowerCase()));
+                        responsavelLabel.toLowerCase().includes(busca.toLowerCase());
       return statusMatch && prioridadeMatch && organizacaoMatch && buscaMatch;
     });
     
@@ -3090,8 +3269,9 @@ const Cronograma = () => {
       const statusMatch = filtroStatus === 'todos' || cronograma.status === filtroStatus;
       const prioridadeMatch = filtroPrioridade === 'todos' || cronograma.prioridade === filtroPrioridade;
       const organizacaoMatch = filtroOrganizacao === 'todos' || cronograma.organizacao === filtroOrganizacao;
+      const responsavelLabel = getResponsavelLabel(cronograma);
       const buscaMatch = !busca || cronograma.titulo.toLowerCase().includes(busca.toLowerCase()) ||
-                        (cronograma.responsavel_nome && cronograma.responsavel_nome.toLowerCase().includes(busca.toLowerCase()));
+                        responsavelLabel.toLowerCase().includes(busca.toLowerCase());
       return statusMatch && prioridadeMatch && organizacaoMatch && buscaMatch;
     });
 
@@ -3911,16 +4091,18 @@ const Cronograma = () => {
               <div className="mt-2 space-y-1 text-xs sm:text-sm">
                 <p className="text-red-700 flex items-center gap-1">
                   <span className="inline-block w-2 h-2 rounded-full bg-red-500" />
-                  Portes:{' '}
+                  Com Portes:{' '}
                   <span className="font-semibold">
-                    {estatisticas.atrasados_portes ?? 0}
+                    {estatisticas.atrasados_com_portes ?? estatisticas.atrasados_portes ?? 0}
                   </span>
                 </p>
                 <p className="text-orange-700 flex items-center gap-1">
                   <span className="inline-block w-2 h-2 rounded-full bg-orange-400" />
-                  Cliente:{' '}
-                  <span className="font-semibold">
-                    {estatisticas.atrasados_empresa ?? 0}
+                  Com {currentUser?.organizacao === 'portes' && !organizacaoSelecionada
+                    ? 'Organização'
+                    : (getOrgDisplayName(organizacaoSelecionada || currentUser?.organizacao) || 'Organização')}:
+                  <span className="font-semibold ml-1">
+                    {estatisticas.atrasados_com_organizacao ?? estatisticas.atrasados_empresa ?? 0}
                   </span>
                 </p>
               </div>
@@ -4218,32 +4400,33 @@ const Cronograma = () => {
                 </div>
 
                 <div className="lg:col-span-2">
-                  <Label htmlFor="responsavel_id" className="text-xs sm:text-sm font-medium">Responsável</Label>
+                  <Label htmlFor="parte_responsavel_demanda" className="text-xs sm:text-sm font-medium">Responsável</Label>
                   <Select
-                    value={formData.responsavel_id?.toString() || 'none'}
-                    onValueChange={(value) => setFormData({...formData, responsavel_id: value === 'none' ? null : parseInt(value)})}
+                    value={formData.parte_responsavel_demanda || 'none'}
+                    onValueChange={(value) => setFormData({...formData, parte_responsavel_demanda: value === 'none' ? null : value as 'portes' | 'organizacao'})}
                   >
                     <SelectTrigger className="mt-1.5 h-9 sm:h-10 text-xs sm:text-sm">
-                      <SelectValue placeholder="Selecione um responsável" />
+                      <SelectValue placeholder="A demanda está com..." />
                     </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">
-                      <div className="flex items-center gap-2">
-                        <User className="h-4 w-4" />
-                        Não atribuído
-                      </div>
-                    </SelectItem>
-                    {usuarios.map((usuario) => (
-                      <SelectItem key={usuario.id} value={usuario.id.toString()}>
+                    <SelectContent>
+                      <SelectItem value="none">
                         <div className="flex items-center gap-2">
                           <User className="h-4 w-4" />
-                          {usuario.nome}
-                          {usuario.nome_empresa && (
-                            <span className="text-xs text-gray-500">({usuario.nome_empresa})</span>
-                          )}
+                          Não atribuído
                         </div>
-                        </SelectItem>
-                      ))}
+                      </SelectItem>
+                      <SelectItem value="portes">
+                        <div className="flex items-center gap-2">
+                          <Building className="h-4 w-4" />
+                          Portes
+                        </div>
+                      </SelectItem>
+                      <SelectItem value="organizacao">
+                        <div className="flex items-center gap-2">
+                          <Building className="h-4 w-4" />
+                          {getOrgDisplayName(formData.organizacao) || 'Organização'}
+                        </div>
+                      </SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -4418,9 +4601,9 @@ const Cronograma = () => {
                     <div className="w-full min-w-0">
                       <h3 className="text-xs sm:text-sm font-medium text-gray-600 mb-1.5 sm:mb-2 break-words">Responsável</h3>
                       <div className="flex items-center gap-2 min-w-0">
-                        <User className="h-3 w-3 sm:h-4 sm:w-4 text-gray-400 flex-shrink-0" />
+                        <Building className="h-3 w-3 sm:h-4 sm:w-4 text-gray-400 flex-shrink-0" />
                         <span className="text-xs sm:text-sm text-gray-700 break-words">
-                          {viewingCronograma.responsavel_nome || 'Não definido'}
+                          {getResponsavelLabel(viewingCronograma)}
                         </span>
                       </div>
                     </div>
@@ -5132,6 +5315,25 @@ const Cronograma = () => {
                     </div>
                   </div>
                 </div>
+
+                {/* Opção UI gerativa (Thesys C1) */}
+                <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 sm:p-4">
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm sm:text-base font-medium text-slate-800">
+                        Overview com UI gerativa (Thesys)
+                      </p>
+                      <p className="text-xs sm:text-sm text-slate-600 mt-1">
+                        Exibe o resumo com cards, tabelas e gráficos gerados pela API Thesys C1.
+                      </p>
+                    </div>
+                    <Switch
+                      checked={usarThesys}
+                      onCheckedChange={setUsarThesys}
+                      className="flex-shrink-0"
+                    />
+                  </div>
+                </div>
               </>
             )}
             </div>
@@ -5263,6 +5465,25 @@ const Cronograma = () => {
                   />
                 </div>
               </div>
+
+              {/* Opção UI gerativa (Thesys) */}
+              <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 sm:p-4">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs sm:text-sm font-medium text-slate-800 break-words">
+                      Overview com UI gerativa (Thesys)
+                    </p>
+                    <p className="text-xs sm:text-sm text-slate-600 mt-1 break-words">
+                      Cards, tabelas e gráficos no navegador.
+                    </p>
+                  </div>
+                  <Switch
+                    checked={usarThesys}
+                    onCheckedChange={setUsarThesys}
+                    className="flex-shrink-0"
+                  />
+                </div>
+              </div>
             </div>
           </div>
 
@@ -5323,7 +5544,12 @@ const Cronograma = () => {
               </div>
             )}
             
-            {overviewText ? (
+            {overviewC1Response ? (
+              <OverviewC1Renderer
+                c1Response={overviewC1Response}
+                isStreaming={isGeneratingOverview}
+              />
+            ) : overviewText ? (
               <div 
                 ref={overviewTextRef}
                 className="prose prose-sm max-w-none overflow-y-auto max-h-[60vh]"
@@ -5379,6 +5605,7 @@ const Cronograma = () => {
               onClick={() => {
                 setIsOverviewModalOpen(false);
                 setOverviewText('');
+                setOverviewC1Response(null);
                 setOverviewStatus('');
                 setOverviewMetadata(null);
               }}
