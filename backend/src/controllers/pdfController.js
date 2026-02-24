@@ -28,9 +28,10 @@ try {
       apiKey: thesysKey,
       baseURL: 'https://api.thesys.dev/v1/embed'
     });
-    console.log('✅ Thesys C1 configurado no pdfController');
+    console.log('✅ Thesys C1 configurado no pdfController (THESYS_API_KEY presente)');
   } else {
-    console.log('⚠️ THESYS_API_KEY não definida - overview com UI gerativa desabilitado');
+    const hasKey = !!(process.env.THESYS_API_KEY);
+    console.log('⚠️ Thesys C1 NÃO configurado - THESYS_API_KEY', hasKey ? 'vazia ou só espaços' : 'não definida no .env carregado');
   }
 } catch (error) {
   console.log('⚠️ Erro ao configurar Thesys:', error.message);

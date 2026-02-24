@@ -990,7 +990,18 @@ const Cronograma = () => {
 
       if (!response.ok) {
         const errData = await response.json().catch(() => ({}));
-        throw new Error(errData.error || errData.details || 'Erro ao iniciar overview com UI gerativa');
+        const msg = errData.error || errData.details || 'Erro ao iniciar overview com UI gerativa';
+        if (response.status === 503) {
+          setIsGeneratingOverview(false);
+          toast({
+            title: 'Thesys não configurado',
+            description: msg + ' Gerando overview em modo texto.',
+            variant: 'default',
+          });
+          gerarOverviewStream(organizacaoParam, statusParam);
+          return;
+        }
+        throw new Error(msg);
       }
 
       const reader = response.body?.getReader();
