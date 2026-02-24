@@ -186,6 +186,7 @@ const Cronograma = () => {
   const [historicoResumos, setHistoricoResumos] = useState<Array<{ id: number; titulo: string; createdAt: string; periodoInicio?: string; periodoFim?: string }>>([]);
   const [historicoLoading, setHistoricoLoading] = useState(false);
   const [isHistoricoResumosOpen, setIsHistoricoResumosOpen] = useState(false);
+  const overviewVeioDoHistoricoRef = useRef(false);
   const overviewTextRef = useRef<HTMLDivElement>(null);
   const alertasBuscadosRef = useRef<boolean>(false);
   const [organizacoes, setOrganizacoes] = useState<any[]>([]);
@@ -1023,6 +1024,7 @@ const Cronograma = () => {
         metadata: d.metadata
       });
       setIsGeneratingOverview(false);
+      overviewVeioDoHistoricoRef.current = true;
       setIsHistoricoResumosOpen(false);
       setIsOverviewModalOpen(true);
     } catch (e) {
@@ -5370,7 +5372,21 @@ const Cronograma = () => {
       </Dialog>
 
       {/* Modal de Overview sendo gerado */}
-      <Dialog open={isOverviewModalOpen} onOpenChange={setIsOverviewModalOpen}>
+      <Dialog
+        open={isOverviewModalOpen}
+        onOpenChange={(open) => {
+          if (!open) {
+            if (overviewVeioDoHistoricoRef.current) {
+              overviewVeioDoHistoricoRef.current = false;
+              setIsHistoricoResumosOpen(true);
+            }
+            setOverviewText('');
+            setOverviewStatus('');
+            setOverviewMetadata(null);
+          }
+          setIsOverviewModalOpen(open);
+        }}
+      >
         <DialogContent className="w-[95vw] max-w-4xl max-h-[90vh] flex flex-col">
           <DialogHeader className="flex-shrink-0 pb-3 sm:pb-4">
             <DialogTitle className="flex items-center gap-2 lg:gap-3 text-base lg:text-lg break-words">
@@ -5446,10 +5462,14 @@ const Cronograma = () => {
             <Button 
               variant="outline" 
               onClick={() => {
-                setIsOverviewModalOpen(false);
+                if (overviewVeioDoHistoricoRef.current) {
+                  overviewVeioDoHistoricoRef.current = false;
+                  setIsHistoricoResumosOpen(true);
+                }
                 setOverviewText('');
                 setOverviewStatus('');
                 setOverviewMetadata(null);
+                setIsOverviewModalOpen(false);
               }}
               className="w-full sm:w-auto px-4 sm:px-6 text-sm sm:text-base"
             >
