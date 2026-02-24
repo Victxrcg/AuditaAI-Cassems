@@ -938,7 +938,12 @@ const Cronograma = () => {
                 setOverviewStatus('Concluído!');
                 setIsGeneratingOverview(false);
               } else if (currentEvent === 'error' || (!currentEvent && data.message && data.message.toLowerCase().includes('erro'))) {
-                throw new Error(data.message || 'Erro ao gerar overview');
+                const rawMsg = data.message || 'Erro ao gerar overview';
+                const isInvalidKey = /401|Incorrect API key|invalid_api_key/i.test(rawMsg);
+                const friendlyMsg = isInvalidKey
+                  ? 'Chave da OpenAI inválida ou expirada. O administrador deve atualizar OPENAI_API_KEY no .env do servidor e reiniciar o backend (pm2 restart).'
+                  : rawMsg;
+                throw new Error(friendlyMsg);
               }
             } catch (e) {
               if (e instanceof SyntaxError) {
@@ -956,10 +961,14 @@ const Cronograma = () => {
       console.error('Erro ao gerar overview:', error);
       setOverviewStatus('Erro ao gerar overview');
       setIsGeneratingOverview(false);
+      const msg = error instanceof Error ? error.message : 'Erro ao gerar overview';
+      const isInvalidKey = /401|Incorrect API key|invalid_api_key/i.test(msg);
       toast({
-        title: "Erro",
-        description: error instanceof Error ? error.message : 'Erro ao gerar overview',
-        variant: "destructive"
+        title: isInvalidKey ? 'Chave OpenAI inválida' : 'Erro',
+        description: isInvalidKey
+          ? 'Chave da OpenAI inválida ou expirada. O administrador deve atualizar OPENAI_API_KEY no .env do servidor e reiniciar o backend (pm2 restart).'
+          : msg,
+        variant: 'destructive'
       });
     }
   };
@@ -1053,15 +1062,17 @@ const Cronograma = () => {
                 setOverviewStatus('Concluído!');
                 setIsGeneratingOverview(false);
               }
-              if (currentEvent === 'error') throw new Error(data.message || 'Erro');
+              if (currentEvent === 'error') throw new Error(data.message || 'Erro Thesys');
             } catch (e) {
-              if (e instanceof Error && e.message === 'Erro') throw e;
+              if (e instanceof Error && e.message === 'Erro Thesys') throw e;
             }
           }
         }
       }
 
-      if (!overviewMetadata && fullC1) setIsGeneratingOverview(false);
+      // Garantir saída do loading e exibir conteúdo ao terminar o stream
+      setIsGeneratingOverview(false);
+      if (fullC1) setOverviewC1Response(fullC1);
     } catch (error) {
       console.error('Erro ao gerar overview Thesys:', error);
       setOverviewStatus('Erro ao gerar overview com UI gerativa');

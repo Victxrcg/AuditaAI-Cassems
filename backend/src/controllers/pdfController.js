@@ -1385,7 +1385,13 @@ REGRAS IMPORTANTES:
       
   } catch (error) {
     console.error('❌ Erro ao gerar overview com streaming:', error);
-    sendEvent('error', { message: error.message || 'Erro ao gerar overview' });
+    const status = error.status || error.statusCode;
+    const code = error.code || error.error?.code;
+    const isInvalidKey = status === 401 || code === 'invalid_api_key' || (error.message && error.message.includes('Incorrect API key'));
+    const message = isInvalidKey
+      ? 'Chave da OpenAI inválida ou expirada. Atualize OPENAI_API_KEY no .env do servidor em https://platform.openai.com/account/api-keys'
+      : (error.message || 'Erro ao gerar overview');
+    sendEvent('error', { message });
     res.end();
   } finally {
     if (server) {
@@ -1398,10 +1404,16 @@ REGRAS IMPORTANTES:
   }
   } catch (error) {
     console.error('❌ Erro ao gerar overview com streaming:', error);
-    res.status(500).json({
+    const status = error.status || error.statusCode;
+    const code = error.code || error.error?.code;
+    const isInvalidKey = status === 401 || code === 'invalid_api_key' || (error.message && error.message.includes('Incorrect API key'));
+    const details = isInvalidKey
+      ? 'Chave da OpenAI inválida ou expirada. Atualize OPENAI_API_KEY no servidor.'
+      : error.message;
+    res.status(isInvalidKey ? 401 : 500).json({
       success: false,
-      error: 'Erro ao gerar overview',
-      details: error.message
+      error: isInvalidKey ? 'Chave OpenAI inválida' : 'Erro ao gerar overview',
+      details
     });
   }
 };
@@ -1538,24 +1550,41 @@ exports.gerarOverviewThesysStream = async (req, res) => {
 
       const userPrompt = `Gere um dashboard de overview do cronograma com os dados abaixo. Use cards para as estatísticas (total, concluídas, em andamento, atrasadas) e uma tabela ou lista para as demandas. Período: ${payload.periodo.inicio} até ${payload.periodo.fim}. Organizações: ${payload.organizacoes.join(', ')}.\n\nDados:\n${JSON.stringify(payload, null, 2)}`;
 
-      const stream = await thesysClient.chat.completions.create({
-        model: 'gpt-4o-mini',
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userPrompt }
-        ],
-        stream: true,
-        max_tokens: 8000,
-        temperature: 0.2
-      });
+      let stream;
+      try {
+        stream = await thesysClient.chat.completions.create({
+          model: 'gpt-4o-mini',
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: userPrompt }
+          ],
+          stream: true,
+          max_tokens: 8000,
+          temperature: 0.2
+        });
+      } catch (apiErr) {
+        const status = apiErr.status || apiErr.statusCode;
+        const code = apiErr.code || apiErr.error?.code;
+        const msg = apiErr.message || apiErr.error?.message || 'Erro na API Thesys';
+        console.error('❌ Thesys API erro:', status, code, msg);
+        if (status === 401 || code === 'invalid_api_key') {
+          sendEvent('error', { message: 'Chave Thesys (THESYS_API_KEY) inválida ou expirada. Verifique no .env do servidor.' });
+        } else {
+          sendEvent('error', { message: msg });
+        }
+        res.end();
+        return;
+      }
 
       let fullText = '';
       let accumulatedChunk = '';
+      let chunkCount = 0;
       for await (const chunk of stream) {
         const content = chunk.choices[0]?.delta?.content || '';
         if (content) {
           fullText += content;
           accumulatedChunk += content;
+          chunkCount++;
           if (accumulatedChunk.length >= 3 || /[\s.,;:!?<>]/.test(content)) {
             sendEvent('chunk', { text: accumulatedChunk });
             accumulatedChunk = '';
@@ -1564,6 +1593,12 @@ exports.gerarOverviewThesysStream = async (req, res) => {
         }
       }
       if (accumulatedChunk) sendEvent('chunk', { text: accumulatedChunk });
+
+      if (!fullText.trim()) {
+        console.warn('⚠️ Thesys retornou resposta vazia');
+        fullText = '<content>Nenhum conteúdo retornado pela API Thesys. Tente o overview em modo texto.</content>';
+      }
+      console.log('✅ Thesys overview: ' + chunkCount + ' chunks, ' + fullText.length + ' caracteres');
 
       sendEvent('complete', {
         fullText,
