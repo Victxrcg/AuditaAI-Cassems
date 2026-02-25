@@ -93,6 +93,13 @@ import {
   History
 } from 'lucide-react';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import FileUploadArea, { FileUploadState } from '@/components/FileUploadArea';
 
 interface CronogramaItem {
@@ -110,7 +117,7 @@ interface CronogramaItem {
   responsavel_email?: string;
   responsavel_empresa?: string;
   // Quem é responsável pela demanda: Portes ou Organização
-  parte_responsavel_demanda?: 'portes' | 'organizacao' | null;
+  parte_responsavel_demanda?: 'portes' | 'organizacao' | 'ambos' | null;
   observacoes?: string;
   motivo_atraso?: string;
   // Parte com o atraso na demanda (quem está devendo ação)
@@ -236,7 +243,7 @@ const Cronograma = () => {
     observacoes: '',
     motivo_atraso: '',
     parte_responsavel_atraso: null as 'portes' | 'empresa' | null,
-    parte_responsavel_demanda: null as 'portes' | 'organizacao' | null
+    parte_responsavel_demanda: null as 'portes' | 'organizacao' | 'ambos' | null
   });
 
   const [formData, setFormData] = useState(initialFormData());
@@ -1990,36 +1997,47 @@ const Cronograma = () => {
   };
 
   // Função para converter data para formato YYYY-MM-DD preservando timezone local
+  // IMPORTANTE: nunca usar new Date("DD/MM/YYYY") - JavaScript interpreta como MM/DD/YYYY!
   const formatDateForInput = (dateString: string | Date | null) => {
     if (!dateString) return '';
     try {
-      let date: Date;
-      
       // Se já é uma Date object
       if (dateString instanceof Date) {
-        date = dateString;
-      } 
-      // Se é string, criar Date object
-      else {
-        // Se é uma string ISO (termina com Z), tratar como UTC mas preservar a data
-        if (typeof dateString === 'string' && dateString.endsWith('Z')) {
-          // Extrair apenas a parte da data (YYYY-MM-DD) antes do T
-          const datePart = dateString.split('T')[0];
-          return datePart; // Retornar diretamente sem conversão
+        const d = dateString;
+        if (isNaN(d.getTime())) return '';
+        const year = d.getFullYear();
+        const month = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+      }
+
+      const str = String(dateString).trim();
+      if (!str) return '';
+
+      // YYYY-MM-DD ou ISO (YYYY-MM-DDTHH:MM:SS...): retornar a parte da data sem usar new Date (evita timezone)
+      if (/^\d{4}-\d{2}-\d{2}/.test(str)) {
+        const datePart = str.split('T')[0].split(' ')[0];
+        return datePart;
+      }
+
+      // DD/MM/YYYY (formato brasileiro): parsear explicitamente - NUNCA usar new Date() aqui!
+      const matchBr = str.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+      if (matchBr) {
+        const [, day, month, year] = matchBr;
+        const d = parseInt(day, 10);
+        const m = parseInt(month, 10);
+        const y = parseInt(year, 10);
+        if (d >= 1 && d <= 31 && m >= 1 && m <= 12 && y >= 1900 && y <= 2100) {
+          return `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
         }
-        date = new Date(dateString);
       }
-      
-      // Verificar se a data é válida
-      if (isNaN(date.getTime())) {
-        return '';
-      }
-      
-      // Usar métodos locais para evitar problemas de timezone
+
+      // Fallback: new Date (para outros formatos)
+      const date = new Date(str);
+      if (isNaN(date.getTime())) return '';
       const year = date.getFullYear();
       const month = String(date.getMonth() + 1).padStart(2, '0');
       const day = String(date.getDate()).padStart(2, '0');
-      
       return `${year}-${month}-${day}`;
     } catch (error) {
       console.error('Erro ao formatar data:', error);
@@ -2141,6 +2159,7 @@ const Cronograma = () => {
   const getResponsavelLabel = (c: CronogramaItem) => {
     if (c.parte_responsavel_demanda === 'portes') return 'Portes';
     if (c.parte_responsavel_demanda === 'organizacao') return getOrgDisplayName(c.organizacao) || 'Organização';
+    if (c.parte_responsavel_demanda === 'ambos') return 'Portes e Organização';
     return c.responsavel_nome || 'Sem responsável';
   };
 
@@ -2223,23 +2242,12 @@ const Cronograma = () => {
     return found?.nome || formatOrgLabel(orgCode);
   };
 
-  // Cor da barra do cronograma considerando quem está com a bola
+  // Cor da barra do cronograma: pendente=amarelo, concluído=verde, atrasado=vermelho
   const getBarColorClass = (item: CronogramaItem) => {
-    if (item.status !== 'atrasado') {
-      // Mantém cores atuais para outros status (ajuste se já tiver lógica própria)
-      if (item.status === 'concluido') return 'bg-green-500';
-      if (item.status === 'em_andamento') return 'bg-blue-500';
-      if (item.status === 'pendente') return 'bg-gray-300';
-      return 'bg-gray-300';
-    }
-
-    if (item.parte_responsavel_atraso === 'empresa') {
-      // Atraso na ponta do cliente/fornecedor
-      return 'bg-orange-500';
-    }
-
-    // Atraso sob responsabilidade da Portes (ou não informado)
-    return 'bg-red-500';
+    if (item.status === 'concluido') return 'bg-green-500';
+    if (item.status === 'atrasado') return 'bg-red-500';
+    // pendente e em_andamento: amarelo
+    return 'bg-yellow-500';
   };
 
   // Determinar com quem está a "bola" (responsabilidade principal)
@@ -2422,6 +2430,28 @@ const Cronograma = () => {
       });
     }
   };
+
+  // Troca rápida de status pela timeline (sem abrir edição)
+  const updateStatusRapido = useCallback(async (cronogramaId: number, novoStatus: 'pendente' | 'em_andamento' | 'concluido' | 'atrasado') => {
+    try {
+      const userOrg = currentUser?.organizacao || 'cassems';
+      const res = await fetch(`${API_BASE}/cronograma/${cronogramaId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-user-organization': userOrg,
+          'x-user-id': currentUser?.id?.toString() || ''
+        },
+        body: JSON.stringify({ status: novoStatus })
+      });
+      if (!res.ok) throw new Error('Erro ao atualizar status');
+      toast({ title: 'Status atualizado', description: 'A demanda foi atualizada.' });
+      fetchCronogramas();
+      fetchEstatisticas();
+    } catch (e) {
+      toast({ title: 'Erro', description: e instanceof Error ? e.message : 'Não foi possível atualizar o status.', variant: 'destructive' });
+    }
+  }, [API_BASE, currentUser, fetchCronogramas, fetchEstatisticas, toast]);
 
   // Plaud: verificar se integração está ativa ao abrir o modal
   useEffect(() => {
@@ -2848,39 +2878,56 @@ const Cronograma = () => {
                 {getStatusBadgeInfo(cronograma.status).text}
               </Badge>
             </div>
-            {getResponsavelLabel(cronograma) !== 'Sem responsável' && (
-              <div className="text-[10px] sm:text-xs text-gray-500 truncate">
-                {getResponsavelLabel(cronograma)}
-              </div>
-            )}
+            {(() => {
+              const responsavel = getResponsavelLabel(cronograma);
+              return (
+                <div className="text-xs sm:text-sm font-medium text-gray-700 truncate" title={`Demanda com: ${responsavel}`}>
+                  A bola está com: <span className="text-gray-900 font-semibold">{responsavel}</span>
+                </div>
+              );
+            })()}
           </div>
         </div>
         
         {/* Timeline bar interativa */}
         <div className="relative flex-1 h-full">
           {dataInicio && dataFim && (
-            <div
-              className={`absolute top-1/2 transform -translate-y-1/2 h-6 sm:h-7 lg:h-8 rounded-lg ${getBarColorClass(cronograma)} shadow-sm hover:shadow-md transition-all cursor-pointer border-2 border-white hover:scale-105 overflow-hidden`}
-              style={{
-                left: posicao.inicio,
-                width: posicao.largura,
-                minWidth: '40px'
-              }}
-              onClick={() => {
-                setViewingCronograma(cronograma);
-                setIsViewDialogOpen(true);
-              }}
-              title={`${cronograma.titulo}
-             Status: ${getStatusBadgeInfo(cronograma.status).text}
-             Período: ${dataInicio.toLocaleDateString('pt-BR')} a ${dataFim.toLocaleDateString('pt-BR')}
-            ${`Responsável: ${getResponsavelLabel(cronograma)}`}
-            ${cronograma.motivo_atraso ? `Atraso: ${cronograma.motivo_atraso}` : ''}
-             Clique para editar`}
-            >
-              <span className="text-white text-[10px] sm:text-xs font-medium px-1 sm:px-2 whitespace-nowrap overflow-hidden text-ellipsis block">
-                {cronograma.titulo}
-              </span>
-            </div>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <div
+                  className={`absolute top-1/2 transform -translate-y-1/2 h-6 sm:h-7 lg:h-8 rounded-lg ${getBarColorClass(cronograma)} shadow-sm hover:shadow-md transition-all cursor-pointer border-2 border-white hover:scale-105 overflow-hidden`}
+                  style={{
+                    left: posicao.inicio,
+                    width: posicao.largura,
+                    minWidth: '40px'
+                  }}
+                  title={`${cronograma.titulo} • Clique para alterar status ou ver detalhes`}
+                >
+                  <span className="text-white text-[10px] sm:text-xs font-medium px-1 sm:px-2 whitespace-nowrap overflow-hidden text-ellipsis block">
+                    {cronograma.titulo}
+                  </span>
+                </div>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" className="min-w-[200px]">
+                <DropdownMenuItem onClick={() => updateStatusRapido(cronograma.id, 'pendente')}>
+                  <Clock className="h-4 w-4 mr-2 text-yellow-600" />
+                  Marcar como Pendente
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => updateStatusRapido(cronograma.id, 'concluido')}>
+                  <CheckCircle className="h-4 w-4 mr-2 text-green-600" />
+                  Marcar como Concluído
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => updateStatusRapido(cronograma.id, 'atrasado')}>
+                  <AlertCircle className="h-4 w-4 mr-2 text-red-600" />
+                  Marcar como Atrasado
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={() => { setViewingCronograma(cronograma); setIsViewDialogOpen(true); }}>
+                  <Eye className="h-4 w-4 mr-2" />
+                  Ver detalhes
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           )}
           
           {/* Linha do tempo atual */}
@@ -2939,28 +2986,50 @@ const Cronograma = () => {
                 {getStatusBadgeInfo(cronograma.status).text}
               </Badge>
             </div>
-            {getResponsavelLabel(cronograma) !== 'Sem responsável' && (
-              <div className="text-[10px] sm:text-xs text-gray-500 truncate">
-                {getResponsavelLabel(cronograma)}
-              </div>
-            )}
+            {(() => {
+              const responsavel = getResponsavelLabel(cronograma);
+              return (
+                <div className="text-xs sm:text-sm font-medium text-gray-700 truncate" title={`Demanda com: ${responsavel}`}>
+                  A bola está com: <span className="text-gray-900 font-semibold">{responsavel}</span>
+                </div>
+              );
+            })()}
           </div>
         </div>
         <div className="relative flex-1 h-full">
           {dataInicio && dataFim && (
-            <div
-              className={`absolute top-1/2 transform -translate-y-1/2 h-6 sm:h-7 lg:h-8 rounded-lg ${coresStatus[cronograma.status]} shadow-sm hover:shadow-md transition-all cursor-pointer border-2 border-white hover:scale-105 overflow-hidden`}
-              style={{ left: posicao.inicio, width: posicao.largura, minWidth: '40px' }}
-              onClick={() => {
-                setViewingCronograma(cronograma);
-                setIsViewDialogOpen(true);
-              }}
-              title={`${cronograma.titulo}\nStatus: ${getStatusBadgeInfo(cronograma.status).text}\nPeríodo: ${dataInicio.toLocaleDateString('pt-BR')} a ${dataFim.toLocaleDateString('pt-BR')}`}
-            >
-              <span className="text-white text-[10px] sm:text-xs font-medium px-1 sm:px-2 whitespace-nowrap overflow-hidden text-ellipsis block">
-                {cronograma.titulo}
-              </span>
-            </div>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <div
+                  className={`absolute top-1/2 transform -translate-y-1/2 h-6 sm:h-7 lg:h-8 rounded-lg ${coresStatus[cronograma.status]} shadow-sm hover:shadow-md transition-all cursor-pointer border-2 border-white hover:scale-105 overflow-hidden`}
+                  style={{ left: posicao.inicio, width: posicao.largura, minWidth: '40px' }}
+                  title={`${cronograma.titulo} • Clique para alterar status ou ver detalhes`}
+                >
+                  <span className="text-white text-[10px] sm:text-xs font-medium px-1 sm:px-2 whitespace-nowrap overflow-hidden text-ellipsis block">
+                    {cronograma.titulo}
+                  </span>
+                </div>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" className="min-w-[200px]">
+                <DropdownMenuItem onClick={() => updateStatusRapido(cronograma.id, 'pendente')}>
+                  <Clock className="h-4 w-4 mr-2 text-yellow-600" />
+                  Marcar como Pendente
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => updateStatusRapido(cronograma.id, 'concluido')}>
+                  <CheckCircle className="h-4 w-4 mr-2 text-green-600" />
+                  Marcar como Concluído
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => updateStatusRapido(cronograma.id, 'atrasado')}>
+                  <AlertCircle className="h-4 w-4 mr-2 text-red-600" />
+                  Marcar como Atrasado
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={() => { setViewingCronograma(cronograma); setIsViewDialogOpen(true); }}>
+                  <Eye className="h-4 w-4 mr-2" />
+                  Ver detalhes
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           )}
           {posicaoHoje !== null && (
             <div 
@@ -3443,10 +3512,10 @@ const Cronograma = () => {
       setFasesExpandidas(novasFases);
     };
 
-    // Cores por status (harmonizadas com os badges)
+    // Cores por status: pendente=amarelo, concluído=verde, atrasado=vermelho
     const coresStatus: Record<string, string> = {
-      'pendente': 'bg-gray-500',
-      'em_andamento': 'bg-blue-500',
+      'pendente': 'bg-yellow-500',
+      'em_andamento': 'bg-yellow-500',
       'concluido': 'bg-green-500',
       'atrasado': 'bg-red-500'
     };
@@ -4209,25 +4278,6 @@ const Cronograma = () => {
                 </div>
 
                 <div>
-                  <Label htmlFor="fase_atual" className="text-xs sm:text-sm font-medium">Fase Atual</Label>
-                  <Select
-                    value={formData.fase_atual}
-                    onValueChange={(value) => setFormData({...formData, fase_atual: value})}
-                  >
-                    <SelectTrigger className="mt-1.5 h-9 sm:h-10 text-xs sm:text-sm">
-                      <SelectValue placeholder="Selecione a fase" />
-                    </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="inicio">Início</SelectItem>
-                    <SelectItem value="planejamento">Planejamento</SelectItem>
-                    <SelectItem value="execucao">Execução</SelectItem>
-                    <SelectItem value="revisao">Revisão</SelectItem>
-                    <SelectItem value="conclusao">Conclusão</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div>
                   <Label htmlFor="status" className="text-xs sm:text-sm font-medium">Status</Label>
                   <Select
                     value={formData.status}
@@ -4289,7 +4339,7 @@ const Cronograma = () => {
                   <Label htmlFor="parte_responsavel_demanda" className="text-xs sm:text-sm font-medium">Responsável</Label>
                   <Select
                     value={formData.parte_responsavel_demanda || 'none'}
-                    onValueChange={(value) => setFormData({...formData, parte_responsavel_demanda: value === 'none' ? null : value as 'portes' | 'organizacao'})}
+                    onValueChange={(value) => setFormData({...formData, parte_responsavel_demanda: value === 'none' ? null : value as 'portes' | 'organizacao' | 'ambos'})}
                   >
                     <SelectTrigger className="mt-1.5 h-9 sm:h-10 text-xs sm:text-sm">
                       <SelectValue placeholder="A demanda está com..." />
@@ -4311,6 +4361,12 @@ const Cronograma = () => {
                         <div className="flex items-center gap-2">
                           <Building className="h-4 w-4" />
                           {getOrgDisplayName(formData.organizacao) || 'Organização'}
+                        </div>
+                      </SelectItem>
+                      <SelectItem value="ambos">
+                        <div className="flex items-center gap-2">
+                          <Building className="h-4 w-4" />
+                          Ambos (Portes e Organização)
                         </div>
                       </SelectItem>
                     </SelectContent>

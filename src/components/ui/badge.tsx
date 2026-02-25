@@ -24,9 +24,9 @@ const badgeVariants = cva(
         "priority-urgente":
           "border-transparent bg-red-500 text-white hover:bg-red-600",
         "status-pendente":
-          "border-transparent bg-gray-500 text-white hover:bg-gray-600",
+          "border-transparent bg-yellow-500 text-white hover:bg-yellow-600",
         "status-em-andamento":
-          "border-transparent bg-blue-500 text-white hover:bg-blue-600",
+          "border-transparent bg-yellow-500 text-white hover:bg-yellow-600",
         "status-concluido":
           "border-transparent bg-green-500 text-white hover:bg-green-600",
         "status-atrasado":

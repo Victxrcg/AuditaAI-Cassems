@@ -224,7 +224,7 @@ exports.criarCronograma = async (req, res) => {
       status,
       motivo_atraso || null,
       parte_responsavel_atraso || null,
-      (parte_responsavel_demanda === 'portes' || parte_responsavel_demanda === 'organizacao') ? parte_responsavel_demanda : null
+      (parte_responsavel_demanda === 'portes' || parte_responsavel_demanda === 'organizacao' || parte_responsavel_demanda === 'ambos') ? parte_responsavel_demanda : null
     ]);
     
     // Buscar o cronograma criado
@@ -348,7 +348,7 @@ exports.atualizarCronograma = async (req, res) => {
       params.push(parte_responsavel_atraso); 
     }
     if (parte_responsavel_demanda !== undefined) { 
-      const val = (parte_responsavel_demanda === 'portes' || parte_responsavel_demanda === 'organizacao') ? parte_responsavel_demanda : null;
+      const val = (parte_responsavel_demanda === 'portes' || parte_responsavel_demanda === 'organizacao' || parte_responsavel_demanda === 'ambos') ? parte_responsavel_demanda : null;
       updates.push('parte_responsavel_demanda = ?'); 
       params.push(val); 
     }
