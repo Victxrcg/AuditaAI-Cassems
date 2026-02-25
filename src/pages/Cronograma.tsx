@@ -2159,7 +2159,7 @@ const Cronograma = () => {
   const getResponsavelLabel = (c: CronogramaItem) => {
     if (c.parte_responsavel_demanda === 'portes') return 'Portes';
     if (c.parte_responsavel_demanda === 'organizacao') return getOrgDisplayName(c.organizacao) || 'Organização';
-    if (c.parte_responsavel_demanda === 'ambos') return 'Portes e Organização';
+    if (c.parte_responsavel_demanda === 'ambos') return `Portes e ${getOrgDisplayName(c.organizacao) || 'Organização'}`;
     return c.responsavel_nome || 'Sem responsável';
   };
 
