@@ -4132,21 +4132,6 @@ const Cronograma = () => {
                 </SelectContent>
               </Select>
             </div>
-            <div className="w-full min-w-0">
-              <Label htmlFor="prioridade-filter" className="text-xs sm:text-sm font-medium">Prioridade</Label>
-              <Select key={`prioridade-${viewMode}-${filtroPrioridade}`} value={filtroPrioridade} onValueChange={setFiltroPrioridade}>
-                <SelectTrigger className="mt-1 h-9 sm:h-10 text-xs sm:text-sm w-full">
-                  <SelectValue placeholder="Todas as prioridades" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="todos">Todas</SelectItem>
-                  <SelectItem value="baixa">Baixa</SelectItem>
-                  <SelectItem value="media">Média</SelectItem>
-                  <SelectItem value="alta">Alta</SelectItem>
-                  <SelectItem value="critica">Crítica</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
             {currentUser?.organizacao === 'portes' && (
               <div className="w-full min-w-0">
                 <Label htmlFor="organizacao-filter" className="text-xs sm:text-sm font-medium">Organização</Label>
@@ -4326,24 +4311,6 @@ const Cronograma = () => {
                 </div>
 
                 <div>
-                  <Label htmlFor="prioridade" className="text-xs sm:text-sm font-medium">Prioridade</Label>
-                  <Select
-                    value={formData.prioridade}
-                    onValueChange={(value) => setFormData({...formData, prioridade: value})}
-                  >
-                    <SelectTrigger className="mt-1.5 h-9 sm:h-10 text-xs sm:text-sm">
-                      <SelectValue placeholder="Selecione a prioridade" />
-                    </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="baixa">Baixa</SelectItem>
-                    <SelectItem value="media">Média</SelectItem>
-                    <SelectItem value="alta">Alta</SelectItem>
-                    <SelectItem value="critica">Crítica</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div>
                   <Label htmlFor="data_inicio" className="text-xs sm:text-sm font-medium">Data de Início</Label>
                   <Input
                     id="data_inicio"
@@ -4516,7 +4483,7 @@ const Cronograma = () => {
                 <div className="flex flex-col min-h-0">
                   {/* Área scrollável de conteúdo */}
                   <div className="space-y-3 sm:space-y-4 lg:space-y-6">
-                  {/* Status e Prioridade */}
+                  {/* Status */}
                   <div className="flex flex-col gap-2 sm:gap-3">
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="text-xs sm:text-sm font-medium text-gray-600">Status:</span>
@@ -4525,15 +4492,6 @@ const Cronograma = () => {
                         className="text-xs whitespace-nowrap"
                       >
                         {getStatusBadgeInfo(viewingCronograma.status).text}
-                      </Badge>
-                    </div>
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-xs sm:text-sm font-medium text-gray-600">Prioridade:</span>
-                      <Badge 
-                        variant={getPriorityBadgeInfo(viewingCronograma.prioridade).variant as any}
-                        className="text-xs whitespace-nowrap"
-                      >
-                        {getPriorityBadgeInfo(viewingCronograma.prioridade).text}
                       </Badge>
                     </div>
                   </div>
@@ -4999,7 +4957,6 @@ const Cronograma = () => {
                 <div className="space-y-1 text-sm text-gray-600">
                   <p><strong>Organização:</strong> {cronogramaToDelete.organizacao?.toUpperCase()}</p>
                   <p><strong>Status:</strong> {cronogramaToDelete.status}</p>
-                  <p><strong>Prioridade:</strong> {cronogramaToDelete.prioridade}</p>
                   {cronogramaToDelete.data_inicio && (
                     <p><strong>Data de Início:</strong> {new Date(cronogramaToDelete.data_inicio).toLocaleDateString('pt-BR')}</p>
                   )}

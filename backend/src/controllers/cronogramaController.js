@@ -206,6 +206,10 @@ exports.criarCronograma = async (req, res) => {
     const dataInicio = (data_inicio && data_inicio !== '') ? data_inicio : null;
     const dataFim = (data_fim && data_fim !== '') ? data_fim : null;
     
+    // Normalizar parte_responsavel_demanda (aceitar "Ambos", "AMBOS", "ambos" etc.)
+    const parteDemandaRaw = parte_responsavel_demanda != null ? String(parte_responsavel_demanda).trim().toLowerCase() : null;
+    const parteDemandaVal = (parteDemandaRaw === 'portes' || parteDemandaRaw === 'organizacao' || parteDemandaRaw === 'ambos') ? parteDemandaRaw : null;
+    
     const result = await executeQueryWithRetry(`
       INSERT INTO cronograma (
         titulo, descricao, organizacao, fase_atual, data_inicio, data_fim,
@@ -224,7 +228,7 @@ exports.criarCronograma = async (req, res) => {
       status,
       motivo_atraso || null,
       parte_responsavel_atraso || null,
-      (parte_responsavel_demanda === 'portes' || parte_responsavel_demanda === 'organizacao' || parte_responsavel_demanda === 'ambos') ? parte_responsavel_demanda : null
+      parteDemandaVal
     ]);
     
     // Buscar o cronograma criado
@@ -348,7 +352,8 @@ exports.atualizarCronograma = async (req, res) => {
       params.push(parte_responsavel_atraso); 
     }
     if (parte_responsavel_demanda !== undefined) { 
-      const val = (parte_responsavel_demanda === 'portes' || parte_responsavel_demanda === 'organizacao' || parte_responsavel_demanda === 'ambos') ? parte_responsavel_demanda : null;
+      const raw = String(parte_responsavel_demanda || '').trim().toLowerCase();
+      const val = (raw === 'portes' || raw === 'organizacao' || raw === 'ambos') ? raw : null;
       updates.push('parte_responsavel_demanda = ?'); 
       params.push(val); 
     }
