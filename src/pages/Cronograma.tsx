@@ -2248,12 +2248,12 @@ const Cronograma = () => {
     return found?.nome || formatOrgLabel(orgCode);
   };
 
-  // Cor da barra do cronograma: pendente=amarelo, concluído=verde, atrasado=vermelho
+  // Cor da barra do cronograma por status: pendente=amarelo, em andamento=azul, concluído=verde, atrasado=vermelho
   const getBarColorClass = (item: CronogramaItem) => {
     if (item.status === 'concluido') return 'bg-green-500';
     if (item.status === 'atrasado') return 'bg-red-500';
-    // pendente e em_andamento: amarelo
-    return 'bg-yellow-500';
+    if (item.status === 'em_andamento') return 'bg-blue-500';
+    return 'bg-yellow-500'; // pendente
   };
 
   // Determinar com quem está a "bola" (responsabilidade principal)
@@ -3542,10 +3542,10 @@ const Cronograma = () => {
       setFasesExpandidas(novasFases);
     };
 
-    // Cores por status: pendente=amarelo, concluído=verde, atrasado=vermelho
+    // Cores por status: pendente=amarelo, em andamento=azul, concluído=verde, atrasado=vermelho
     const coresStatus: Record<string, string> = {
       'pendente': 'bg-yellow-500',
-      'em_andamento': 'bg-yellow-500',
+      'em_andamento': 'bg-blue-500',
       'concluido': 'bg-green-500',
       'atrasado': 'bg-red-500'
     };
