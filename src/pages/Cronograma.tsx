@@ -2231,10 +2231,16 @@ const Cronograma = () => {
     return org.replace(/_/g, ' ').toUpperCase();
   };
 
-  // Nome de exibição da organização (lista de orgs tem nome; senão usa formatOrgLabel)
+  // Nome de exibição da organização: prioriza nome real (lista de orgs ou usuário logado), senão usa código formatado
   const getOrgDisplayName = (orgCode?: string | null) => {
     if (!orgCode) return null;
     const code = String(orgCode).trim().toLowerCase();
+    // Se for a organização do usuário logado, usar o nome real vindo do auth/API
+    if (currentUser && (currentUser.organizacao || '').toString().trim().toLowerCase() === code) {
+      const nomeReal = currentUser.nome_empresa || currentUser.organizacao_nome;
+      if (nomeReal) return nomeReal;
+    }
+    // Buscar na lista de organizações (quando usuário Portes tem a lista carregada)
     const found = organizacoes.find((o: any) => {
       const c = (o.codigo || o.organizacao || '').toString().trim().toLowerCase();
       return c === code || c.replace(/_/g, '') === code.replace(/_/g, '');
@@ -2386,11 +2392,12 @@ const Cronograma = () => {
       
       const method = editingCronograma ? 'PUT' : 'POST';
       
-      // Preparar dados para envio (remover datas vazias)
+      // Preparar dados para envio (remover datas vazias e garantir responsável)
       const dadosParaEnvio = {
         ...formData,
         data_inicio: formData.data_inicio || null,
-        data_fim: formData.data_fim || null
+        data_fim: formData.data_fim || null,
+        parte_responsavel_demanda: formData.parte_responsavel_demanda ?? null
       };
       
       
@@ -2406,6 +2413,21 @@ const Cronograma = () => {
 
       if (response.ok) {
         const responseData = await response.json();
+        
+        // Atualizar na lista local o cronograma salvo (criar ou editar) para refletir parte_responsavel_demanda na hora
+        const cronogramaSalvo = responseData.data || responseData;
+        if (cronogramaSalvo && cronogramaSalvo.id != null) {
+          if (editingCronograma) {
+            setCronogramas(prev => prev.map(c => 
+              c.id === cronogramaSalvo.id 
+                ? { ...c, ...cronogramaSalvo, parte_responsavel_demanda: cronogramaSalvo.parte_responsavel_demanda ?? c.parte_responsavel_demanda }
+                : c
+            ));
+          } else {
+            // Nova demanda: inserir no início da lista com os dados retornados (já com parte_responsavel_demanda)
+            setCronogramas(prev => [cronogramaSalvo, ...prev]);
+          }
+        }
         
         toast({
           title: "Sucesso",
@@ -2913,6 +2935,10 @@ const Cronograma = () => {
                   <Clock className="h-4 w-4 mr-2 text-yellow-600" />
                   Marcar como Pendente
                 </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => updateStatusRapido(cronograma.id, 'em_andamento')}>
+                  <RefreshCw className="h-4 w-4 mr-2 text-blue-600" />
+                  Marcar como Em andamento
+                </DropdownMenuItem>
                 <DropdownMenuItem onClick={() => updateStatusRapido(cronograma.id, 'concluido')}>
                   <CheckCircle className="h-4 w-4 mr-2 text-green-600" />
                   Marcar como Concluído
@@ -3014,6 +3040,10 @@ const Cronograma = () => {
                 <DropdownMenuItem onClick={() => updateStatusRapido(cronograma.id, 'pendente')}>
                   <Clock className="h-4 w-4 mr-2 text-yellow-600" />
                   Marcar como Pendente
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => updateStatusRapido(cronograma.id, 'em_andamento')}>
+                  <RefreshCw className="h-4 w-4 mr-2 text-blue-600" />
+                  Marcar como Em andamento
                 </DropdownMenuItem>
                 <DropdownMenuItem onClick={() => updateStatusRapido(cronograma.id, 'concluido')}>
                   <CheckCircle className="h-4 w-4 mr-2 text-green-600" />
