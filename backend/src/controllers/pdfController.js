@@ -1450,29 +1450,38 @@ REGRAS IMPORTANTES:
   }
 };
 
-// Listar histórico de resumos (overview) do usuário/organização
+// Listar histórico de resumos (overview) do usuário/organização — filtrado pelo cronograma (organização) atual
 exports.listarHistoricoResumos = async (req, res) => {
   let pool, server;
   try {
     const userOrg = req.headers['x-user-organization'] || req.query.user_org || 'cassems';
+    const organizacaoFiltro = req.query.organizacao != null ? String(req.query.organizacao).trim() : null;
     const limit = Math.min(Number(req.query.limit) || 50, 100);
     const offset = Number(req.query.offset) || 0;
     ({ pool, server } = await getDbPoolWithTunnel());
     await ensureOverviewResumosTable(pool);
     let rows;
     let countResult;
+    const params = [userOrg];
+    const countParams = [userOrg];
+    let whereClause = 'WHERE user_org = ?';
+    if (organizacaoFiltro !== null && organizacaoFiltro !== '') {
+      whereClause += ' AND organizacao_filtro = ?';
+      params.push(organizacaoFiltro);
+      countParams.push(organizacaoFiltro);
+    }
     try {
       rows = await pool.query(
         `SELECT id, titulo, organizacao_filtro, status_filtro, periodo_inicio, periodo_fim, created_at
          FROM overview_resumos
-         WHERE user_org = ?
+         ${whereClause}
          ORDER BY created_at DESC
          LIMIT ? OFFSET ?`,
-        [userOrg, limit, offset]
+        [...params, limit, offset]
       );
       countResult = await pool.query(
-        `SELECT COUNT(*) as total FROM overview_resumos WHERE user_org = ?`,
-        [userOrg]
+        `SELECT COUNT(*) as total FROM overview_resumos ${whereClause}`,
+        countParams
       );
     } catch (tableErr) {
       const msg = (tableErr.message || '').toLowerCase();

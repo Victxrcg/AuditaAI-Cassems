@@ -1001,7 +1001,12 @@ const Cronograma = () => {
     setHistoricoLoading(true);
     try {
       const baseUrl = API_BASE.endsWith('/api') ? API_BASE : `${API_BASE}/api`;
-      const res = await fetch(`${baseUrl}/pdf/historico-resumos`, {
+      // Restringir histórico à organização do cronograma atual (igual ao filtro do overview)
+      const orgParaHistorico = currentUser?.organizacao === 'portes'
+        ? (organizacaoSelecionada || 'todos')
+        : (currentUser?.organizacao || 'cassems');
+      const url = `${baseUrl}/pdf/historico-resumos?organizacao=${encodeURIComponent(orgParaHistorico)}`;
+      const res = await fetch(url, {
         headers: { 'x-user-organization': currentUser?.organizacao || 'cassems' }
       });
       if (!res.ok) throw new Error('Erro ao carregar histórico');
